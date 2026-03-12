@@ -1,0 +1,43 @@
+{
+  "name": "git-fs",
+  "version": "0.1.0",
+  "description": "Filesystem abstraction over Git provider APIs (GitHub, GitLab)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js",
+      "require": "./dist/index.cjs"
+    },
+    "./providers/github": {
+      "import": "./dist/providers/github.js",
+      "require": "./dist/providers/github.cjs"
+    },
+    "./providers/gitlab": {
+      "import": "./dist/providers/gitlab.js",
+      "require": "./dist/providers/gitlab.cjs"
+    },
+    "./cache/indexeddb": {
+      "import": "./dist/cache/indexeddb.js",
+      "require": "./dist/cache/indexeddb.cjs"
+    }
+  },
+  "main": "./dist/index.cjs",
+  "module": "./dist/index.js",
+  "types": "./dist/index.d.ts",
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "tsup",
+    "test": "vitest run",
+    "test:watch": "vitest",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "tsup": "^8.0.0",
+    "typescript": "^5.5.0",
+    "vitest": "^2.0.0",
+    "happy-dom": "^15.0.0"
+  },
+  "license": "MIT"
+}
