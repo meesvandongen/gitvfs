@@ -1,29 +1,52 @@
 import { GitFS } from 'git-fs'
 import { github } from 'git-fs/providers/github'
+import { gitlab } from 'git-fs/providers/gitlab'
+import type { Provider } from './repos'
+
+interface GitHubRepoConfig {
+  owner: string
+  repo: string
+  branch: string
+}
+
+interface GitLabRepoConfig {
+  projectId: string | number
+  branch: string
+  name: string
+  apiUrl?: string
+}
+
+type RepoConfig = GitHubRepoConfig | GitLabRepoConfig
 
 export function renderApp(
   appEl: HTMLElement,
   accessToken: string,
+  provider: Provider,
+  repoConfig: RepoConfig,
+  onBack: () => void,
   onLogout: () => void,
 ) {
-  const owner = import.meta.env.VITE_GITHUB_OWNER
-  const repo = import.meta.env.VITE_GITHUB_REPO
-  const branch = import.meta.env.VITE_GITHUB_BRANCH || 'main'
+  let fs: GitFS
+  let repoDisplayName: string
+  let branch: string
 
-  if (!owner || !repo) {
-    appEl.innerHTML = `
-      <div class="error-page">
-        <h1>GitHub Repository Not Configured</h1>
-        <p>Please set <code>VITE_GITHUB_OWNER</code> and <code>VITE_GITHUB_REPO</code> in your <code>.env</code> file.</p>
-      </div>
-    `
-    return
+  if (provider === 'github') {
+    const config = repoConfig as GitHubRepoConfig
+    repoDisplayName = `${config.owner}/${config.repo}`
+    branch = config.branch
+    fs = new GitFS({
+      provider: github({ token: accessToken, owner: config.owner, repo: config.repo }),
+      branch,
+    })
+  } else {
+    const config = repoConfig as GitLabRepoConfig
+    repoDisplayName = config.name
+    branch = config.branch
+    fs = new GitFS({
+      provider: gitlab({ token: accessToken, projectId: config.projectId, apiUrl: config.apiUrl }),
+      branch,
+    })
   }
-
-  const fs = new GitFS({
-    provider: github({ token: accessToken, owner, repo }),
-    branch,
-  })
 
   // State
   let currentPath = ''
@@ -35,10 +58,9 @@ export function renderApp(
     <div class="app-layout">
       <header class="app-header">
         <div class="app-header-left">
-          <svg class="header-icon" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.5">
-            <path d="M3 7v10a2 2 0 002 2h14a2 2 0 002-2V9a2 2 0 00-2-2h-6l-2-2H5a2 2 0 00-2 2z"/>
-          </svg>
-          <span class="repo-name">${owner}/${repo}</span>
+          <button id="back-btn" class="btn btn-ghost btn-sm">← Repositories</button>
+          <span class="header-separator"></span>
+          <span class="repo-name">${repoDisplayName}</span>
           <span class="branch-badge">${branch}</span>
         </div>
         <div class="app-header-right">
@@ -85,6 +107,7 @@ export function renderApp(
     </div>
   `
 
+  document.getElementById('back-btn')!.addEventListener('click', onBack)
   document.getElementById('logout-btn')!.addEventListener('click', onLogout)
 
   const fileEditor = document.getElementById('file-editor') as HTMLTextAreaElement
@@ -209,7 +232,6 @@ export function renderApp(
     selectedFile = path
     isDirty = false
 
-    // Highlight selected file
     document.querySelectorAll('.file-item').forEach((el) => {
       el.classList.toggle('file-item-active', (el as HTMLElement).dataset.path === path)
     })
@@ -228,7 +250,7 @@ export function renderApp(
     saveBtn.disabled = true
 
     try {
-      const content = await fs.readFile(path, { encoding: 'utf-8' }) as string
+      const content = (await fs.readFile(path, { encoding: 'utf-8' })) as string
       fileEditor.value = content
       fileEditor.dataset.original = content
       fileContent = content
@@ -247,6 +269,8 @@ export function renderApp(
     document.getElementById('editor-error')!.style.display = 'none'
   }
 
-  // Initial load
+  // Suppress unused variable warning – currentPath is read by loadDirectory closures
+  void currentPath
+
   loadDirectory('')
 }
