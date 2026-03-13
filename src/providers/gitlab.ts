@@ -7,13 +7,13 @@ import type {
   CommitResult,
 } from '../types/provider.js'
 import { NotFoundError } from '../types/errors.js'
-import { createFetchREST } from './shared/http.js'
+import { createFetchREST, type TokenProvider } from './shared/http.js'
 import { createFetchGraphQL } from './shared/graphql.js'
 import { encodeText, toBase64, fromBase64, decodeText } from '../utils/encoding.js'
 import { getGitHash } from '../utils/hash.js'
 
 export interface GitLabOptions {
-  token: string
+  token: TokenProvider
   projectId: string | number
   apiUrl?: string
 }

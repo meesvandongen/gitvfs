@@ -1,7 +1,8 @@
 import { AuthError, NetworkError, RateLimitError, GitFSError } from '../../types/errors.js'
+import type { TokenProvider } from './http.js'
 
 export interface GraphQLOptions {
-  token: string
+  token: TokenProvider
   url: string
 }
 
@@ -10,12 +11,13 @@ export function createFetchGraphQL(options: GraphQLOptions) {
     query: string,
     variables: Record<string, unknown> = {},
   ): Promise<T> {
+    const token = typeof options.token === 'function' ? await options.token() : options.token
     let response: Response
     try {
       response = await fetch(options.url, {
         method: 'POST',
         headers: {
-          Authorization: `Bearer ${options.token}`,
+          Authorization: `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
         body: JSON.stringify({ query, variables }),

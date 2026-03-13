@@ -7,12 +7,12 @@ import type {
   CommitResult,
 } from '../types/provider.js'
 import { NotFoundError } from '../types/errors.js'
-import { createFetchREST } from './shared/http.js'
+import { createFetchREST, type TokenProvider } from './shared/http.js'
 import { createFetchGraphQL } from './shared/graphql.js'
 import { fromBase64, toBase64, encodeText } from '../utils/encoding.js'
 
 export interface GitHubOptions {
-  token: string
+  token: TokenProvider
   owner: string
   repo: string
   apiUrl?: string

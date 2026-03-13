@@ -1,8 +1,14 @@
 import { AuthError, NetworkError, RateLimitError, NotFoundError, GitFSError } from '../../types/errors.js'
 
+export type TokenProvider = string | (() => string | Promise<string>)
+
 export interface HttpOptions {
-  token: string
+  token: TokenProvider
   baseUrl: string
+}
+
+async function resolveToken(token: TokenProvider): Promise<string> {
+  return typeof token === 'function' ? token() : token
 }
 
 export function createFetchREST(options: HttpOptions) {
@@ -12,7 +18,7 @@ export function createFetchREST(options: HttpOptions) {
   ): Promise<unknown> {
     const url = path.startsWith('http') ? path : `${options.baseUrl}${path}`
     const headers = new Headers(init.headers)
-    headers.set('Authorization', `Bearer ${options.token}`)
+    headers.set('Authorization', `Bearer ${await resolveToken(options.token)}`)
     if (!headers.has('Accept')) {
       headers.set('Accept', init.raw ? 'application/vnd.github.raw' : 'application/json')
     }

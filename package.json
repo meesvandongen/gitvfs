@@ -19,6 +19,14 @@
     "./cache/indexeddb": {
       "import": "./dist/cache/indexeddb.js",
       "require": "./dist/cache/indexeddb.cjs"
+    },
+    "./discovery/github": {
+      "import": "./dist/discovery/github.js",
+      "require": "./dist/discovery/github.cjs"
+    },
+    "./discovery/gitlab": {
+      "import": "./dist/discovery/gitlab.js",
+      "require": "./dist/discovery/gitlab.cjs"
     }
   },
   "main": "./dist/index.cjs",

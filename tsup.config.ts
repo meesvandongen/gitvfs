@@ -6,6 +6,8 @@ export default defineConfig({
     'providers/github': 'src/providers/github.ts',
     'providers/gitlab': 'src/providers/gitlab.ts',
     'cache/indexeddb': 'src/cache/indexeddb.ts',
+    'discovery/github': 'src/discovery/github.ts',
+    'discovery/gitlab': 'src/discovery/gitlab.ts',
   },
   format: ['esm', 'cjs'],
   dts: true,

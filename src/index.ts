@@ -22,3 +22,4 @@ export {
 } from './types/errors.js'
 export { MemoryCacheAdapter } from './cache/memory.js'
 export { NoneCacheAdapter } from './cache/none.js'
+export type { TokenProvider } from './providers/shared/http.js'
