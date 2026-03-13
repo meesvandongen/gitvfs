@@ -6,7 +6,7 @@ import type {
   CommitOptions,
   CommitResult,
 } from '../types/provider.js'
-import { NotFoundError } from '../types/errors.js'
+import { NotFoundError, ConflictError } from '../types/errors.js'
 import { createFetchREST } from './shared/http.js'
 import { createFetchGraphQL } from './shared/graphql.js'
 import { encodeText, toBase64, fromBase64, decodeText } from '../utils/encoding.js'
@@ -61,8 +61,8 @@ class GitLabProvider implements GitProvider {
               tree(ref: "${ref}", recursive: true) {
                 blobs(first: 100${afterClause}) {
                   pageInfo { hasNextPage endCursor }
-                  nodes { path sha flatPath }
-                }
+                  nodes { path sha flatPath size }
+}
                 trees(first: 100${afterClause}) {
                   nodes { path sha }
                 }
@@ -78,7 +78,7 @@ class GitLabProvider implements GitProvider {
             tree: {
               blobs: {
                 pageInfo: { hasNextPage: boolean; endCursor: string }
-                nodes: Array<{ path: string; sha: string; flatPath: string }>
+                nodes: Array<{ path: string; sha: string; flatPath: string; size: number }>
               }
               trees: { nodes: Array<{ path: string; sha: string }> }
             }
@@ -89,7 +89,7 @@ class GitLabProvider implements GitProvider {
       const tree = data.project.repository.tree
 
       for (const blob of tree.blobs.nodes) {
-        entries.push({ path: blob.path, type: 'blob', sha: blob.sha })
+        entries.push({ path: blob.path, type: 'blob', sha: blob.sha, size: blob.size })
       }
 
       for (const t of tree.trees.nodes) {
@@ -214,6 +214,16 @@ class GitLabProvider implements GitProvider {
   }
 
   async commit(options: CommitOptions): Promise<CommitResult> {
+    // Validate expectedHeadOid for optimistic concurrency (match GitHub behavior)
+    if (options.expectedHeadOid) {
+      const currentHead = await this.getLastCommitSha(options.branch)
+      if (currentHead !== options.expectedHeadOid) {
+        throw new ConflictError(
+          `Expected head OID ${options.expectedHeadOid} but found ${currentHead}`,
+        )
+      }
+    }
+
     const actions = options.changes.map((change) => {
       const base: Record<string, string> = { file_path: change.path }
 
