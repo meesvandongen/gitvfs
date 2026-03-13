@@ -45,6 +45,10 @@ export function createFetchREST(options: HttpOptions) {
       throw new GitFSError(`HTTP ${response.status}: ${text}`, 'HTTP_ERROR')
     }
 
+    if (response.status === 204) {
+      return undefined
+    }
+
     if (init.raw) {
       return new Uint8Array(await response.arrayBuffer())
     }

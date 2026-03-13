@@ -104,8 +104,9 @@ class GitLabProvider implements GitProvider {
   }
 
   async getFiles(ref: string, paths: string[]): Promise<Map<string, FileContent>> {
-    const fullPath = await this.getFullPath()
     const result = new Map<string, FileContent>()
+    if (paths.length === 0) return result
+    const fullPath = await this.getFullPath()
     const chunkSize = 100
 
     for (let i = 0; i < paths.length; i += chunkSize) {
