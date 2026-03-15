@@ -12,7 +12,7 @@ import { CacheManager } from './cache/manager.js'
 import { MemoryCacheAdapter } from './cache/memory.js'
 import { NoneCacheAdapter } from './cache/none.js'
 import { NotFoundError } from './types/errors.js'
-import { basename, dirname, join, normalize } from './utils/path.js'
+import { basename, dirname, normalize } from './utils/path.js'
 import { encodeText, decodeText } from './utils/encoding.js'
 
 export interface DirEntry {
@@ -57,6 +57,8 @@ export class GitFS {
   private cache: CacheManager
   private knownEntries = new Map<string, TreeEntry>()
   private headSha: string | null = null
+  private lastHeadValidationAt = 0
+  private headValidationIntervalMs: number
 
   private autoCommit: boolean
   private autoCommitDelay: number
@@ -67,6 +69,7 @@ export class GitFS {
     this.provider = options.provider
     this.readBranch = options.branch
     this.writeBranch = options.writeBranch ?? options.branch
+    this.headValidationIntervalMs = options.headValidationIntervalMs ?? 30_000
     this.autoCommit = options.autoCommit ?? false
     this.autoCommitDelay = options.autoCommitDelay ?? 2000
     this.commitMessageFn = options.commitMessage
@@ -76,19 +79,26 @@ export class GitFS {
   }
 
   private async ensureCacheFresh(): Promise<string> {
-    const currentHead = await this.provider.getLastCommitSha(this.readBranch)
+    const now = Date.now()
 
-    if (this.headSha === currentHead) {
-      return currentHead
+    if (
+      this.headSha !== null
+      && now - this.lastHeadValidationAt < this.headValidationIntervalMs
+    ) {
+      return this.headSha
     }
 
-    const cachedHead = await this.cache.getHeadSha(this.readBranch)
+    const currentHead = await this.provider.getLastCommitSha(this.readBranch)
+    const previousHead = this.headSha
+    const cachedHead = previousHead ?? await this.cache.getHeadSha(this.readBranch)
+
     if (cachedHead !== currentHead) {
       await this.cache.clear()
       this.knownEntries.clear()
     }
 
     this.headSha = currentHead
+    this.lastHeadValidationAt = now
     await this.cache.setHeadSha(this.readBranch, currentHead)
     return currentHead
   }
@@ -433,6 +443,7 @@ export class GitFS {
     this.buffer.clear()
     this.knownEntries.clear()
     this.headSha = this.readBranch === this.writeBranch ? result.sha : null
+    this.lastHeadValidationAt = this.headSha === null ? 0 : Date.now()
 
     return result
   }
@@ -449,6 +460,7 @@ export class GitFS {
     this.writeBranch = branch
     this.knownEntries.clear()
     this.headSha = null
+    this.lastHeadValidationAt = 0
   }
 
   private scheduleAutoCommit(): void {

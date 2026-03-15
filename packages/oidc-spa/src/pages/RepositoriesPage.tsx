@@ -1,34 +1,82 @@
-import { Link, useLoaderData } from '@tanstack/react-router'
-import type { RepoCard } from '../lib/git-data'
+import { useSuspenseQuery, useQueryClient } from '@tanstack/react-query'
+import { Link, useRouteContext } from '@tanstack/react-router'
+import { AsyncBoundary } from '../components/AsyncBoundary'
+import {
+  getDirectoryQueryOptions,
+  getRepositoriesQueryOptions,
+  type RepoCard,
+} from '../lib/git-data'
 
 export function RepositoriesPage() {
-  const data = useLoaderData({ from: '/repositories' }) as {
-    providerName: string
-    repositories: RepoCard[]
+  const { providerConfig, token } = useRouteContext({ from: '/repositories' }) as {
+    providerConfig: { provider: 'github' | 'gitlab'; apiUrl?: string }
+    token: string
   }
+
+  const providerName = providerConfig.provider === 'github' ? 'GitHub' : 'GitLab'
+
+  return (
+    <AsyncBoundary
+      resetKey={providerConfig.provider}
+      fallback={(
+        <section className="stack-page">
+          <div className="loading-inline">
+            <div className="spinner spinner-sm"></div>
+            Loading repositories…
+          </div>
+        </section>
+      )}
+      errorTitle="Could not load repositories."
+    >
+      <RepositoriesContent providerName={providerName} provider={providerConfig.provider} token={token} apiUrl={providerConfig.apiUrl} />
+    </AsyncBoundary>
+  )
+}
+
+function RepositoriesContent(props: {
+  providerName: string
+  provider: 'github' | 'gitlab'
+  token: string
+  apiUrl?: string
+}) {
+  const queryClient = useQueryClient()
+  const { data: repositories } = useSuspenseQuery(
+    getRepositoriesQueryOptions({
+      provider: props.provider,
+      token: props.token,
+      apiUrl: props.apiUrl,
+    }),
+  )
 
   return (
     <section className="stack-page">
       <div className="section-heading">
         <div>
           <p className="eyebrow">Saved Token</p>
-          <h1 className="section-title">{data.providerName} repositories</h1>
+          <h1 className="section-title">{props.providerName} repositories</h1>
         </div>
         <p className="section-copy">
           Select a repository to open the routed editor experience powered by <code>git-fs</code>.
         </p>
       </div>
 
-      {data.repositories.length === 0 ? (
+      {repositories.length === 0 ? (
         <div className="empty-state">No repositories found for this account.</div>
       ) : (
         <div className="repo-list">
-          {data.repositories.map((repo) => (
+          {repositories.map((repo) => (
             <Link
               key={repo.kind === 'github' ? `${repo.owner}/${repo.repo}` : `${repo.projectId}`}
               to="/editor"
               search={repo}
               className="repo-card"
+              onMouseEnter={() => {
+                queryClient.prefetchQuery(
+                  getDirectoryQueryOptions({ ...repo, token: props.token }, ''),
+                ).catch(() => {
+                  // Ignore warm-up failures — navigation will surface the real error.
+                })
+              }}
             >
               <div className="repo-card-header">
                 <span className="repo-card-name">{repo.label}</span>

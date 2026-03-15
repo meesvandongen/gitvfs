@@ -1,7 +1,6 @@
 import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/react-router'
 import { z } from 'zod'
 import { AppFrame } from './components/AppFrame'
-import { fetchAvailableRepositories } from './lib/git-data'
 import { getActiveProviderConfig, getActiveProviderToken } from './lib/provider-config'
 import { fetchUserProfile } from './lib/user-profile'
 import { EditorPage } from './pages/EditorPage'
@@ -51,32 +50,7 @@ const repositoriesRoute = createRoute({
   beforeLoad: () => {
     return requireProviderAndToken()
   },
-  loader: async ({ context }: { context: { providerConfig: ReturnType<typeof getActiveProviderConfig>; token: string } }) => {
-    const { providerConfig, token } = context
-
-    // Kick off profile fetch (caches for later use in components).
-    void fetchUserProfile(providerConfig.provider, token, providerConfig.apiUrl)
-
-    const repositories = await fetchAvailableRepositories({
-      provider: providerConfig.provider,
-      token,
-      apiUrl: providerConfig.apiUrl,
-    })
-
-    return {
-      providerName: providerConfig.provider === 'github' ? 'GitHub' : 'GitLab',
-      repositories,
-    }
-  },
   component: RepositoriesPage,
-  pendingComponent: () => (
-    <section className="stack-page">
-      <div className="loading-inline">
-        <div className="spinner spinner-sm"></div>
-        Loading repositories…
-      </div>
-    </section>
-  ),
 })
 
 const editorRoute = createRoute({

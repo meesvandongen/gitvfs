@@ -1,5 +1,6 @@
 import { Link, Outlet } from '@tanstack/react-router'
-import { useEffect, useState, useSyncExternalStore } from 'react'
+import { useQuery } from '@tanstack/react-query'
+import { useSyncExternalStore } from 'react'
 import {
   clearStoredProviderToken,
   getActiveProviderConfig,
@@ -12,7 +13,6 @@ import {
 import {
   clearCachedUserProfile,
   fetchUserProfile,
-  type UserProfile,
 } from '../lib/user-profile'
 
 export function AppFrame() {
@@ -82,29 +82,11 @@ function TokenButtons(props: { provider: Provider; token: string | null; apiUrl?
 
 function ConnectedTokenButtons(props: { provider: Provider; token: string; apiUrl?: string }) {
   const { provider, token, apiUrl } = props
-  const [profile, setProfile] = useState<UserProfile | null>(null)
-
-  useEffect(() => {
-    let cancelled = false
-
-    setProfile(null)
-
-    fetchUserProfile(provider, token, apiUrl)
-      .then((result) => {
-        if (!cancelled) {
-          setProfile(result)
-        }
-      })
-      .catch(() => {
-        if (!cancelled) {
-          setProfile(null)
-        }
-      })
-
-    return () => {
-      cancelled = true
-    }
-  }, [apiUrl, provider, token])
+  const { data: profile } = useQuery({
+    queryKey: ['user-profile', provider, apiUrl ?? '', token],
+    queryFn: () => fetchUserProfile(provider, token, apiUrl),
+    staleTime: 5 * 60_000,
+  })
 
   const displayName = profile?.name ?? `${getProviderDisplayName(provider)} token saved`
   const initials = displayName.slice(0, 1).toUpperCase()

@@ -85,6 +85,14 @@ describe('GitFS', () => {
       expect(names).toContain('archive')
       expect(names).toContain('archive/2024.md')
     })
+
+    it('reuses the validated branch head across rapid navigation', async () => {
+      await fs.readdir('')
+      await fs.readdir('posts')
+      await fs.readdir('')
+
+      expect(provider.lastCommitShaCallCount).toBe(1)
+    })
   })
 
   describe('exists', () => {

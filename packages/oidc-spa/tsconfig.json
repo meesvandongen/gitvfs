@@ -8,7 +8,13 @@
     "moduleResolution": "bundler",
     "strict": true,
     "skipLibCheck": true,
-    "noEmit": true
+    "noEmit": true,
+    "baseUrl": ".",
+    "paths": {
+      "git-fs": ["../git-fs/src/index.ts"],
+      "git-fs/providers/github": ["../git-fs/src/providers/github.ts"],
+      "git-fs/providers/gitlab": ["../git-fs/src/providers/gitlab.ts"]
+    }
   },
   "include": ["src"]
 }

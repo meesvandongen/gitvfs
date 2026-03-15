@@ -27,6 +27,7 @@ interface MockBranch {
 export class MockProvider implements GitProvider {
   branches: Map<string, MockBranch> = new Map()
   commitCount = 0
+  lastCommitShaCallCount = 0
 
   constructor() {
     this.branches.set('main', {
@@ -139,6 +140,7 @@ export class MockProvider implements GitProvider {
   }
 
   async getLastCommitSha(branchName: string): Promise<string> {
+    this.lastCommitShaCallCount += 1
     const branch = this.branches.get(branchName)
     if (!branch) throw new NotFoundError(`Branch not found: ${branchName}`)
     return branch.sha

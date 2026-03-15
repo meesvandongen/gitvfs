@@ -538,6 +538,10 @@ input {
   min-width: 0;
 }
 
+.pane-pending {
+  opacity: 0.74;
+}
+
 .editor-empty,
 .editor-error {
   flex: 1;

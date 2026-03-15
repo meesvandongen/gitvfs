@@ -7,6 +7,7 @@ export interface GitFSOptions {
   branch: string
   writeBranch?: string
   cache?: 'memory' | 'indexeddb' | 'none' | CacheAdapter | CacheConfig
+  headValidationIntervalMs?: number
   autoCommit?: boolean
   autoCommitDelay?: number
   commitMessage?: (changes: Change[]) => string

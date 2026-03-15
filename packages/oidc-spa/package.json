@@ -12,6 +12,7 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@tanstack/react-query": "^5.71.10",
     "@tanstack/react-router": "^1.114.0",
     "git-fs": "workspace:*",
     "react": "^19.0.0",

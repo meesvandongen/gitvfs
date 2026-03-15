@@ -1,4 +1,5 @@
-import { GitFS } from 'git-fs'
+import { queryOptions, type QueryClient } from '@tanstack/react-query'
+import { GitFS, type DirEntry } from 'git-fs'
 import { github } from 'git-fs/providers/github'
 import { gitlab } from 'git-fs/providers/gitlab'
 import type { Provider } from './provider-config'
@@ -27,6 +28,8 @@ export type RepoCard = RepoSelection & {
   updatedAt: string | null
 }
 
+export type RepoSession = RepoSelection & { token: string }
+
 interface GitHubRepoApiModel {
   full_name: string
   name: string
@@ -44,6 +47,28 @@ interface GitLabProjectApiModel {
   visibility: string
   description: string | null
   last_activity_at: string | null
+}
+
+const gitFsRegistry = new Map<string, GitFS>()
+
+function getRepoSessionKey(params: RepoSession): string {
+  return params.kind === 'github'
+    ? `github:${params.owner}/${params.repo}:${params.branch}:${params.token}`
+    : `gitlab:${params.projectId}:${params.branch}:${params.apiUrl ?? 'https://gitlab.com'}:${params.token}`
+}
+
+function sortEntries(entries: DirEntry[]): DirEntry[] {
+  return [...entries].sort((a, b) => {
+    if (a.type !== b.type) {
+      return a.type === 'tree' ? -1 : 1
+    }
+
+    return a.name.localeCompare(b.name)
+  })
+}
+
+export function getRepoQueryKey(params: RepoSession) {
+  return ['git-fs', getRepoSessionKey(params)] as const
 }
 
 export async function fetchAvailableRepositories(params: {
@@ -152,6 +177,7 @@ export function createGitFs(params: RepoSelection & { token: string }): GitFS {
         repo: params.repo,
       }),
       branch: params.branch,
+      headValidationIntervalMs: 30_000,
     })
   }
 
@@ -162,7 +188,58 @@ export function createGitFs(params: RepoSelection & { token: string }): GitFS {
       apiUrl: params.apiUrl,
     }),
     branch: params.branch,
+    headValidationIntervalMs: 30_000,
   })
+}
+
+export function getGitFs(params: RepoSession): GitFS {
+  const key = getRepoSessionKey(params)
+  const existing = gitFsRegistry.get(key)
+
+  if (existing) {
+    return existing
+  }
+
+  const fs = createGitFs(params)
+  gitFsRegistry.set(key, fs)
+  return fs
+}
+
+export function getRepositoriesQueryOptions(params: {
+  provider: Provider
+  token: string
+  apiUrl?: string
+}) {
+  return queryOptions({
+    queryKey: ['repositories', params.provider, params.apiUrl ?? '', params.token],
+    queryFn: () => fetchAvailableRepositories(params),
+    staleTime: 60_000,
+  })
+}
+
+export function getDirectoryQueryOptions(params: RepoSession, path: string) {
+  return queryOptions({
+    queryKey: [...getRepoQueryKey(params), 'dir', path],
+    queryFn: async () => sortEntries(await getGitFs(params).readdir(path) as DirEntry[]),
+    staleTime: 60_000,
+  })
+}
+
+export function getFileTextQueryOptions(params: RepoSession, path: string) {
+  return queryOptions({
+    queryKey: [...getRepoQueryKey(params), 'file', path],
+    queryFn: async () => readTextFile(getGitFs(params), path),
+    staleTime: 60_000,
+  })
+}
+
+export function updateCachedFileText(
+  queryClient: QueryClient,
+  params: RepoSession,
+  path: string,
+  content: string,
+): void {
+  queryClient.setQueryData(getFileTextQueryOptions(params, path).queryKey, content)
 }
 
 export async function readTextFile(fs: GitFS, path: string): Promise<string> {
