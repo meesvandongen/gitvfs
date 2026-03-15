@@ -5,11 +5,13 @@ import type {
   BranchInfo,
   CommitOptions,
   CommitResult,
+  ReadDirOptions,
 } from '../types/provider.js'
 import { NotFoundError } from '../types/errors.js'
 import { createFetchREST, type TokenProvider } from './shared/http.js'
 import { createFetchGraphQL } from './shared/graphql.js'
 import { fromBase64, toBase64, encodeText } from '../utils/encoding.js'
+import { normalize } from '../utils/path.js'
 
 export interface GitHubOptions {
   token: TokenProvider
@@ -35,7 +37,11 @@ class GitHubProvider implements GitProvider {
     })
   }
 
-  async getTree(ref: string): Promise<TreeEntry[]> {
+  private encodePath(path: string): string {
+    return normalize(path).split('/').filter(Boolean).map(encodeURIComponent).join('/')
+  }
+
+  private async getRecursiveTree(ref: string): Promise<TreeEntry[]> {
     // First get the commit to find the tree SHA
     const commit = (await this.fetchREST(
       `/repos/${this.owner}/${this.repo}/git/ref/heads/${ref}`,
@@ -57,6 +63,38 @@ class GitHubProvider implements GitProvider {
       sha: entry.sha,
       size: entry.size,
     }))
+  }
+
+  async readdir(ref: string, path: string, options?: ReadDirOptions): Promise<TreeEntry[]> {
+    const normalized = normalize(path)
+
+    if (options?.recursive) {
+      const prefix = normalized ? `${normalized}/` : ''
+      const entries = await this.getRecursiveTree(ref)
+      return entries.filter((entry) => {
+        if (normalized && entry.path === normalized) {
+          return false
+        }
+        return entry.path.startsWith(prefix)
+      })
+    }
+
+    const encodedPath = this.encodePath(normalized)
+    const suffix = encodedPath ? `/${encodedPath}` : ''
+    const query = `?ref=${encodeURIComponent(ref)}`
+    const result = (await this.fetchREST(
+      `/repos/${this.owner}/${this.repo}/contents${suffix}${query}`,
+    )) as Array<{ path: string; type: string; sha: string; size?: number }> | { path: string; type: string; sha: string; size?: number }
+
+    const entries = Array.isArray(result) ? result : [result]
+    return entries
+      .filter((entry) => entry.path !== normalized)
+      .map((entry) => ({
+        path: entry.path,
+        type: entry.type === 'dir' ? 'tree' : 'blob',
+        sha: entry.sha,
+        size: entry.size,
+      }))
   }
 
   async getFiles(ref: string, paths: string[]): Promise<Map<string, FileContent>> {
@@ -206,14 +244,13 @@ class GitHubProvider implements GitProvider {
 
     // GitHub's createCommitOnBranch returns the new commit SHA;
     // to get individual file SHAs, we fetch the new tree
-    const newTree = await this.getTree(options.branch)
-    for (const change of options.changes) {
-      if (change.action !== 'delete') {
-        const entry = newTree.find((e) => e.path === change.path)
-        if (entry) {
-          files[change.path] = { sha: entry.sha }
-        }
-      }
+    const changedPaths = options.changes
+      .filter((change) => change.action !== 'delete')
+      .map((change) => change.path)
+
+    const changedFiles = await this.getFiles(options.branch, changedPaths)
+    for (const [path, file] of changedFiles) {
+      files[path] = { sha: file.sha }
     }
 
     return {

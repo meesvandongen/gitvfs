@@ -10,6 +10,26 @@ describe('GitLab Provider', () => {
     vi.restoreAllMocks()
   })
 
+  it('readdir fetches a directory via repository tree REST API', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { path: 'src/index.ts', type: 'blob', id: 'blob-sha-1', name: 'index.ts', mode: '100644' },
+          { path: 'src/lib', type: 'tree', id: 'tree-sha-1', name: 'lib', mode: '040000' },
+        ]),
+        { status: 200 },
+      ),
+    )
+
+    const entries = await provider.readdir('main', 'src')
+    expect(entries).toEqual([
+      { path: 'src/index.ts', type: 'blob', sha: 'blob-sha-1' },
+      { path: 'src/lib', type: 'tree', sha: 'tree-sha-1' },
+    ])
+    expect(fetchSpy.mock.calls[0][0]).toContain('/repository/tree?ref=main')
+  })
+
   it('getBranch fetches branch info via REST', async () => {
     vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
       new Response(

@@ -22,20 +22,29 @@ export class CacheManager {
     await this.adapter.set(this.key(`${branch}:head`), sha)
   }
 
-  async getTree(branch: string): Promise<TreeEntry[] | undefined> {
-    return this.adapter.get<TreeEntry[]>(this.key(`${branch}:tree`))
+  async getDirEntries(
+    branch: string,
+    path: string,
+    recursive = false,
+  ): Promise<TreeEntry[] | undefined> {
+    return this.adapter.get<TreeEntry[]>(this.key(`${branch}:dir:${recursive ? 'recursive:' : ''}${path}`))
   }
 
-  async setTree(branch: string, tree: TreeEntry[]): Promise<void> {
-    await this.adapter.set(this.key(`${branch}:tree`), tree)
+  async setDirEntries(
+    branch: string,
+    path: string,
+    entries: TreeEntry[],
+    recursive = false,
+  ): Promise<void> {
+    await this.adapter.set(this.key(`${branch}:dir:${recursive ? 'recursive:' : ''}${path}`), entries)
   }
 
-  async getFileContent(sha: string, path: string): Promise<FileContent | undefined> {
-    return this.adapter.get<FileContent>(this.key(`${sha}:${path}`))
+  async getFileContent(branch: string, path: string): Promise<FileContent | undefined> {
+    return this.adapter.get<FileContent>(this.key(`${branch}:file:${path}`))
   }
 
-  async setFileContent(sha: string, path: string, content: FileContent): Promise<void> {
-    await this.adapter.set(this.key(`${sha}:${path}`), content)
+  async setFileContent(branch: string, path: string, content: FileContent): Promise<void> {
+    await this.adapter.set(this.key(`${branch}:file:${path}`), content)
   }
 
   async clear(): Promise<void> {

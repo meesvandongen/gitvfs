@@ -10,7 +10,7 @@ describe('GitHub Provider', () => {
     vi.restoreAllMocks()
   })
 
-  it('getTree fetches recursive tree via REST', async () => {
+  it('readdir fetches recursive tree via REST when requested', async () => {
     const mockTree = {
       tree: [
         { path: 'readme.md', type: 'blob', sha: 'abc123', size: 42 },
@@ -33,12 +33,33 @@ describe('GitHub Provider', () => {
       new Response(JSON.stringify(mockTree), { status: 200 }),
     )
 
-    const tree = await provider.getTree('main')
+    const tree = await provider.readdir('main', '', { recursive: true })
 
     expect(tree).toHaveLength(3)
     expect(tree[0]).toEqual({ path: 'readme.md', type: 'blob', sha: 'abc123', size: 42 })
     expect(fetchSpy).toHaveBeenCalledTimes(3)
     expect(fetchSpy.mock.calls[2][0]).toContain('git/trees/tree-sha-1?recursive=1')
+  })
+
+  it('readdir fetches a shallow directory via contents API', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    fetchSpy.mockResolvedValueOnce(
+      new Response(
+        JSON.stringify([
+          { path: 'src/index.ts', type: 'file', sha: 'ghi789', size: 100 },
+          { path: 'src/lib', type: 'dir', sha: 'dirsha' },
+        ]),
+        { status: 200 },
+      ),
+    )
+
+    const entries = await provider.readdir('main', 'src')
+
+    expect(entries).toEqual([
+      { path: 'src/index.ts', type: 'blob', sha: 'ghi789', size: 100 },
+      { path: 'src/lib', type: 'tree', sha: 'dirsha', size: undefined },
+    ])
+    expect(fetchSpy.mock.calls[0][0]).toContain('/contents/src?ref=main')
   })
 
   it('getBlob fetches blob by SHA', async () => {
@@ -86,19 +107,15 @@ describe('GitHub Provider', () => {
       ),
     )
 
-    // getTree call after commit (for file SHAs): ref lookup
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ object: { sha: 'new-commit-sha' } }), { status: 200 }),
-    )
-    // commit lookup
-    fetchSpy.mockResolvedValueOnce(
-      new Response(JSON.stringify({ tree: { sha: 'new-tree-sha' } }), { status: 200 }),
-    )
-    // tree response
+    // getFiles call after commit (for file SHAs)
     fetchSpy.mockResolvedValueOnce(
       new Response(
         JSON.stringify({
-          tree: [{ path: 'new-file.md', type: 'blob', sha: 'file-sha-1', size: 10 }],
+          data: {
+            repository: {
+              f0: { text: '# New', oid: 'file-sha-1', byteSize: 5 },
+            },
+          },
         }),
         { status: 200 },
       ),

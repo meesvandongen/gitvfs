@@ -1,108 +1,114 @@
-# git-fs + oidc-spa Sample
+# git-fs Personal Access Token React Sample
 
-A single-page application that demonstrates using [oidc-spa](https://github.com/keycloakify/oidc-spa) for authentication and [git-fs](../../) to browse and edit files in a GitHub repository.
+A React single-page app that demonstrates a simple “bring your own token” flow with [TanStack Router](https://tanstack.com/router) and [git-fs](../../). Users choose GitHub or GitLab, paste a personal access token by hand, and the app stores it in browser storage for repository browsing and editing.
 
 ## What it does
 
-1. **Authenticates** the user via OpenID Connect using `oidc-spa` (Authorization Code + PKCE flow).
-2. **Passes the access token** from the OIDC provider to the `git-fs` GitHub provider.
-3. **Renders a file browser** backed by `git-fs` — directories are listable, files are viewable and editable.
-4. **Commits edits** directly to the GitHub repository when the user saves a file.
+1. Lets users choose GitHub or GitLab in the UI.
+2. Prompts for a personal access token directly in the app.
+3. Saves the token in `localStorage` for the selected provider.
+4. Uses the saved token with `git-fs` to browse repositories and files.
+5. Allows editing text files and committing changes back to the repository.
 
-> **Note:** This sample uses the access token issued by your OIDC provider as the GitHub API token. This works when GitHub itself is the OIDC/OAuth2 provider. If you use a different provider (Keycloak, Auth0, etc.), you will need to supply a GitHub Personal Access Token separately — see [Adapting to a different provider](#adapting-to-a-different-provider).
+## Stack
+
+- React 19
+- TanStack Router
+- Vite 8
+- TypeScript
+- `git-fs`
 
 ## Prerequisites
 
-- Node.js 18+
-- A GitHub repository you want to browse/edit
-- An OIDC provider configured with a public client (no client secret, PKCE required):
-  - **Redirect URI:** `http://localhost:3000`
-  - **Scopes:** `openid profile email` (plus `repo` if using GitHub as the provider)
+- Node.js 20.19+
+- A GitHub or GitLab account with repositories you want to browse or edit
+- A personal access token for the provider you want to use
 
 ## Setup
 
 1. Install dependencies:
 
    ```sh
-   npm install
+   pnpm install
    ```
 
-2. Copy `.env.example` to `.env` and fill in your values:
-
-   ```sh
-   cp .env.example .env
-   ```
+2. Optional: copy `.env.example` to `.env` if you want to target a self-managed GitLab instance.
 
    | Variable | Description |
    |---|---|
-   | `VITE_OIDC_ISSUER_URI` | OIDC issuer URL (e.g. `https://auth.example.com/realms/myrealm`) |
-   | `VITE_OIDC_CLIENT_ID` | Client ID registered with your OIDC provider |
-   | `VITE_GITHUB_OWNER` | GitHub repository owner (user or org) |
-   | `VITE_GITHUB_REPO` | GitHub repository name |
-   | `VITE_GITHUB_BRANCH` | Branch to read from (default: `main`) |
+   | `VITE_GITLAB_URL` | Optional base URL for self-managed GitLab |
 
 3. Start the dev server:
 
    ```sh
-   npm run dev
+   pnpm dev
    ```
 
-4. Open [http://localhost:3000](http://localhost:3000).
+4. Open [http://localhost:3000](http://localhost:3000), choose a provider, and paste a token.
 
-## Using GitHub as the OIDC provider
+## Creating tokens
 
-GitHub supports OAuth 2.0 with OpenID Connect. To use GitHub as the provider:
+### GitHub
 
-1. [Create a GitHub OAuth App](https://github.com/settings/applications/new):
-   - **Application name:** anything
-   - **Homepage URL:** `http://localhost:3000`
-   - **Authorization callback URL:** `http://localhost:3000`
+Create a token at [GitHub personal access tokens](https://github.com/settings/personal-access-tokens/new).
 
-2. Set in `.env`:
-   ```
-   VITE_OIDC_ISSUER_URI=https://github.com
-   VITE_OIDC_CLIENT_ID=<your GitHub OAuth App client ID>
-   ```
+- Classic tokens usually need `repo` access to browse and commit.
+- Fine-grained tokens should have repository contents access plus metadata read access for the repositories you want to browse.
 
-   > GitHub's OIDC issuer is `https://github.com` and it exposes a discovery document at `https://github.com/.well-known/openid-configuration`.
+### GitLab
 
-The access token issued by GitHub can then be used directly with the GitHub API, which is exactly what this sample does.
+Create a token in GitLab under **User Settings → Access Tokens**.
 
-## Adapting to a different provider
+- Give the token the `api` scope so the sample can list projects, read files, and commit changes.
 
-If you authenticate with a non-GitHub OIDC provider (Keycloak, Auth0, Entra ID, etc.), the access token will not be valid for the GitHub API. In that case, modify `src/app.ts` to use a GitHub Personal Access Token instead:
+For self-managed GitLab, set this in `.env`:
 
-```ts
-// src/app.ts
-const githubToken = import.meta.env.VITE_GITHUB_TOKEN  // add this to .env
-
-const fs = new GitFS({
-  provider: github({ token: githubToken, owner, repo }),
-  branch,
-})
+```txt
+VITE_GITLAB_URL=https://gitlab.example.com
 ```
 
-The OIDC authentication still protects the app — users must sign in before they can see or use the file browser.
+## Storage note
+
+This sample stores tokens in `localStorage` for the current browser profile. That keeps the demo straightforward, but it is not a substitute for a production-grade secret-handling strategy.
 
 ## Project structure
 
-```
+```txt
 samples/oidc-spa/
-├── index.html          # HTML entry point
+├── index.html
 ├── src/
-│   ├── main.ts         # Initializes oidc-spa, renders login or app
-│   ├── app.ts          # File browser UI backed by git-fs
-│   └── style.css       # Styles
-├── .env.example        # Environment variable template
-├── vite.config.ts
+│   ├── components/
+│   │   └── AppFrame.tsx
+│   ├── lib/
+│   │   ├── git-data.ts
+│   │   ├── provider-config.ts
+│   │   └── user-profile.ts
+│   ├── pages/
+│   │   ├── EditorPage.tsx
+│   │   ├── HomePage.tsx
+│   │   └── RepositoriesPage.tsx
+│   ├── main.tsx
+│   ├── router.tsx
+│   ├── style.css
+│   └── vite-env.d.ts
+├── .env.example
+├── package.json
 ├── tsconfig.json
-└── package.json
+└── vite.config.ts
 ```
+
+## Routing overview
+
+- `/` — provider selection and token entry
+- `/repositories` — repository list for the active provider token
+- `/editor` — file browser and editor for the selected repository
+
+The repository and editor routes redirect back to `/` when no token is saved for the active provider.
 
 ## Building for production
 
 ```sh
-npm run build
+pnpm build
 ```
 
-The output is in `dist/`. Deploy as a static site (Netlify, Vercel, GitHub Pages, etc.). Make sure to add your production URL as an allowed redirect URI in your OIDC provider.
+The production files are written to `dist/`.

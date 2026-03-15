@@ -1,4 +1,10 @@
-import type { GitProvider, TreeEntry, FileContent, CommitResult } from './types/provider.js'
+import type {
+  GitProvider,
+  TreeEntry,
+  FileContent,
+  CommitResult,
+  ReadDirOptions,
+} from './types/provider.js'
 import type { GitFSOptions, CacheConfig } from './types/options.js'
 import type { CacheAdapter } from './cache/types.js'
 import { ChangeBuffer, type Change } from './change-buffer.js'
@@ -6,7 +12,7 @@ import { CacheManager } from './cache/manager.js'
 import { MemoryCacheAdapter } from './cache/memory.js'
 import { NoneCacheAdapter } from './cache/none.js'
 import { NotFoundError } from './types/errors.js'
-import { normalize } from './utils/path.js'
+import { basename, dirname, join, normalize } from './utils/path.js'
 import { encodeText, decodeText } from './utils/encoding.js'
 
 export interface DirEntry {
@@ -20,6 +26,10 @@ export interface StatResult {
   type: 'blob' | 'tree'
   size?: number
   sha: string
+}
+
+export interface ReadDirResultOptions {
+  recursive?: boolean
 }
 
 function createCacheAdapter(
@@ -45,7 +55,7 @@ export class GitFS {
   private writeBranch: string
   private buffer = new ChangeBuffer()
   private cache: CacheManager
-  private tree: TreeEntry[] | null = null
+  private knownEntries = new Map<string, TreeEntry>()
   private headSha: string | null = null
 
   private autoCommit: boolean
@@ -65,32 +75,96 @@ export class GitFS {
     this.cache = new CacheManager(adapter, `${options.branch}`)
   }
 
-  /** Ensure the tree is loaded for reads. */
-  private async ensureTree(): Promise<TreeEntry[]> {
-    if (this.tree) return this.tree
-
-    // Check cache first
-    const cachedHead = await this.cache.getHeadSha(this.readBranch)
+  private async ensureCacheFresh(): Promise<string> {
     const currentHead = await this.provider.getLastCommitSha(this.readBranch)
 
-    if (cachedHead === currentHead) {
-      const cachedTree = await this.cache.getTree(this.readBranch)
-      if (cachedTree) {
-        this.tree = cachedTree
-        this.headSha = currentHead
-        return this.tree
-      }
+    if (this.headSha === currentHead) {
+      return currentHead
     }
 
-    this.tree = await this.provider.getTree(this.readBranch)
+    const cachedHead = await this.cache.getHeadSha(this.readBranch)
+    if (cachedHead !== currentHead) {
+      await this.cache.clear()
+      this.knownEntries.clear()
+    }
+
     this.headSha = currentHead
     await this.cache.setHeadSha(this.readBranch, currentHead)
-    await this.cache.setTree(this.readBranch, this.tree)
-    return this.tree
+    return currentHead
   }
 
-  private findTreeEntry(path: string): TreeEntry | undefined {
-    return this.tree?.find((e) => e.path === normalize(path))
+  private rememberEntries(entries: TreeEntry[]): void {
+    for (const entry of entries) {
+      this.knownEntries.set(normalize(entry.path), {
+        ...entry,
+        path: normalize(entry.path),
+      })
+    }
+  }
+
+  private rememberFile(file: FileContent): void {
+    this.knownEntries.set(normalize(file.path), {
+      path: normalize(file.path),
+      type: 'blob',
+      sha: file.sha,
+      size: file.size,
+    })
+  }
+
+  private rememberSyntheticDirectories(path: string): void {
+    const normalized = normalize(path)
+    if (!normalized) return
+
+    const parts = normalized.split('/')
+    for (let i = 1; i < parts.length; i++) {
+      const dirPath = parts.slice(0, i).join('/')
+      if (!this.knownEntries.has(dirPath)) {
+        this.knownEntries.set(dirPath, { path: dirPath, type: 'tree', sha: '', size: undefined })
+      }
+    }
+  }
+
+  private async ensureDir(path: string, options?: ReadDirOptions): Promise<TreeEntry[]> {
+    const normalized = normalize(path)
+    const recursive = options?.recursive ?? false
+
+    await this.ensureCacheFresh()
+
+    const cachedEntries = await this.cache.getDirEntries(this.readBranch, normalized, recursive)
+    if (cachedEntries) {
+      this.rememberEntries(cachedEntries)
+      return cachedEntries
+    }
+
+    const entries = await this.provider.readdir(this.readBranch, normalized, options)
+    this.rememberEntries(entries)
+    this.rememberSyntheticDirectories(normalized)
+    await this.cache.setDirEntries(this.readBranch, normalized, entries, recursive)
+    return entries
+  }
+
+  private async findEntry(path: string): Promise<TreeEntry | undefined> {
+    const normalized = normalize(path)
+    if (!normalized) {
+      return { path: '', type: 'tree', sha: '', size: undefined }
+    }
+
+    await this.ensureCacheFresh()
+
+    const known = this.knownEntries.get(normalized)
+    if (known) {
+      return known
+    }
+
+    const parentPath = dirname(normalized)
+    const childName = basename(normalized)
+
+    try {
+      const entries = await this.ensureDir(parentPath)
+      return entries.find((entry) => basename(entry.path) === childName)
+    } catch {
+      return undefined
+    }
   }
 
   /** Read a file. Pending writes overlay remote content. */
@@ -115,37 +189,54 @@ export class GitFS {
       }
     }
 
-    await this.ensureTree()
-    const entry = this.findTreeEntry(normalized)
+    const entry = await this.findEntry(normalized)
     if (!entry || entry.type !== 'blob') {
       throw new NotFoundError(`File not found: ${normalized}`)
     }
 
     // Check file cache
-    const cached = await this.cache.getFileContent(entry.sha, normalized)
+    const cached = await this.cache.getFileContent(this.readBranch, normalized)
     if (cached) {
+      this.rememberFile(cached)
       return options?.encoding === 'utf-8' ? decodeText(cached.content) : cached.content
     }
 
     // Fetch from provider
     const file = await this.provider.getFile(this.readBranch, normalized)
-    await this.cache.setFileContent(file.sha, normalized, file)
+    this.rememberFile(file)
+    this.rememberSyntheticDirectories(normalized)
+    await this.cache.setFileContent(this.readBranch, normalized, file)
 
     return options?.encoding === 'utf-8' ? decodeText(file.content) : file.content
   }
 
   /** List directory entries. */
-  async readdir(path: string): Promise<DirEntry[]> {
+  async readdir(path: string, options?: ReadDirResultOptions): Promise<DirEntry[]> {
     const normalized = normalize(path)
-    await this.ensureTree()
+    const recursive = options?.recursive ?? false
+    const treeEntries = await this.ensureDir(normalized, options)
 
     const prefix = normalized ? `${normalized}/` : ''
     const entries = new Map<string, DirEntry>()
 
-    // Add entries from tree
-    for (const entry of this.tree!) {
+    // Add entries from provider directory listing
+    for (const entry of treeEntries) {
       if (!entry.path.startsWith(prefix)) continue
       const rest = entry.path.slice(prefix.length)
+      if (!rest) continue
+
+      if (recursive) {
+        if (!this.buffer.isDeleted(entry.path)) {
+          entries.set(rest, {
+            name: rest,
+            type: entry.type,
+            sha: entry.sha,
+            size: entry.size,
+          })
+        }
+        continue
+      }
+
       const slashIdx = rest.indexOf('/')
       if (slashIdx === -1 && rest) {
         // Direct child
@@ -171,6 +262,14 @@ export class GitFS {
       if (change.action === 'delete') continue
       if (!change.path.startsWith(prefix)) continue
       const rest = change.path.slice(prefix.length)
+      if (!rest) continue
+
+      if (recursive) {
+        entries.set(rest, { name: rest, type: 'blob', sha: '', size: undefined })
+        this.rememberSyntheticDirectories(change.path)
+        continue
+      }
+
       const slashIdx = rest.indexOf('/')
       if (slashIdx === -1 && rest) {
         entries.set(rest, { name: rest, type: 'blob', sha: '', size: undefined })
@@ -195,8 +294,7 @@ export class GitFS {
       return change.action !== 'delete'
     }
 
-    await this.ensureTree()
-    return this.findTreeEntry(normalized) !== undefined
+    return (await this.findEntry(normalized)) !== undefined
   }
 
   /** Get file/directory metadata. */
@@ -212,8 +310,7 @@ export class GitFS {
       return { type: 'blob', sha: '', size: undefined }
     }
 
-    await this.ensureTree()
-    const entry = this.findTreeEntry(normalized)
+    const entry = await this.findEntry(normalized)
     if (!entry) {
       throw new NotFoundError(`Not found: ${normalized}`)
     }
@@ -222,26 +319,28 @@ export class GitFS {
 
   /** Prefetch the tree and optionally file contents into cache. */
   async prefetch(): Promise<void> {
-    const tree = await this.ensureTree()
+    const tree = await this.ensureDir('', { recursive: true })
     const blobPaths = tree.filter((e) => e.type === 'blob').map((e) => e.path)
 
     if (blobPaths.length === 0) return
 
     const files = await this.provider.getFiles(this.readBranch, blobPaths)
     for (const [path, file] of files) {
-      await this.cache.setFileContent(file.sha, path, file)
+      this.rememberFile(file)
+      await this.cache.setFileContent(this.readBranch, path, file)
     }
   }
 
   /** Stage a file write (no API call yet). */
   writeFile(path: string, content: string | Uint8Array): void {
     const normalized = normalize(path)
-    const existing = this.tree?.find((e) => e.path === normalized)
+    const existing = this.knownEntries.get(normalized)
     this.buffer.add({
       action: existing ? 'update' : 'create',
       path: normalized,
       content,
     })
+    this.rememberSyntheticDirectories(normalized)
     this.scheduleAutoCommit()
   }
 
@@ -319,19 +418,21 @@ export class GitFS {
       if (change?.content !== undefined) {
         const bytes =
           change.content instanceof Uint8Array ? change.content : encodeText(change.content)
-        await this.cache.setFileContent(info.sha, path, {
+        const file = {
           path,
           sha: info.sha,
           content: bytes,
           size: bytes.length,
-        })
+        }
+        this.rememberFile(file)
+        await this.cache.setFileContent(this.writeBranch, path, file)
       }
     }
 
-    // Invalidate tree cache for the write branch
-    await this.cache.setHeadSha(this.writeBranch, result.sha)
+    await this.cache.clear()
     this.buffer.clear()
-    this.tree = null // Force re-fetch on next read
+    this.knownEntries.clear()
+    this.headSha = this.readBranch === this.writeBranch ? result.sha : null
 
     return result
   }
@@ -346,7 +447,7 @@ export class GitFS {
   checkout(branch: string): void {
     this.readBranch = branch
     this.writeBranch = branch
-    this.tree = null
+    this.knownEntries.clear()
     this.headSha = null
   }
 

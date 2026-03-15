@@ -5,11 +5,13 @@ import type {
   BranchInfo,
   CommitOptions,
   CommitResult,
+  ReadDirOptions,
 } from '../types/provider.js'
 import { NotFoundError } from '../types/errors.js'
 import { createFetchREST, type TokenProvider } from './shared/http.js'
 import { createFetchGraphQL } from './shared/graphql.js'
-import { encodeText, toBase64, fromBase64, decodeText } from '../utils/encoding.js'
+import { encodeText, toBase64, fromBase64 } from '../utils/encoding.js'
+import { normalize } from '../utils/path.js'
 import { getGitHash } from '../utils/hash.js'
 
 export interface GitLabOptions {
@@ -46,58 +48,34 @@ class GitLabProvider implements GitProvider {
     return this.fullPath
   }
 
-  async getTree(ref: string): Promise<TreeEntry[]> {
-    const fullPath = await this.getFullPath()
+  async readdir(ref: string, path: string, options?: ReadDirOptions): Promise<TreeEntry[]> {
+    const normalized = normalize(path)
     const entries: TreeEntry[] = []
-    let endCursor: string | null = null
+    let page = 1
     let hasNextPage = true
 
     while (hasNextPage) {
-      const afterClause = endCursor ? `, after: "${endCursor}"` : ''
-      const query = `
-        query {
-          project(fullPath: "${fullPath}") {
-            repository {
-              tree(ref: "${ref}", recursive: true) {
-                blobs(first: 100${afterClause}) {
-                  pageInfo { hasNextPage endCursor }
-                  nodes { path sha flatPath }
-                }
-                trees(first: 100${afterClause}) {
-                  nodes { path sha }
-                }
-              }
-            }
-          }
-        }
-      `
+      const params = new URLSearchParams({
+        ref,
+        recursive: options?.recursive ? 'true' : 'false',
+        per_page: '100',
+        page: String(page),
+      })
 
-      const data = (await this.fetchGraphQL(query)) as {
-        project: {
-          repository: {
-            tree: {
-              blobs: {
-                pageInfo: { hasNextPage: boolean; endCursor: string }
-                nodes: Array<{ path: string; sha: string; flatPath: string }>
-              }
-              trees: { nodes: Array<{ path: string; sha: string }> }
-            }
-          }
-        }
+      if (normalized) {
+        params.set('path', normalized)
       }
 
-      const tree = data.project.repository.tree
+      const batch = (await this.fetchREST(
+        `/projects/${encodeURIComponent(this.projectId)}/repository/tree?${params.toString()}`,
+      )) as Array<{ path: string; type: 'blob' | 'tree'; id: string; name: string; mode: string }>
 
-      for (const blob of tree.blobs.nodes) {
-        entries.push({ path: blob.path, type: 'blob', sha: blob.sha })
+      for (const entry of batch) {
+        entries.push({ path: entry.path, type: entry.type, sha: entry.id })
       }
 
-      for (const t of tree.trees.nodes) {
-        entries.push({ path: t.path, type: 'tree', sha: t.sha })
-      }
-
-      hasNextPage = tree.blobs.pageInfo.hasNextPage
-      endCursor = tree.blobs.pageInfo.endCursor
+      hasNextPage = batch.length === 100
+      page += 1
     }
 
     return entries

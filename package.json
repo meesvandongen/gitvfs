@@ -5,25 +5,18 @@
   "type": "module",
   "exports": {
     ".": {
-      "import": "./dist/index.js",
-      "require": "./dist/index.cjs"
+      "import": "./dist/index.js"
     },
     "./providers/github": {
-      "import": "./dist/providers/github.js",
-      "require": "./dist/providers/github.cjs"
+      "import": "./dist/providers/github.js"
     },
     "./providers/gitlab": {
-      "import": "./dist/providers/gitlab.js",
-      "require": "./dist/providers/gitlab.cjs"
+      "import": "./dist/providers/gitlab.js"
     },
     "./cache/indexeddb": {
-      "import": "./dist/cache/indexeddb.js",
-      "require": "./dist/cache/indexeddb.cjs"
+      "import": "./dist/cache/indexeddb.js"
     }
   },
-  "main": "./dist/index.cjs",
-  "module": "./dist/index.js",
-  "types": "./dist/index.d.ts",
   "files": [
     "dist"
   ],

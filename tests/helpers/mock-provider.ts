@@ -5,10 +5,12 @@ import type {
   BranchInfo,
   CommitOptions,
   CommitResult,
+  ReadDirOptions,
 } from '../../src/types/provider'
 import { NotFoundError } from '../../src/types/errors'
 import { encodeText } from '../../src/utils/encoding'
 import { getGitHash } from '../../src/utils/hash'
+import { normalize } from '../../src/utils/path'
 
 interface MockFile {
   path: string
@@ -43,15 +45,17 @@ export class MockProvider implements GitProvider {
     b.files.push({ path, content: bytes, sha })
   }
 
-  async getTree(ref: string): Promise<TreeEntry[]> {
+  async readdir(ref: string, path: string, options?: ReadDirOptions): Promise<TreeEntry[]> {
     const branch = this.branches.get(ref)
     if (!branch) throw new NotFoundError(`Branch not found: ${ref}`)
 
-    const entries: TreeEntry[] = []
+    const allEntries: TreeEntry[] = []
     const dirs = new Set<string>()
+    const normalized = normalize(path)
+    const prefix = normalized ? `${normalized}/` : ''
 
     for (const file of branch.files) {
-      entries.push({
+      allEntries.push({
         path: file.path,
         type: 'blob',
         sha: file.sha,
@@ -64,12 +68,26 @@ export class MockProvider implements GitProvider {
         const dir = parts.slice(0, i).join('/')
         if (!dirs.has(dir)) {
           dirs.add(dir)
-          entries.push({ path: dir, type: 'tree', sha: `tree-${dir}` })
+          allEntries.push({ path: dir, type: 'tree', sha: `tree-${dir}` })
         }
       }
     }
 
-    return entries
+    if (options?.recursive) {
+      return allEntries.filter((entry) => {
+        if (normalized && entry.path === normalized) return false
+        return entry.path.startsWith(prefix)
+      })
+    }
+
+    return allEntries.filter((entry) => {
+      if (normalized) {
+        if (!entry.path.startsWith(prefix)) return false
+        return !entry.path.slice(prefix.length).includes('/')
+      }
+
+      return !entry.path.includes('/')
+    })
   }
 
   async getFiles(ref: string, paths: string[]): Promise<Map<string, FileContent>> {

@@ -15,11 +15,11 @@ describe('CacheManager', () => {
 
   it('stores and retrieves tree', async () => {
     const cm = createManager()
-    const tree = [
+    const entries = [
       { path: 'file.txt', type: 'blob' as const, sha: 'aaa', size: 10 },
     ]
-    await cm.setTree('main', tree)
-    expect(await cm.getTree('main')).toEqual(tree)
+    await cm.setDirEntries('main', '', entries)
+    expect(await cm.getDirEntries('main', '')).toEqual(entries)
   })
 
   it('stores and retrieves file content', async () => {
@@ -30,15 +30,15 @@ describe('CacheManager', () => {
       content: new Uint8Array([1, 2, 3]),
       size: 3,
     }
-    await cm.setFileContent('abc', 'file.txt', content)
-    expect(await cm.getFileContent('abc', 'file.txt')).toEqual(content)
+    await cm.setFileContent('main', 'file.txt', content)
+    expect(await cm.getFileContent('main', 'file.txt')).toEqual(content)
   })
 
   it('returns undefined for missing keys', async () => {
     const cm = createManager()
     expect(await cm.getHeadSha('main')).toBeUndefined()
-    expect(await cm.getTree('main')).toBeUndefined()
-    expect(await cm.getFileContent('abc', 'file.txt')).toBeUndefined()
+    expect(await cm.getDirEntries('main', '')).toBeUndefined()
+    expect(await cm.getFileContent('main', 'file.txt')).toBeUndefined()
   })
 
   it('clears all cached data', async () => {

@@ -4,6 +4,7 @@ export type { GitFSOptions, CacheConfig } from './types/options.js'
 export type {
   GitProvider,
   TreeEntry,
+  ReadDirOptions,
   FileContent,
   BranchInfo,
   CommitOptions,

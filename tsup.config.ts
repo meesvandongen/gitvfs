@@ -7,7 +7,7 @@ export default defineConfig({
     'providers/gitlab': 'src/providers/gitlab.ts',
     'cache/indexeddb': 'src/cache/indexeddb.ts',
   },
-  format: ['esm', 'cjs'],
+  format: ['esm'],
   dts: true,
   splitting: true,
   clean: true,

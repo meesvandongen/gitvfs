@@ -75,6 +75,16 @@ describe('GitFS', () => {
       const names = entries.map((e) => e.name)
       expect(names).not.toContain('draft.md')
     })
+
+    it('supports recursive listings', async () => {
+      await provider.addFile('main', 'posts/archive/2024.md', 'Archived')
+      const entries = await fs.readdir('posts', { recursive: true })
+      const names = entries.map((e) => e.name)
+      expect(names).toContain('hello.md')
+      expect(names).toContain('draft.md')
+      expect(names).toContain('archive')
+      expect(names).toContain('archive/2024.md')
+    })
   })
 
   describe('exists', () => {

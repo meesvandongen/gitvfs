@@ -37,8 +37,12 @@ export interface CommitResult {
   files: Record<string, { sha: string }>
 }
 
+export interface ReadDirOptions {
+  recursive?: boolean
+}
+
 export interface GitProvider {
-  getTree(ref: string): Promise<TreeEntry[]>
+  readdir(ref: string, path: string, options?: ReadDirOptions): Promise<TreeEntry[]>
   getFiles(ref: string, paths: string[]): Promise<Map<string, FileContent>>
   getFile(ref: string, path: string): Promise<FileContent>
   getBlob(sha: string): Promise<Uint8Array>

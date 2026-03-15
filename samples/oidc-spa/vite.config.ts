@@ -1,9 +1,11 @@
+import react from '@vitejs/plugin-react'
 import { defineConfig } from 'vite'
 
 export default defineConfig({
-  // Required for OIDC redirect: the silent-sso.html must be served at /silent-sso.html
-  // and the app must be able to handle the redirect back from the OIDC provider.
+  plugins: [react()],
+  // Keep a stable port so the sample URL stays predictable in docs.
   server: {
     port: 3000,
+    strictPort: true,
   },
 })
