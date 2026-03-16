@@ -15,6 +15,8 @@ import {
   fetchUserProfile,
 } from '../lib/user-profile'
 
+const PROJECT_GITHUB_URL = 'https://github.com/meesvandongen/git-fs'
+
 export function AppFrame() {
   const session = useSyncExternalStore(
     subscribeToProviderSession,
@@ -49,6 +51,14 @@ export function AppFrame() {
         </nav>
 
         <div className="topbar-actions">
+          <a
+            href={PROJECT_GITHUB_URL}
+            target="_blank"
+            rel="noreferrer"
+            className="btn btn-ghost btn-sm"
+          >
+            View on GitHub
+          </a>
           <span className="provider-pill">{providerName}</span>
           <TokenButtons provider={session.activeProvider} token={token} apiUrl={activeProviderConfig.apiUrl} />
           {hasMultipleProvidersConfigured() && (
