@@ -11,7 +11,7 @@ importers:
       '@tanstack/react-router':
         specifier: ^1.114.0
         version: 1.167.1(react-dom@19.2.4(react@19.2.4))(react@19.2.4)
-      git-fs:
+      gitvfs:
         specifier: file:../..
         version: file:../..
       react:
@@ -368,7 +368,7 @@ packages:
     resolution: {integrity: sha512-3hN7NaskYvMDLQY55gnW3NQ+mesEAepTqlg+VEbj7zzqEMBVNhzcGYYeqFo/TlYz6eQiFcp1HcsCZO+nGgS8zg==}
     engines: {node: '>=6.9.0'}
 
-  git-fs@file:../..:
+  gitvfs@file:../..:
     resolution: {directory: ../.., type: directory}
 
   isbot@5.1.36:
@@ -926,7 +926,7 @@ snapshots:
 
   gensync@1.0.0-beta.2: {}
 
-  git-fs@file:../..: {}
+  gitvfs@file:../..: {}
 
   isbot@5.1.36: {}
 

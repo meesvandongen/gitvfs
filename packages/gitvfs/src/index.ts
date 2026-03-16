@@ -1,5 +1,5 @@
-export { GitFS } from './git-fs.js'
-export type { DirEntry, StatResult } from './git-fs.js'
+export { GitFS } from './gitvfs.js'
+export type { DirEntry, StatResult } from './gitvfs.js'
 export type { GitFSOptions, CacheConfig } from './types/options.js'
 export type {
   GitProvider,

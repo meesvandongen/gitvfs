@@ -1,6 +1,6 @@
 import type { CacheAdapter } from './types.js'
 
-const DEFAULT_DB_NAME = 'git-fs-cache'
+const DEFAULT_DB_NAME = 'gitvfs-cache'
 const STORE_NAME = 'cache'
 
 export class IndexedDBCacheAdapter implements CacheAdapter {

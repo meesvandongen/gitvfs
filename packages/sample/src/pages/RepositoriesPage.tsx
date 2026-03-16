@@ -56,7 +56,7 @@ function RepositoriesContent(props: {
           <h1 className="section-title">{props.providerName} repositories</h1>
         </div>
         <p className="section-copy">
-          Select a repository to open the routed editor experience powered by <code>git-fs</code>.
+          Select a repository to open the routed editor experience powered by <code>gitvfs</code>.
         </p>
       </div>
 

@@ -30,7 +30,7 @@ export function AppFrame() {
       <header className="topbar">
         <div className="topbar-branding">
           <span className="eyebrow">Sample</span>
-          <span className="topbar-title">git-fs · React + TanStack Router</span>
+          <span className="topbar-title">gitvfs · React + TanStack Router</span>
         </div>
 
         <nav className="topbar-nav">

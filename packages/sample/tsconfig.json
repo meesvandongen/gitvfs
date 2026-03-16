@@ -11,9 +11,9 @@
     "noEmit": true,
     "baseUrl": ".",
     "paths": {
-      "git-fs": ["../git-fs/src/index.ts"],
-      "git-fs/providers/github": ["../git-fs/src/providers/github.ts"],
-      "git-fs/providers/gitlab": ["../git-fs/src/providers/gitlab.ts"]
+      "gitvfs": ["../gitvfs/src/index.ts"],
+      "gitvfs/providers/github": ["../gitvfs/src/providers/github.ts"],
+      "gitvfs/providers/gitlab": ["../gitvfs/src/providers/gitlab.ts"]
     }
   },
   "include": ["src"]

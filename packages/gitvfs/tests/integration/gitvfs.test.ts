@@ -1,5 +1,5 @@
 import { describe, it, expect, beforeEach } from 'vitest'
-import { GitFS } from '../../src/git-fs'
+import { GitFS } from '../../src/gitvfs'
 import { MockProvider } from '../helpers/mock-provider'
 import { NotFoundError } from '../../src/types/errors'
 

@@ -7,16 +7,16 @@ export default defineConfig({
   resolve: {
     alias: [
       {
-        find: 'git-fs/providers/github',
-        replacement: fileURLToPath(new URL('../git-fs/src/providers/github.ts', import.meta.url)),
+        find: 'gitvfs/providers/github',
+        replacement: fileURLToPath(new URL('../gitvfs/src/providers/github.ts', import.meta.url)),
       },
       {
-        find: 'git-fs/providers/gitlab',
-        replacement: fileURLToPath(new URL('../git-fs/src/providers/gitlab.ts', import.meta.url)),
+        find: 'gitvfs/providers/gitlab',
+        replacement: fileURLToPath(new URL('../gitvfs/src/providers/gitlab.ts', import.meta.url)),
       },
       {
-        find: 'git-fs',
-        replacement: fileURLToPath(new URL('../git-fs/src/index.ts', import.meta.url)),
+        find: 'gitvfs',
+        replacement: fileURLToPath(new URL('../gitvfs/src/index.ts', import.meta.url)),
       },
     ],
   },

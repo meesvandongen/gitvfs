@@ -1,7 +1,7 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query'
-import { GitFS, type DirEntry } from 'git-fs'
-import { github } from 'git-fs/providers/github'
-import { gitlab } from 'git-fs/providers/gitlab'
+import { GitFS, type DirEntry } from 'gitvfs'
+import { github } from 'gitvfs/providers/github'
+import { gitlab } from 'gitvfs/providers/gitlab'
 import type { Provider } from './provider-config'
 
 export interface GitHubRepoSelection {
@@ -68,7 +68,7 @@ function sortEntries(entries: DirEntry[]): DirEntry[] {
 }
 
 export function getRepoQueryKey(params: RepoSession) {
-  return ['git-fs', getRepoSessionKey(params)] as const
+  return ['gitvfs', getRepoSessionKey(params)] as const
 }
 
 export async function fetchAvailableRepositories(params: {

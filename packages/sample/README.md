@@ -1,13 +1,13 @@
-# git-fs Personal Access Token React Sample
+# gitvfs Personal Access Token React Sample
 
-A React single-page app that demonstrates a simple “bring your own token” flow with [TanStack Router](https://tanstack.com/router) and [git-fs](../../). Users choose GitHub or GitLab, paste a personal access token by hand, and the app stores it in browser storage for repository browsing and editing.
+A React single-page app that demonstrates a simple “bring your own token” flow with [TanStack Router](https://tanstack.com/router) and [gitvfs](../../). Users choose GitHub or GitLab, paste a personal access token by hand, and the app stores it in browser storage for repository browsing and editing.
 
 ## What it does
 
 1. Lets users choose GitHub or GitLab in the UI.
 2. Prompts for a personal access token directly in the app.
 3. Saves the token in `localStorage` for the selected provider.
-4. Uses the saved token with `git-fs` to browse repositories and files.
+4. Uses the saved token with `gitvfs` to browse repositories and files.
 5. Allows editing text files and committing changes back to the repository.
 
 ## Stack
@@ -16,7 +16,7 @@ A React single-page app that demonstrates a simple “bring your own token” fl
 - TanStack Router
 - Vite 8
 - TypeScript
-- `git-fs`
+- `gitvfs`
 
 ## Prerequisites
 

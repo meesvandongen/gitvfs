@@ -8,8 +8,8 @@ export interface ProviderConfig {
 }
 
 const PROVIDERS: Provider[] = ['github', 'gitlab']
-const PROVIDER_KEY = 'git-fs-provider'
-const TOKEN_KEY_PREFIX = 'git-fs-token:'
+const PROVIDER_KEY = 'gitvfs-provider'
+const TOKEN_KEY_PREFIX = 'gitvfs-token:'
 const sessionListeners = new Set<() => void>()
 let storageListenerAttached = false
 let cachedSessionSnapshot: ProviderSessionSnapshot | null = null
