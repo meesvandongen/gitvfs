@@ -1,7 +1,23 @@
 {
   "name": "gitvfs",
-  "version": "0.1.0",
-  "description": "Filesystem abstraction over Git provider APIs (GitHub, GitLab)",
+  "version": "0.1.1",
+  "description": "Filesystem-style abstraction over Git provider APIs for browsing and editing repositories",
+  "keywords": [
+    "git",
+    "filesystem",
+    "github",
+    "gitlab",
+    "virtual-fs",
+    "browser"
+  ],
+  "homepage": "https://gitvfs-demo.mvd.im/",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meesvandongen/gitvfs.git"
+  },
+  "bugs": {
+    "url": "https://github.com/meesvandongen/gitvfs/issues"
+  },
   "type": "module",
   "exports": {
     ".": {
