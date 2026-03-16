@@ -151,7 +151,8 @@ export function HomePage() {
               <button
                 key={provider}
                 type="button"
-                className={`provider-card ${provider === activeProvider ? 'provider-card-active' : ''}`}
+                className={`provider-card provider-card-${provider} ${provider === activeProvider ? 'provider-card-active' : ''}`}
+                aria-pressed={provider === activeProvider}
                 onClick={() => handleProviderSelect(provider)}
               >
                 <span className="provider-card-title">{getProviderDisplayName(provider)}</span>

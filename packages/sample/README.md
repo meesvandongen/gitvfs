@@ -74,7 +74,7 @@ This sample stores tokens in `localStorage` for the current browser profile. Tha
 ## Project structure
 
 ```txt
-samples/oidc-spa/
+packages/sample/
 ├── index.html
 ├── src/
 │   ├── components/
@@ -94,6 +94,7 @@ samples/oidc-spa/
 ├── .env.example
 ├── package.json
 ├── tsconfig.json
+├── wrangler.jsonc
 └── vite.config.ts
 ```
 
@@ -112,3 +113,37 @@ pnpm build
 ```
 
 The production files are written to `dist/`.
+
+## Deploying to Cloudflare Workers
+
+This sample is configured for a static Cloudflare Workers deployment using Wrangler and the built Vite output in `dist/`.
+
+### Workers project name
+
+The Worker is named `gitvfs-demo`.
+
+### Default deployment URL
+
+After deployment, the default Workers URL will be:
+
+```txt
+https://gitvfs-demo.<your-account-subdomain>.workers.dev
+```
+
+Cloudflare uses your Worker name plus your account's `workers.dev` subdomain to form the final URL.
+
+### Deploy steps
+
+1. Authenticate Wrangler with your Cloudflare account:
+
+   ```sh
+   pnpm exec wrangler login
+   ```
+
+2. Deploy the app:
+
+   ```sh
+   pnpm deploy
+   ```
+
+Wrangler runs the sample build before deployment and uploads the contents of `dist/` as static assets. The config also enables single-page application fallback routing, so client-side routes like `/repositories` and `/editor` resolve to `index.html`.
