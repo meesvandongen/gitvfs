@@ -9,7 +9,6 @@
     "strict": true,
     "skipLibCheck": true,
     "noEmit": true,
-    "baseUrl": ".",
     "paths": {
       "gitvfs": ["../gitvfs/src/index.ts"],
       "gitvfs/providers/github": ["../gitvfs/src/providers/github.ts"],

@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vite-plus/test'
 import { encodeText, decodeText, toBase64, fromBase64 } from '../../src/utils/encoding'
 
 describe('encoding utils', () => {

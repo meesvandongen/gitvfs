@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vitest'
+import { describe, it, expect, beforeEach } from 'vite-plus/test'
 import { GitFS } from '../../src/gitvfs'
 import { MockProvider } from '../helpers/mock-provider'
 import { NotFoundError } from '../../src/types/errors'

@@ -20,7 +20,7 @@ A React single-page app that demonstrates a simple “bring your own token” fl
 
 ## Prerequisites
 
-- Node.js 20.19+
+- Node.js 22.18+
 - A GitHub or GitLab account with repositories you want to browse or edit
 - A personal access token for the provider you want to use
 
@@ -143,7 +143,7 @@ Cloudflare uses your Worker name plus your account's `workers.dev` subdomain to 
 2. Deploy the app:
 
    ```sh
-   pnpm deploy
+   pnpm run deploy
    ```
 
 Wrangler runs the sample build before deployment and uploads the contents of `dist/` as static assets. The config also enables single-page application fallback routing, so client-side routes like `/repositories` and `/editor` resolve to `index.html`.
