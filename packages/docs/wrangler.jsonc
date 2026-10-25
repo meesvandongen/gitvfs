@@ -1,0 +1,15 @@
+{
+  "$schema": "./node_modules/wrangler/config-schema.json",
+  "name": "gitvfs-docs",
+  "compatibility_date": "2026-10-22",
+  // Static output of `pnpm run build`; Workers Builds runs the build, then deploys or previews.
+  "assets": {
+    "directory": "./build/client",
+    // Prerendered pages live at <path>/index.html; serve them without a trailing slash redirect.
+    "html_handling": "drop-trailing-slash",
+    // scripts/postbuild.mjs copies the SPA fallback to 404.html.
+    "not_found_handling": "404-page"
+  },
+  "preview_urls": true,
+  "previews": {}
+}

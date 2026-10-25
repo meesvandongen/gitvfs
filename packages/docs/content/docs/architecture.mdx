@@ -1,0 +1,48 @@
+---
+title: Architecture
+description: How the packages are layered, and why they are split the way they are.
+---
+
+The packages form layers. Each layer only depends on the ones below it, so apps can stop at the
+level they need.
+
+```txt
+┌───────────────────────────────┐   ┌───────────────────────┐
+│ gitvfs-cms/react              │   │ gitvfs-cms/oidc       │
+│ CmsApp, DocumentEditor,       │   │ oidc-spa session  →   │
+│ AutoForm fields, preview      │   │ TokenProvider         │
+├───────────────────────────────┤   └───────────┬───────────┘
+│ gitvfs-cms                    │               │
+│ content types, documents,     │               │
+│ validation, commits           │               │
+├───────────────────────────────┴───────────────▼───────────┐
+│ gitvfs                                                    │
+│ GitFS · providers (GitHub, GitLab) · caches               │
+└───────────────────────────────────────────────────────────┘
+```
+
+## gitvfs
+
+The core has no runtime dependencies. A `GitProvider` speaks one hosting API; `GitFS` adds the
+filesystem view, the change buffer that stages writes, and the cache that is invalidated whenever
+the branch head moves. Providers and the IndexedDB cache are separate entry points
+(`gitvfs/providers/github`, `gitvfs/providers/gitlab`, `gitvfs/cache/indexeddb`), so bundles only
+include what an app imports.
+
+## gitvfs-cms
+
+The CMS core turns files into typed documents. It depends on `zod` (schemas), `yaml`
+(frontmatter) and `@autoform/zod` (to attach editor metadata to schema fields), but not on React.
+It can run in scripts, tests or a server as well as in the browser.
+
+The React layer is a subpath, `gitvfs-cms/react`. React, react-hook-form and the resolvers are
+optional peer dependencies, needed only when that subpath is imported. The same goes for
+`gitvfs-cms/oidc` and `oidc-spa`.
+
+## Why subpaths instead of more packages
+
+Each subpath already behaves like a package: its own entry point, and dependencies that are only
+needed when it is imported. Publishing them separately would add version coordination without
+changing what users install. They can be split out later, without breaking imports, if they need
+independent release cycles. A good candidate for that is a UI kit for other design systems (for
+example AutoForm's shadcn or MUI renderers).

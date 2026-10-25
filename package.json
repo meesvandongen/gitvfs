@@ -6,7 +6,7 @@
     "build": "vp run -r build",
     "test": "vp run -r test",
     "typecheck": "vp run -r typecheck",
-    "lint": "vp lint"
+    "lint": "pnpm --filter gitvfs-docs run typegen && vp lint"
   },
   "devDependencies": {
     "vite-plus": "catalog:"

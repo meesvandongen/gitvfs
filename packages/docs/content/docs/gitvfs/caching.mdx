@@ -1,0 +1,33 @@
+---
+title: Caching
+description: Keep API calls down with memory, IndexedDB or custom caches.
+---
+
+`GitFS` caches directory listings and file contents. Before using the cache it checks the branch
+head (at most every `headValidationIntervalMs`, 30 seconds by default) and clears the cache when
+the head has moved, so cached data never outlives the commit it came from.
+
+```ts
+new GitFS({ provider, branch: 'main', cache: 'memory' }) // default
+new GitFS({ provider, branch: 'main', cache: 'none' })
+```
+
+## IndexedDB
+
+To keep the cache across page loads, pass the IndexedDB adapter:
+
+```ts
+import { IndexedDBCacheAdapter } from 'gitvfs/cache/indexeddb'
+
+new GitFS({ provider, branch: 'main', cache: new IndexedDBCacheAdapter('my-app') })
+```
+
+## Custom caches
+
+Any object with async `get`, `set`, `delete` and `clear` methods is a `CacheAdapter`.
+
+## Prefetch
+
+`prefetch()` loads the whole tree and every file into the cache in as few requests as the
+provider allows. Use it for small repositories where instant navigation matters more than the
+initial load.

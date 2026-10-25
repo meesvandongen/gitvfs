@@ -1,0 +1,57 @@
+---
+title: Content types
+description: Collections, singletons, formats, and how files are read and written.
+---
+
+## Collections
+
+A collection is a folder with one file per entry. The file name, without extension, is the
+entry's **slug**.
+
+| Option | Default | |
+| --- | --- | --- |
+| `name` | required | Identifier used by the API and the UI. |
+| `label` | `name` | Display name. |
+| `folder` | required | Folder holding the entries, relative to the repository root. |
+| `schema` | required | A `z.object(...)` describing the document. |
+| `format` | `'markdown'` | `'markdown'`, `'json'` or `'yaml'`. |
+| `extension` | `md`, `json` or `yml` | For example `mdx`. |
+| `bodyField` | `'body'` | Schema key that holds the markdown body. |
+| `slugField` | `'title'` | Field that new entries derive their slug from. |
+| `labelField` | `'title'` | Field shown in entry lists. |
+| `sort` | by label | Compare function for entry lists. |
+| `commitMessage` | `Update <path>` | `({ action, name, path, previousPath }) => string`. |
+| `previewStylesheets` | `[]` | Stylesheets loaded into the preview, for example your site's CSS. |
+| `previewBaseUrl` | | Base URL for relative links and images in the preview. |
+
+## Singletons
+
+A singleton is a single file, such as site settings or a navigation menu. It takes `path` instead
+of `folder`, and infers its format from the extension. A missing file is read as empty and created
+on the first save.
+
+## Formats
+
+- **markdown**: YAML frontmatter between `---` lines, followed by the body. The body is exposed as
+  the `bodyField` key, so it is edited and validated like any other field.
+- **json**: the whole file is the document, written with two-space indentation.
+- **yaml**: the whole file is the document.
+
+## What saving preserves
+
+The CMS is careful with files that were written by hand:
+
+- Frontmatter keys the schema does not know about are kept.
+- Existing keys keep their position, so diffs only show what changed.
+- When the schema has no `bodyField`, the markdown body is kept as is.
+- Dates are written as `2024-05-01` when they have no time, and as ISO timestamps otherwise.
+
+## Validation
+
+Saves are validated with the schema before anything is staged; invalid data throws a
+`ContentValidationError` with zod's issues. When a stored file does not match the schema,
+`readEntry` still returns its data together with `issues`, so the editor can open it and show what
+needs fixing.
+
+Every write is a single commit. If the commit fails (for example with a `ConflictError` because
+someone else pushed), the staged change is discarded so it does not leak into the next save.

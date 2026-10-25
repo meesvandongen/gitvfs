@@ -1,0 +1,47 @@
+---
+title: API reference
+description: Every method of GitFS and the errors it throws.
+---
+
+## `new GitFS(options)`
+
+| Option | Type | Default |
+| --- | --- | --- |
+| `provider` | `GitProvider` | required |
+| `branch` | `string` | required |
+| `writeBranch` | `string` | `branch` |
+| `cache` | `'memory' \| 'none' \| CacheAdapter` | `'memory'` |
+| `headValidationIntervalMs` | `number` | `30000` |
+| `autoCommit` | `boolean` | `false` |
+| `autoCommitDelay` | `number` | `2000` |
+| `commitMessage` | `(changes: Change[]) => string` | `Update N file(s)` |
+
+## Reading
+
+- `readFile(path)` returns a `Uint8Array`; `readFile(path, { encoding: 'utf-8' })` returns a string.
+- `readdir(path, { recursive? })` returns `DirEntry[]` (`name`, `type: 'blob' | 'tree'`, `sha`, `size`).
+- `exists(path)` and `stat(path)`.
+- `prefetch()` warms the cache.
+
+## Writing
+
+- `writeFile(path, content)`, `rm(path)`, `rename(from, to)` stage changes.
+- `status()` lists staged changes; `discard()` drops them.
+- `commit(message)` returns `{ sha, date, files }`.
+
+## Branches
+
+- `createBranch(name)` branches from the current read branch.
+- `checkout(branch)` switches both the read and write branch.
+
+## Errors
+
+All errors extend `GitFSError` and carry a `code`:
+
+| Class | `code` | When |
+| --- | --- | --- |
+| `NotFoundError` | `NOT_FOUND` | The file, directory or branch does not exist. |
+| `AuthError` | `AUTH` | The token is missing, invalid or lacks access (401/403). |
+| `RateLimitError` | `RATE_LIMIT` | The API rate limit was hit; see `retryAfter`. |
+| `ConflictError` | `CONFLICT` | The branch moved since it was read. |
+| `NetworkError` | `NETWORK` | The request did not reach the API. |
