@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vite-plus/test'
 import { getGitHash } from '../../src/utils/hash'
 import { encodeText } from '../../src/utils/encoding'
 

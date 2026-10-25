@@ -1,4 +1,4 @@
-import { describe, it, expect } from 'vitest'
+import { describe, it, expect } from 'vite-plus/test'
 import { normalize, join, dirname, basename } from '../../src/utils/path'
 
 describe('path utils', () => {
