@@ -1,6 +1,6 @@
 {
   "$schema": "./node_modules/wrangler/config-schema.json",
-  "name": "gitvfs-docs",
+  "name": "gitvfs",
   "compatibility_date": "2026-10-22",
   // Static output of `pnpm run build`; Workers Builds runs the build, then deploys or previews.
   "assets": {
