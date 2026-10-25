@@ -116,34 +116,18 @@ The production files are written to `dist/`.
 
 ## Deploying to Cloudflare Workers
 
-This sample is configured for a static Cloudflare Workers deployment using Wrangler and the built Vite output in `dist/`.
+The sample is deployed as static assets on Cloudflare Workers by [Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/), Cloudflare's Git integration. GitHub CI never runs Wrangler.
 
-### Workers project name
+- **Root directory:** `packages/sample`
+- **Build command:** `pnpm run build`
+- **Deploy command:** `npx wrangler deploy` (production branch)
+- **Preview command:** `npx wrangler preview` (every other branch)
 
-The Worker is named `gitvfs-demo`.
+`wrangler.jsonc` serves `dist/` with single-page application fallback routing, so client-side routes like `/repositories` and `/editor` resolve to `index.html`. Its empty `previews` block enables [Worker Previews](https://developers.cloudflare.com/workers/previews/), so each branch gets its own preview URL.
 
-### Default deployment URL
+To check the production build locally on the Workers runtime:
 
-After deployment, the default Workers URL will be:
-
-```txt
-https://gitvfs-demo.<your-account-subdomain>.workers.dev
+```sh
+pnpm run build
+pnpm exec wrangler dev
 ```
-
-Cloudflare uses your Worker name plus your account's `workers.dev` subdomain to form the final URL.
-
-### Deploy steps
-
-1. Authenticate Wrangler with your Cloudflare account:
-
-   ```sh
-   pnpm exec wrangler login
-   ```
-
-2. Deploy the app:
-
-   ```sh
-   pnpm run deploy
-   ```
-
-Wrangler runs the sample build before deployment and uploads the contents of `dist/` as static assets. The config also enables single-page application fallback routing, so client-side routes like `/repositories` and `/editor` resolve to `index.html`.

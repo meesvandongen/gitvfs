@@ -9,8 +9,7 @@
   "scripts": {
     "dev": "vp dev",
     "build": "tsc && vp build",
-    "preview": "vp preview",
-    "deploy": "wrangler deploy"
+    "preview": "vp preview"
   },
   "dependencies": {
     "@tanstack/react-query": "^5.71.10",
@@ -27,6 +26,6 @@
     "typescript": "^5.5.0",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "wrangler": "4.74.0"
+    "wrangler": "4.152.0"
   }
 }
