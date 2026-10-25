@@ -1,0 +1,18 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "ES2022",
+    "moduleResolution": "bundler",
+    "jsx": "react-jsx",
+    "strict": true,
+    "esModuleInterop": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "types": ["vite-plus/test/globals"],
+    "paths": {
+      "gitvfs": ["../gitvfs/src/index.ts"]
+    }
+  },
+  "include": ["src", "tests", "playground"]
+}
