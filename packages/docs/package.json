@@ -38,6 +38,6 @@
     "typescript": "^5.5.0",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "wrangler": "4.152.0"
+    "wrangler": "4.153.0"
   }
 }
