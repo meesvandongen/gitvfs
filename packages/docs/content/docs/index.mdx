@@ -1,0 +1,30 @@
+---
+title: Introduction
+description: Git repositories as a filesystem in the browser, and a content management system built on top.
+---
+
+gitvfs is a small family of packages for apps that keep their data in a Git repository and talk to
+it straight from the browser, through the GitHub or GitLab API. There is no server to run and no
+database to keep in sync: the repository is the source of truth, and every change is a commit.
+
+<Cards>
+  <Card title="gitvfs" href="/docs/gitvfs" description="Read, stage and commit files with a filesystem-style API." />
+  <Card title="gitvfs-cms" href="/docs/cms" description="Edit markdown, JSON and YAML content with forms and a live preview." />
+  <Card title="Authentication" href="/docs/cms/authentication" description="Personal access tokens, or OpenID Connect through oidc-spa." />
+  <Card title="Architecture" href="/docs/architecture" description="How the packages fit together and where they are heading." />
+</Cards>
+
+## The packages
+
+| Package | What it does |
+| --- | --- |
+| `gitvfs` | `GitFS`: `readFile`, `readdir`, `writeFile`, `rm`, `rename`, `commit`, with GitHub and GitLab providers and pluggable caching. |
+| `gitvfs-cms` | Content types described with zod (`defineCollection`, `defineSingleton`) and a `GitCms` that reads, validates and commits them. |
+| `gitvfs-cms/react` | `CmsApp`, a complete editor UI built with [AutoForm](https://autoform.vantezzen.io/), plus the pieces to build your own. |
+| `gitvfs-cms/oidc` | A token provider backed by [oidc-spa](https://www.oidc-spa.dev/), so users sign in instead of pasting tokens. |
+
+## These docs edit themselves
+
+This site is a [Fumadocs](https://fumadocs.dev) app whose pages are MDX files in the gitvfs
+repository. The [editor](/admin) is `gitvfs-cms` configured with one collection per docs folder:
+sign in with a GitHub token and every save becomes a commit, which in turn redeploys the site.

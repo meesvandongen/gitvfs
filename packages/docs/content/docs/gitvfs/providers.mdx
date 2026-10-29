@@ -1,0 +1,52 @@
+---
+title: Providers
+description: Connect to GitHub or GitLab, and supply tokens.
+---
+
+A provider implements the `GitProvider` interface for one hosting API. Import only the ones you use.
+
+## GitHub
+
+```ts
+import { github } from 'gitvfs/providers/github'
+
+const provider = github({
+  owner: 'acme',
+  repo: 'docs',
+  token: 'github_pat_…',
+  // apiUrl: 'https://github.example.com/api/v3', // GitHub Enterprise Server
+})
+```
+
+The token needs read access to repository contents for reads, and write access to commit.
+Fine-grained personal access tokens with **Contents: read and write** on the repository are enough.
+
+## GitLab
+
+```ts
+import { gitlab } from 'gitvfs/providers/gitlab'
+
+const provider = gitlab({
+  projectId: 1234, // or 'group/project'
+  token: 'glpat-…',
+  // apiUrl: 'https://gitlab.example.com', // self-managed
+})
+```
+
+Personal access tokens and OAuth tokens need the `api` scope. With OAuth you can sign users in
+instead of asking for tokens; see [Authentication](/docs/cms/authentication).
+
+## Tokens
+
+`token` is a `TokenProvider`: either a string or a function returning one (or a promise of one).
+The function runs before every request, so short-lived tokens can be refreshed transparently:
+
+```ts
+const provider = github({ owner: 'acme', repo: 'docs', token: async () => session.getAccessToken() })
+```
+
+## Custom providers
+
+Anything that implements `GitProvider` works with `GitFS`: `readdir`, `getFile`, `getFiles`,
+`getBlob`, `getBranch`, `getLastCommitSha`, `createBranch`, `deleteBranch` and `commit`. An
+in-memory implementation is a convenient test double.

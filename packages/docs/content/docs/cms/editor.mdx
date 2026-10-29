@@ -1,0 +1,63 @@
+---
+title: Editor
+description: The React editor, its fields, and how to customize forms and previews.
+---
+
+## Fields
+
+Forms are generated from the schema by AutoForm. Types are inferred from zod, and can be refined
+with helpers that attach editor metadata through `.check()`:
+
+| Schema | Field |
+| --- | --- |
+| `z.string()` | text input |
+| `z.string().check(textarea())` | multi-line text |
+| `z.string().check(markdown())` | markdown editor with toolbar and live preview |
+| `z.number()` | number input |
+| `z.boolean()` | checkbox |
+| `z.coerce.date()` | date picker |
+| `z.enum([...])` | select |
+| `z.array(...)` | repeatable list |
+| `z.object({...})` | group of fields |
+
+`field({ label, description, order, inputProps, fieldType })` sets the other options:
+
+```ts
+title: z.string().min(1).check(field({ label: 'Title', description: 'Shown in the browser tab' })),
+```
+
+Use `.default('')` on optional text such as the body: AutoForm treats empty inputs as missing, so a
+plain required string rejects an empty body.
+
+## Preview
+
+The editor shows two tabs next to the form:
+
+- **Preview** renders the title and markdown body. Content is rendered in an `iframe` that is
+  sandboxed without scripts and with a strict content security policy, so content from the
+  repository can never run code next to the user's token. Pass `previewStylesheets` to style it
+  like your site.
+- **Source** shows the exact file the next save will commit.
+
+Replace the rendered preview per collection:
+
+```tsx
+<CmsApp cms={cms} previews={{ posts: ({ values }) => <PostCard post={values} /> }} />
+```
+
+## Building your own UI
+
+`CmsApp` is assembled from exported parts, so you can embed only what you need:
+
+- `CmsProvider` and `useCms()` share a `GitCms` instance.
+- `DocumentEditor` loads, edits, previews and commits one entry or singleton.
+- `ContentForm` is the AutoForm for a content type, with the CMS field components.
+- `DocumentPreview`, `MarkdownPreview` and `PreviewFrame` render previews.
+- `uiComponents` and `formComponents` are the AutoForm components; override any of them through
+  the `uiComponents` and `formComponents` props, for example to add a custom `fieldType`.
+
+## Styling
+
+Import `gitvfs-cms/styles.css`. All classes are prefixed with `gcms-`, and colors, radius and fonts
+are custom properties on `.gcms-app` (`--gcms-accent`, `--gcms-bg`, …). Dark mode follows
+`prefers-color-scheme`.

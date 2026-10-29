@@ -1,0 +1,73 @@
+---
+title: Authentication
+description: Personal access tokens, or OpenID Connect with oidc-spa.
+---
+
+`gitvfs` sends a bearer token with every API request. Where it comes from is up to the app.
+
+## Personal access tokens
+
+The simplest option, used by the [demo](https://gitvfs-demo.mvd.im/) and by the [editor for
+these docs](/admin): the user pastes a token, and the app keeps it in browser storage. Prefer
+`sessionStorage`, and ask for the narrowest token that works (on GitHub: a fine-grained token with
+**Contents: read and write** on one repository).
+
+## OpenID Connect with oidc-spa
+
+`gitvfs-cms/oidc` connects [oidc-spa](https://www.oidc-spa.dev/) to gitvfs. oidc-spa runs the
+Authorization Code flow with PKCE in the browser, keeps tokens in memory, and renews them in the
+background; gitvfs asks it for the current access token before every request.
+
+```sh
+pnpm add oidc-spa
+```
+
+Call `oidcEarlyInit` at the very top of your entry file (or use `oidc-spa/vite-plugin`):
+
+```ts
+import { oidcEarlyInit } from 'oidc-spa/entrypoint'
+
+const { shouldLoadApp } = oidcEarlyInit({ BASE_URL: import.meta.env.BASE_URL })
+if (shouldLoadApp) import('./main')
+```
+
+Then create a session and hand its token to the provider:
+
+```ts
+import { GitFS } from 'gitvfs'
+import { gitlab } from 'gitvfs/providers/gitlab'
+import { createOidcSession, gitlabOidc } from 'gitvfs-cms/oidc'
+
+const session = await createOidcSession(gitlabOidc({ clientId: 'your-application-id' }))
+
+if (!session.isUserLoggedIn) {
+  await session.login() // redirects to GitLab
+} else {
+  const fs = new GitFS({
+    provider: gitlab({ projectId: 'acme/site', token: session.token }),
+    branch: 'main',
+  })
+}
+```
+
+`session.user` holds the ID token claims (name, username, avatar) and `session.logout()` ends the
+session. For other identity providers, pass any oidc-spa parameters to `createOidcSession`, or use
+`oidcTokenProvider(oidc)` with an oidc-spa instance you created yourself.
+
+### GitLab
+
+GitLab is an OpenID Connect provider, and its OAuth tokens work against the API that
+`gitvfs/providers/gitlab` uses. Create an application under **User settings → Applications** (or
+for a group or instance):
+
+- clear **Confidential**, so it can be used from a browser with PKCE;
+- add your app's URL as a redirect URI;
+- select the `openid` and `api` scopes.
+
+`gitlabOidc({ clientId, gitlabUrl })` fills in the issuer and requests the `api` scope.
+
+### GitHub
+
+GitHub does not offer OpenID Connect for signing users in, and its OAuth token exchange needs a
+client secret, so it cannot run in the browser alone. Use personal access tokens, or put an
+identity provider that brokers GitHub and exchanges tokens (for example Keycloak) in front of it.

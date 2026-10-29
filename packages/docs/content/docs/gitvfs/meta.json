@@ -1,0 +1,4 @@
+{
+  "title": "gitvfs",
+  "pages": ["index", "providers", "editing", "caching", "api"]
+}

@@ -1,0 +1,39 @@
+---
+title: Deployment
+description: Host a gitvfs-cms editor as a static site.
+---
+
+An editor built with `gitvfs-cms` is a static single-page app: it needs no server, because the
+browser talks to the GitHub or GitLab API directly. Any static host works.
+
+## Cloudflare Workers
+
+The demo and these docs are deployed with
+[Workers Builds](https://developers.cloudflare.com/workers/ci-cd/builds/): Cloudflare runs
+`pnpm run build` for each project and deploys the static output, and every branch gets a preview
+URL. The configuration lives next to each app in `wrangler.jsonc`:
+
+```jsonc
+{
+  "name": "gitvfs",
+  "compatibility_date": "2026-10-22",
+  "assets": {
+    "directory": "./build/client",
+    "html_handling": "drop-trailing-slash",
+    "not_found_handling": "404-page",
+  },
+  "preview_urls": true,
+  "previews": {},
+}
+```
+
+The empty `previews` block enables
+[Worker Previews](https://developers.cloudflare.com/workers/previews/) for non-production branches.
+
+## Security checklist
+
+- Serve the editor over HTTPS, from an origin that hosts nothing else, since it handles tokens.
+- Keep tokens in memory or `sessionStorage`; with oidc-spa they never touch storage.
+- Ask for the narrowest scopes: one repository, contents only.
+- Rendered previews are sandboxed, but do not render repository content elsewhere in the editor
+  with `dangerouslySetInnerHTML`.

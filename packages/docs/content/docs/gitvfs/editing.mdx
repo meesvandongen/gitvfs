@@ -1,0 +1,54 @@
+---
+title: Editing and committing
+description: Stage changes, commit them, and work with branches.
+---
+
+## Staging
+
+`writeFile`, `rm` and `rename` are synchronous: they only record a change in the buffer. Reads
+see staged changes immediately, so an editor can show the state the next commit will produce.
+
+```ts
+fs.writeFile('posts/hello.md', '# Hello\n')
+fs.rename('drafts/idea.md', 'posts/idea.md')
+fs.rm('posts/old.md')
+
+fs.status()
+// [{ path: 'posts/hello.md', action: 'create' }, …]
+
+fs.discard() // drop everything that is staged
+```
+
+## Committing
+
+`commit(message)` turns every staged change into one commit and clears the buffer. It passes the
+expected head commit to the provider, so a commit fails with a `ConflictError` instead of
+overwriting work someone pushed in the meantime.
+
+```ts
+const { sha } = await fs.commit('Publish hello post')
+```
+
+## Branches
+
+```ts
+const fs = new GitFS({ provider, branch: 'main', writeBranch: 'content-edits' })
+```
+
+With a `writeBranch`, reads come from `branch` and commits go to `writeBranch`, which is created
+from `branch` on the first commit. This is a good fit for review workflows where edits land in a
+pull request. Use `createBranch(name)` and `checkout(branch)` to manage branches directly.
+
+## Auto-commit
+
+```ts
+const fs = new GitFS({
+  provider,
+  branch: 'main',
+  autoCommit: true,
+  autoCommitDelay: 2000,
+  commitMessage: (changes) => `Update ${changes.map((c) => c.path).join(', ')}`,
+})
+```
+
+Changes are committed after the delay passes without further writes.
