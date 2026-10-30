@@ -2,14 +2,28 @@
   "$schema": "./node_modules/wrangler/config-schema.json",
   "name": "gitvfs",
   "compatibility_date": "2026-10-22",
+  // Token exchange for "Sign in with GitHub" on /admin. Only /api/github/* reaches it.
+  "main": "./worker/index.ts",
+  // Bundle the workspace source, so the package needs no build first.
+  "alias": {
+    "gitvfs-github-auth/server": "../github-auth/src/server.ts"
+  },
+  // GITHUB_CLIENT_SECRET is a secret: `wrangler secret put GITHUB_CLIENT_SECRET`.
+  // Sign-in stays off until GITHUB_CLIENT_ID is set.
+  "vars": {
+    "GITHUB_CLIENT_ID": "",
+    "GITHUB_ALLOWED_ORIGINS": "https://docs.gitvfs.mvd.im"
+  },
   // Static output of `pnpm run build`; Workers Builds runs the build, then deploys or previews.
   "assets": {
     "directory": "./build/client",
     // Prerendered pages live at <path>/index.html; serve them without a trailing slash redirect.
     "html_handling": "drop-trailing-slash",
     // scripts/postbuild.mjs copies the SPA fallback to 404.html.
-    "not_found_handling": "404-page"
+    "not_found_handling": "404-page",
+    "run_worker_first": ["/api/github/*"]
   },
   "preview_urls": true,
+  // Previews do not inherit vars, so sign-in stays off there and /admin offers token sign-in.
   "previews": {}
 }

@@ -14,7 +14,9 @@
       "gitvfs": ["../gitvfs/src/index.ts"],
       "gitvfs/providers/github": ["../gitvfs/src/providers/github.ts"],
       "gitvfs-cms": ["../cms/src/index.ts"],
-      "gitvfs-cms/react": ["../cms/src/react/index.ts"]
+      "gitvfs-cms/react": ["../cms/src/react/index.ts"],
+      "gitvfs-github-auth": ["../github-auth/src/index.ts"],
+      "gitvfs-github-auth/server": ["../github-auth/src/server.ts"]
     },
     "esModuleInterop": true,
     "verbatimModuleSyntax": true,

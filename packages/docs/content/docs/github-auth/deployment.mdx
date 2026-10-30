@@ -1,0 +1,86 @@
+---
+title: Deployment
+description: Serve the token exchange from the same Cloudflare Worker as your static site.
+---
+
+These docs show the setup: one Worker serves the prerendered site as static assets and runs code
+only for `/api/github/*`.
+
+## The Worker
+
+```ts title="worker/index.ts"
+import { createTokenHandler } from 'gitvfs-github-auth/server'
+
+interface Env {
+  GITHUB_CLIENT_ID?: string
+  GITHUB_CLIENT_SECRET?: string
+  GITHUB_ALLOWED_ORIGINS?: string
+}
+
+export default {
+  async fetch(request: Request, env: Env): Promise<Response> {
+    const url = new URL(request.url)
+    const origins = (env.GITHUB_ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean)
+    const enabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) && origins.includes(url.origin)
+
+    if (url.pathname === '/api/github/config') {
+      return Response.json({ clientId: enabled ? env.GITHUB_CLIENT_ID : null })
+    }
+    if (url.pathname === '/api/github/token' && enabled) {
+      return createTokenHandler({
+        clientId: env.GITHUB_CLIENT_ID!,
+        clientSecret: env.GITHUB_CLIENT_SECRET!,
+        allowedOrigins: origins,
+      })(request)
+    }
+    return Response.json({ error: 'not_found' }, { status: 404 })
+  },
+}
+```
+
+`/api/github/config` lets the page find out whether sign-in is available on the current origin.
+The editor shows **Sign in with GitHub** only when it is, and falls back to personal access tokens
+elsewhere, such as on preview URLs that are not registered with the app.
+
+## Configuration
+
+```jsonc title="wrangler.jsonc"
+{
+  "name": "gitvfs",
+  "main": "./worker/index.ts",
+  "vars": {
+    "GITHUB_CLIENT_ID": "Iv23li…",
+    "GITHUB_ALLOWED_ORIGINS": "https://docs.example.com",
+  },
+  "assets": {
+    "directory": "./build/client",
+    // Only the token routes run the Worker; everything else is served as a static file.
+    "run_worker_first": ["/api/github/*"],
+  },
+  "previews": {},
+}
+```
+
+Set the secret once per Worker:
+
+```sh
+pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
+```
+
+Variables set at the top level apply to production only. [Worker
+Previews](https://developers.cloudflare.com/workers/previews/) do not inherit them, which keeps
+sign-in off on previews unless you add the variables to the `previews` block and register the
+preview URL with the app.
+
+## Local development
+
+Put the secret in `.dev.vars` (keep it out of Git), then run the built site on the Workers runtime
+with sign-in enabled for the local origin:
+
+```sh
+printf 'GITHUB_CLIENT_SECRET=…\n' > .dev.vars
+pnpm run build
+pnpm exec wrangler dev --var GITHUB_CLIENT_ID:Iv23li… --var GITHUB_ALLOWED_ORIGINS:http://localhost:8787
+```
+
+Add `http://localhost:8787/admin` as a callback URL of the app for this to work.
