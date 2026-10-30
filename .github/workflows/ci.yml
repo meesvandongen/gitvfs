@@ -33,5 +33,8 @@ jobs:
       - run: pnpm --filter gitvfs-cms run typecheck
       - run: pnpm --filter gitvfs-cms run test
       - run: pnpm --filter gitvfs-cms run build
+      - run: pnpm --filter gitvfs-github-auth run typecheck
+      - run: pnpm --filter gitvfs-github-auth run test
+      - run: pnpm --filter gitvfs-github-auth run build
       - run: pnpm --filter gitvfs-docs run typecheck
       # Deployments happen in Cloudflare Workers Builds; CI never runs Wrangler.

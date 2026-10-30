@@ -264,6 +264,9 @@ importers:
       gitvfs-cms:
         specifier: workspace:*
         version: link:../cms
+      gitvfs-github-auth:
+        specifier: workspace:*
+        version: link:../github-auth
       isbot:
         specifier: ^5
         version: 5.2.2
@@ -316,6 +319,18 @@ importers:
       wrangler:
         specifier: 4.153.0
         version: 4.153.0(@types/node@26.6.5)
+
+  packages/github-auth:
+    devDependencies:
+      happy-dom:
+        specifier: ^20.8.4
+        version: 20.14.6
+      typescript:
+        specifier: ^5.5.0
+        version: 5.9.3
+      vite-plus:
+        specifier: 'catalog:'
+        version: 1.4.0(@types/node@26.6.5)(@vitest/ui@5.0.5)(esbuild@0.28.2)(happy-dom@20.14.6)(jiti@2.7.0)(typescript@5.9.3)(yaml@2.9.1)
 
   packages/gitvfs:
     devDependencies:
