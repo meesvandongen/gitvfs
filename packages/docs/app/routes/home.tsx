@@ -24,9 +24,9 @@ const packages = [
     description: 'Collections of markdown, JSON and YAML content, edited with forms and a live preview.',
   },
   {
-    name: 'gitvfs-cms/oidc',
-    href: '/docs/cms/authentication',
-    description: 'Sign in with OpenID Connect through oidc-spa and use the session token for the Git API.',
+    name: 'gitvfs-github-auth',
+    href: '/docs/github-auth',
+    description: 'Sign in with GitHub from the browser with PKCE, plus the token handler GitHub requires.',
   },
 ]
 

@@ -22,7 +22,19 @@ Deployed by Cloudflare [Workers Builds](https://developers.cloudflare.com/worker
 - **Deploy command:** `npx wrangler deploy` (production branch)
 - **Preview command:** `npx wrangler preview` (every other branch)
 
-`wrangler.jsonc` serves `build/client` as static assets. Its empty `previews` block enables [Worker Previews](https://developers.cloudflare.com/workers/previews/). To try the production build on the Workers runtime:
+## Sign in with GitHub
+
+`/admin` offers **Sign in with GitHub** through [gitvfs-github-auth](../github-auth) when the Worker in `worker/index.ts` is configured for the current origin. Otherwise it falls back to personal access tokens.
+
+1. Create a GitHub App with callback URL `https://<docs domain>/admin` and **Contents: read and write**, and install it on this repository.
+2. Set `GITHUB_CLIENT_ID` and `GITHUB_ALLOWED_ORIGINS` in `wrangler.jsonc`.
+3. Run `pnpm exec wrangler secret put GITHUB_CLIENT_SECRET`.
+
+Previews do not inherit these variables, so they offer token sign-in only.
+
+## Assets
+
+`wrangler.jsonc` serves `build/client` as static assets, and only `/api/github/*` runs the Worker. Its empty `previews` block enables [Worker Previews](https://developers.cloudflare.com/workers/previews/). To try the production build on the Workers runtime:
 
 ```sh
 pnpm run build

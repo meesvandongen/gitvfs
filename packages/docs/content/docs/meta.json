@@ -1,3 +1,11 @@
 {
-  "pages": ["index", "---Packages---", "gitvfs", "cms", "---Project---", "architecture"]
+  "pages": [
+    "index",
+    "---Packages---",
+    "gitvfs",
+    "cms",
+    "github-auth",
+    "---Project---",
+    "architecture"
+  ]
 }

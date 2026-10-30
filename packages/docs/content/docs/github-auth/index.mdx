@@ -1,0 +1,106 @@
+---
+title: Sign in with GitHub
+description: GitHub sign-in for browser apps, with PKCE and a tiny token exchange handler.
+---
+
+`gitvfs-github-auth` lets users of a browser app sign in with GitHub and turns the session into a
+gitvfs `TokenProvider`. It is what the [editor for these docs](/admin) uses.
+
+## Why it needs a server part
+
+GitHub [supports PKCE](https://github.blog/changelog/2025-07-14-pkce-support-for-oauth-and-github-app-authentication/)
+for OAuth Apps and GitHub Apps, which protects the authorization code. Two things still stop a
+browser from finishing the sign-in on its own:
+
+- the token endpoint (`github.com/login/oauth/access_token`) always requires the **client secret**;
+- it sends **no CORS headers**, so a web page cannot read its response.
+
+The package therefore has two entry points:
+
+| Import | Runs in | Does |
+| --- | --- | --- |
+| `gitvfs-github-auth` | the browser | Redirects to GitHub with a PKCE challenge, keeps the verifier across the redirect, exchanges the code, refreshes expiring tokens. |
+| `gitvfs-github-auth/server` | Workers, Deno, Bun, Node 18+ | `createTokenHandler`: adds the client secret and CORS headers, and only accepts exchanges that carry a PKCE verifier. |
+
+The secret never reaches the browser, and the handler only forwards the fields GitHub needs.
+
+## Create a GitHub App
+
+A GitHub App is recommended over an OAuth App: its user tokens only reach repositories where the
+app is installed, only carry the permissions you choose, and expire after eight hours (they are
+refreshed automatically).
+
+1. Under **Settings → Developer settings → GitHub Apps**, create an app.
+2. Set the **Callback URL** to the page that handles the redirect, for example
+   `https://docs.example.com/admin`.
+3. Under **Repository permissions**, give **Contents** read and write access. Keep **Expire user
+   authorization tokens** enabled.
+4. Generate a client secret, and install the app on the repositories it may edit.
+
+An OAuth App works too; pass `scope: 'repo'` (or `public_repo`) to the browser client.
+
+## Browser
+
+```ts
+import { GitFS } from 'gitvfs'
+import { github } from 'gitvfs/providers/github'
+import { createGitHubAuth } from 'gitvfs-github-auth'
+
+const auth = createGitHubAuth({
+  clientId: 'Iv23li…',
+  tokenUrl: '/api/github/token',
+  redirectUri: `${location.origin}/admin`,
+})
+
+await auth.handleRedirect() // completes the sign-in when GitHub sends the user back
+
+if (!auth.isSignedIn()) await auth.login()
+
+const fs = new GitFS({
+  provider: github({ owner: 'acme', repo: 'site', token: auth.token }),
+  branch: 'main',
+})
+```
+
+`auth.token` hands gitvfs a valid access token for every request, refreshing it when it has
+expired; concurrent requests share one refresh. `auth.fetchUser()` returns the user's profile and
+`auth.signOut()` forgets the tokens.
+
+| Option | Default | |
+| --- | --- | --- |
+| `clientId` | required | The app's client ID. |
+| `tokenUrl` | required | Where `createTokenHandler` is served. |
+| `redirectUri` | current page | Must match a callback URL of the app. |
+| `scope` | | OAuth Apps only. |
+| `storage` | `'session'` | `'session'`, `'local'`, `'memory'`, or a Storage-like object. |
+| `githubUrl`, `apiUrl` | github.com | For GitHub Enterprise Server. |
+
+Failures throw a `GitHubAuthError` whose `code` is `not_signed_in`, `session_expired`,
+`state_mismatch`, `token_exchange_failed`, or GitHub's own error such as `access_denied`.
+
+## Token handler
+
+```ts
+import { createTokenHandler } from 'gitvfs-github-auth/server'
+
+const handleToken = createTokenHandler({
+  clientId: env.GITHUB_CLIENT_ID,
+  clientSecret: env.GITHUB_CLIENT_SECRET,
+  allowedOrigins: ['https://docs.example.com'],
+})
+
+// in any Fetch API server
+const response = await handleToken(request)
+```
+
+Requests from origins that are not allowed, or without an `Origin` header, get a 403. GitHub's
+OAuth errors, which it reports with a 200 status, become 400 responses with the same `error` code.
+See [Deployment](/docs/github-auth/deployment) for a complete Cloudflare Worker.
+
+## Limits
+
+- GitHub matches callback URLs exactly, without wildcards. Sign-in only works on URLs registered
+  with the app (a GitHub App accepts up to ten), so preview deployments usually fall back to tokens.
+- As with any browser sign-in, code running on the page can read the tokens. Host the editor on
+  its own origin and never render untrusted HTML next to it; `gitvfs-cms` sandboxes its previews
+  for this reason.

@@ -31,6 +31,7 @@ export const collections = [
   docsCollection('overview', 'Overview', ''),
   docsCollection('gitvfs', 'gitvfs', 'gitvfs'),
   docsCollection('cms', 'gitvfs-cms', 'cms'),
+  docsCollection('github-auth', 'gitvfs-github-auth', 'github-auth'),
 ]
 
 // Fumadocs' meta.json orders the sidebar; `---Label---` entries are separators.
@@ -53,6 +54,13 @@ export const singletons = [
     name: 'nav-cms',
     label: 'Sidebar: gitvfs-cms',
     path: `${root}/cms/meta.json`,
+    schema: navigationSchema,
+    commitMessage,
+  }),
+  defineSingleton({
+    name: 'nav-github-auth',
+    label: 'Sidebar: gitvfs-github-auth',
+    path: `${root}/github-auth/meta.json`,
     schema: navigationSchema,
     commitMessage,
   }),

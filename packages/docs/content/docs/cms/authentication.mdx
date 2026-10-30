@@ -68,6 +68,15 @@ for a group or instance):
 
 ### GitHub
 
-GitHub does not offer OpenID Connect for signing users in, and its OAuth token exchange needs a
-client secret, so it cannot run in the browser alone. Use personal access tokens, or put an
-identity provider that brokers GitHub and exchanges tokens (for example Keycloak) in front of it.
+GitHub does not offer OpenID Connect for signing users in. It does support the OAuth
+authorization code flow with PKCE, but its token endpoint still requires the client secret and
+sends no CORS headers, so a browser cannot finish the sign-in alone.
+[gitvfs-github-auth](/docs/github-auth) closes that gap: it runs the PKCE flow in the browser and
+ships a small token exchange handler that adds the secret, for example in a Cloudflare Worker.
+
+```ts
+import { createGitHubAuth } from 'gitvfs-github-auth'
+
+const auth = createGitHubAuth({ clientId: 'Iv23li…', tokenUrl: '/api/github/token' })
+const provider = github({ owner: 'acme', repo: 'site', token: auth.token })
+```

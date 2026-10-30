@@ -7,18 +7,18 @@ The packages form layers. Each layer only depends on the ones below it, so apps 
 level they need.
 
 ```txt
-┌───────────────────────────────┐   ┌───────────────────────┐
-│ gitvfs-cms/react              │   │ gitvfs-cms/oidc       │
-│ CmsApp, DocumentEditor,       │   │ oidc-spa session  →   │
-│ AutoForm fields, preview      │   │ TokenProvider         │
-├───────────────────────────────┤   └───────────┬───────────┘
-│ gitvfs-cms                    │               │
-│ content types, documents,     │               │
-│ validation, commits           │               │
-├───────────────────────────────┴───────────────▼───────────┐
-│ gitvfs                                                    │
-│ GitFS · providers (GitHub, GitLab) · caches               │
-└───────────────────────────────────────────────────────────┘
+┌───────────────────────────────┐ ┌──────────────────┐ ┌──────────────────────┐
+│ gitvfs-cms/react              │ │ gitvfs-cms/oidc  │ │ gitvfs-github-auth   │
+│ CmsApp, DocumentEditor,       │ │ oidc-spa session │ │ PKCE sign-in  +      │
+│ AutoForm fields, preview      │ │  → TokenProvider │ │ /server token handler│
+├───────────────────────────────┤ └────────┬─────────┘ └──────────┬───────────┘
+│ gitvfs-cms                    │          │  TokenProvider       │
+│ content types, documents,     │          │                      │
+│ validation, commits           │          │                      │
+├───────────────────────────────┴──────────▼──────────────────────▼───────────┐
+│ gitvfs                                                                      │
+│ GitFS · providers (GitHub, GitLab) · caches                                 │
+└─────────────────────────────────────────────────────────────────────────────┘
 ```
 
 ## gitvfs
@@ -38,6 +38,12 @@ It can run in scripts, tests or a server as well as in the browser.
 The React layer is a subpath, `gitvfs-cms/react`. React, react-hook-form and the resolvers are
 optional peer dependencies, needed only when that subpath is imported. The same goes for
 `gitvfs-cms/oidc` and `oidc-spa`.
+
+## gitvfs-github-auth
+
+GitHub sign-in is its own package because it has its own runtime: half of it runs on a server.
+It has no dependencies and does not depend on gitvfs either; `auth.token` simply matches the
+`TokenProvider` signature. Apps that are not CMSes, such as the gitvfs demo, can use it alone.
 
 ## Why subpaths instead of more packages
 
