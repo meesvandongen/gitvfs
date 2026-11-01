@@ -2,7 +2,7 @@ import { useMemo, useState, useSyncExternalStore } from 'react'
 import { GitFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createCms } from 'gitvfs-cms'
-import { CmsApp } from 'gitvfs-cms/react'
+import { CmsApp, RepositoryPicker } from 'gitvfs-cms/react'
 import type { MockRepository } from 'gitvfs-github-msw'
 import { ColorField } from './ColorField'
 import { collections, singletons } from './content'
@@ -10,10 +10,27 @@ import { AuthorPreview, EventPreview } from './previews'
 
 const DOCS_URL = 'https://docs.gitvfs.mvd.im/docs/cms'
 
-interface AppProps {
+export interface DemoRepository {
+  fullName: string
   repository: MockRepository
+}
+
+interface AppProps {
+  repositories: DemoRepository[]
   subscribe: (listener: () => void) => () => void
   reset: () => Promise<void>
+}
+
+const CURRENT_KEY = 'gitvfs-cms-demo:current'
+
+function storedRepository(repositories: DemoRepository[]): string {
+  try {
+    const stored = localStorage.getItem(CURRENT_KEY)
+    if (repositories.some((entry) => entry.fullName === stored)) return stored!
+  } catch {
+    // Storage blocked: start with the first repository.
+  }
+  return repositories[0].fullName
 }
 
 function timeAgo(date: string): string {
@@ -24,20 +41,26 @@ function timeAgo(date: string): string {
   return new Date(date).toLocaleDateString()
 }
 
-export function App({ repository, subscribe, reset }: AppProps) {
-  // Re-render when the mock repository changes (every commit), to update the history.
+export function App({ repositories, subscribe, reset }: AppProps) {
+  // Every GitHub API call goes to the mock in this browser, so any token works.
+  const provider = useMemo(() => github({ token: 'demo' }), [])
+  const [current, setCurrent] = useState(() => storedRepository(repositories))
+  const [picking, setPicking] = useState(false)
+  const { repository } = repositories.find((entry) => entry.fullName === current) ?? repositories[0]
+
+  // Re-render when a mock repository changes (every commit), to update the history.
   const head = useSyncExternalStore(subscribe, () => repository.branchHead('main'))
   const [generation, setGeneration] = useState(0)
 
-  // A fresh CMS after a reset, so no cached file survives it.
+  // A fresh CMS per repository, and after a reset, so no cached file survives it.
   const cms = useMemo(
     () =>
       createCms({
-        fs: new GitFS({ repository: github({ token: 'demo' }).repository('acme/site'), branch: 'main' }),
+        fs: new GitFS({ repository: provider.repository(current), branch: 'main' }),
         collections,
         singletons,
       }),
-    [generation],
+    [provider, current, generation],
   )
   const history = useMemo(() => repository.log('main', 6), [repository, head])
 
@@ -45,6 +68,16 @@ export function App({ repository, subscribe, reset }: AppProps) {
     if (!window.confirm('Throw away all your changes and start over?')) return
     await reset()
     setGeneration((value) => value + 1)
+  }
+
+  const choose = (fullName: string) => {
+    setCurrent(fullName)
+    setPicking(false)
+    try {
+      localStorage.setItem(CURRENT_KEY, fullName)
+    } catch {
+      // Not remembered across reloads; the demo still works.
+    }
   }
 
   return (
@@ -58,31 +91,47 @@ export function App({ repository, subscribe, reset }: AppProps) {
         <a href={DOCS_URL}>Docs</a>
       </header>
       <div className="demo-app">
-        <CmsApp
-          key={generation}
-          cms={cms}
-          title="Acme content"
-          formComponents={{ color: ColorField }}
-          previews={{ authors: AuthorPreview, events: EventPreview }}
-          sidebarFooter={
-            <div className="demo-history">
-              <p className="gcms-nav-heading">History · acme/site</p>
-              <ol>
-                {history.map((commit) => (
-                  <li key={commit.sha} title={commit.sha}>
-                    <span>{commit.message}</span>
-                    <time dateTime={commit.date}>
-                      {commit.sha.slice(0, 7)} · {timeAgo(commit.date)}
-                    </time>
-                  </li>
-                ))}
-              </ol>
-              <button type="button" className="gcms-button gcms-button--small" onClick={() => void resetDemo()}>
-                Reset demo
-              </button>
-            </div>
-          }
-        />
+        {picking ? (
+          <RepositoryPicker
+            provider={provider}
+            title="Choose a repository to edit"
+            onSelect={(picked) => choose(picked.fullName)}
+            onCancel={() => setPicking(false)}
+          />
+        ) : (
+          <CmsApp
+            key={`${current}:${generation}`}
+            cms={cms}
+            title="Acme content"
+            formComponents={{ color: ColorField }}
+            previews={{ authors: AuthorPreview, events: EventPreview }}
+            sidebarFooter={
+              <div className="demo-history">
+                <div className="demo-repository">
+                  <p className="gcms-nav-heading">Repository</p>
+                  <strong>{current}</strong>
+                  <button type="button" className="gcms-button gcms-button--small" onClick={() => setPicking(true)}>
+                    Switch repository
+                  </button>
+                </div>
+                <p className="gcms-nav-heading">History</p>
+                <ol>
+                  {history.map((commit) => (
+                    <li key={commit.sha} title={commit.sha}>
+                      <span>{commit.message}</span>
+                      <time dateTime={commit.date}>
+                        {commit.sha.slice(0, 7)} · {timeAgo(commit.date)}
+                      </time>
+                    </li>
+                  ))}
+                </ol>
+                <button type="button" className="gcms-button gcms-button--small" onClick={() => void resetDemo()}>
+                  Reset demo
+                </button>
+              </div>
+            }
+          />
+        )}
       </div>
     </div>
   )

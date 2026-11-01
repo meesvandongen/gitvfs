@@ -222,6 +222,17 @@ describe('RepositoryPicker', () => {
     act(() => container.querySelector<HTMLButtonElement>('.gcms-picker-item')!.click())
     expect(picked).toEqual(['acme/site'])
     expect(provider.calls).toBe(1)
+    expect(byText('Cancel')).toBeUndefined()
+  })
+
+  it('offers Cancel when onCancel is given', async () => {
+    let cancelled = 0
+    const provider = fakeProvider(async function* () {
+      yield info('acme/site')
+    })
+    act(() => root.render(<RepositoryPicker provider={provider} onSelect={() => {}} onCancel={() => cancelled++} />))
+    act(() => byText('Cancel')!.click())
+    expect(cancelled).toBe(1)
   })
 
   it('shows errors and retries', async () => {

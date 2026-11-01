@@ -10,6 +10,8 @@ export interface RepositoryPickerProps {
   filter?: (repository: RepositoryInfo) => boolean
   /** Shown above the list. Default: "Choose a repository" */
   title?: ReactNode
+  /** Adds a Cancel button, e.g. to go back to the repository that was open before. */
+  onCancel?: () => void
 }
 
 /** Flush the list to the screen every this many repositories while pages are still loading. */
@@ -68,7 +70,14 @@ export function RepositoryPicker(props: RepositoryPickerProps) {
     <div className="gcms-app gcms-app--picker">
       <main className="gcms-picker">
         <div className="gcms-picker-header">
-          <h1 className="gcms-document-title">{props.title ?? 'Choose a repository'}</h1>
+          <div className="gcms-picker-title">
+            <h1 className="gcms-document-title">{props.title ?? 'Choose a repository'}</h1>
+            {props.onCancel ? (
+              <button type="button" className="gcms-button gcms-button--ghost gcms-button--small" onClick={props.onCancel}>
+                Cancel
+              </button>
+            ) : null}
+          </div>
           <input
             className="gcms-input"
             type="search"

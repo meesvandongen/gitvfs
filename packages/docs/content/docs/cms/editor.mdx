@@ -72,7 +72,9 @@ function Admin({ gh }: { gh: GitProvider }) {
 }
 ```
 
-Pass `filter` to offer only some repositories, for example those under your organization.
+Pass `filter` to offer only some repositories, for example those under your organization, and
+`onCancel` to show a Cancel button when users switch from a repository they already have open.
+The [CMS demo](https://demo.cms.gitvfs.mvd.im) does this with **Switch repository**.
 
 ## Building your own UI
 

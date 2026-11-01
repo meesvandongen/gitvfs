@@ -1,17 +1,34 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
 import { fromBase64, StaleHeadError, toBase64, toText, type MockRepository } from './repository.js'
 
-export interface GitHubHandlerOptions {
-  repository: MockRepository
+export interface RepositoryDetails {
+  description?: string
+  private?: boolean
+  /** Default: `main` when it exists, else the first branch. */
+  defaultBranch?: string
+}
+
+/** One repository the mock serves, at `owner/repo`. */
+export interface MockedRepository {
   owner: string
   repo: string
+  repository: MockRepository
+  /** How `GET /user/repos` describes the repository. */
+  details?: RepositoryDetails
+}
+
+export interface GitHubHandlerOptions {
+  /** The repositories to serve. For a single one, `repository`, `owner` and `repo` are a shorthand. */
+  repositories?: MockedRepository[]
+  repository?: MockRepository
+  owner?: string
+  repo?: string
+  details?: RepositoryDetails
   /** Default: https://api.github.com */
   apiUrl?: string
-  /** How `GET /user/repos` describes the repository. */
-  details?: { description?: string; private?: boolean; defaultBranch?: string }
   /** The profile `GET /user` returns. */
   user?: { login: string; name?: string; avatar_url?: string; html_url?: string }
-  /** Called after every change (commits, branches), e.g. to save the repository. */
+  /** Called after every change (commits, branches) with the repository that changed, e.g. to save it. */
   onChange?: (repository: MockRepository) => void | Promise<void>
 }
 
@@ -42,16 +59,46 @@ interface CreateCommitInput {
   }
 }
 
+function mockedRepositories(options: GitHubHandlerOptions): MockedRepository[] {
+  const list = [...(options.repositories ?? [])]
+  if (options.repository) {
+    if (!options.owner || !options.repo) throw new TypeError('Pass owner and repo with repository')
+    list.push({ owner: options.owner, repo: options.repo, repository: options.repository, details: options.details })
+  }
+  if (list.length === 0) throw new TypeError('Pass at least one repository')
+  return list
+}
+
+function describeRepository(entry: MockedRepository, login: string) {
+  const { owner, repo, repository, details } = entry
+  const defaultBranch = details?.defaultBranch
+    ?? (repository.branchHead('main') ? 'main' : repository.branchNames()[0] ?? null)
+  const head = defaultBranch ? repository.branchHead(defaultBranch) : undefined
+  const pushedAt = head ? repository.getCommit(head)!.date : null
+  return {
+    name: repo,
+    full_name: `${owner}/${repo}`,
+    owner: { login: owner, type: owner === login ? 'User' : 'Organization' },
+    private: details?.private ?? false,
+    description: details?.description ?? null,
+    html_url: `https://github.com/${owner}/${repo}`,
+    default_branch: defaultBranch,
+    pushed_at: pushedAt,
+    updated_at: pushedAt,
+    permissions: { admin: true, push: true, pull: true },
+  }
+}
+
 /**
  * MSW request handlers for the parts of the GitHub API that gitvfs uses: the account's repository
  * list, refs, commits, trees, blobs, contents, the GraphQL file query and `createCommitOnBranch`.
  * Requests for other repositories fall through to the network.
  */
 export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler[] {
-  const { repository, owner, repo } = options
+  const entries = mockedRepositories(options)
   const api = (options.apiUrl ?? 'https://api.github.com').replace(/\/$/, '')
-  const base = `${api}/repos/${owner}/${repo}`
-  const changed = async () => options.onChange?.(repository)
+  const login = options.user?.login ?? 'demo'
+  const find = (owner: string, repo: string) => entries.find((entry) => entry.owner === owner && entry.repo === repo)
 
   return [
     http.get(`${api}/user`, ({ request }) => {
@@ -60,30 +107,62 @@ export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler
       return HttpResponse.json({ name: null, avatar_url: '', html_url: `https://github.com/${user.login}`, ...user })
     }),
 
-    // `github({ token }).listRepositories()`: the mocked repository is the account's only one.
+    // `github({ token }).listRepositories()`: every mocked repository, most recently pushed first.
     http.get(`${api}/user/repos`, ({ request }) => {
       if (!isAuthenticated(request)) return unauthorized()
-      const login = options.user?.login ?? 'demo'
-      const defaultBranch = options.details?.defaultBranch
-        ?? (repository.branchHead('main') ? 'main' : repository.branchNames()[0] ?? null)
-      const head = defaultBranch ? repository.branchHead(defaultBranch) : undefined
-      const pushedAt = head ? repository.getCommit(head)!.date : null
-      return HttpResponse.json([
-        {
-          name: repo,
-          full_name: `${owner}/${repo}`,
-          owner: { login: owner, type: owner === login ? 'User' : 'Organization' },
-          private: options.details?.private ?? false,
-          description: options.details?.description ?? null,
-          html_url: `https://github.com/${owner}/${repo}`,
-          default_branch: defaultBranch,
-          pushed_at: pushedAt,
-          updated_at: pushedAt,
-          permissions: { admin: true, push: true, pull: true },
-        },
-      ])
+      const repos = entries.map((entry) => describeRepository(entry, login))
+      repos.sort((a, b) => String(b.pushed_at ?? '').localeCompare(String(a.pushed_at ?? '')))
+      return HttpResponse.json(repos)
     }),
 
+    ...entries.flatMap((entry) => repositoryHandlers(entry, api, async () => options.onChange?.(entry.repository))),
+
+    http.post(`${api}/graphql`, async ({ request }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const { query, variables } = (await request.json()) as { query: string; variables?: Record<string, unknown> }
+
+      if (/createCommitOnBranch/.test(query)) {
+        const input = variables?.input as CreateCommitInput | undefined
+        const [owner = '', repo = ''] = input?.branch.repositoryNameWithOwner.split('/') ?? []
+        const entry = find(owner, repo)
+        if (!input || !entry) return graphqlErrors(`Could not resolve to a Repository`, 'NOT_FOUND')
+        try {
+          const commit = await entry.repository.commit({
+            branch: input.branch.branchName,
+            message: input.message.headline,
+            expectedHeadOid: input.expectedHeadOid,
+            additions: input.fileChanges?.additions?.map((file) => ({ path: file.path, content: fromBase64(file.contents) })),
+            deletions: input.fileChanges?.deletions?.map((file) => file.path),
+          })
+          await options.onChange?.(entry.repository)
+          return HttpResponse.json({
+            data: { createCommitOnBranch: { commit: { oid: commit.oid, committedDate: commit.date } } },
+          })
+        } catch (error) {
+          return graphqlErrors((error as Error).message, error instanceof StaleHeadError ? 'STALE_DATA' : 'UNPROCESSABLE')
+        }
+      }
+
+      const target = /repository\(owner:\s*"([^"]+)",\s*name:\s*"([^"]+)"\)/.exec(query)
+      const entry = target ? find(target[1], target[2]) : undefined
+      if (!entry) return graphqlErrors(`Could not resolve to a Repository`, 'NOT_FOUND')
+      const result: Record<string, { text: string | null; oid: string; byteSize: number } | null> = {}
+      for (const [, alias, expression] of query.matchAll(/(\w+):\s*object\(expression:\s*"([^"]+)"\)/g)) {
+        const separator = expression.indexOf(':')
+        const file = entry.repository.readFile(expression.slice(0, separator), expression.slice(separator + 1))
+        result[alias] = file ? { text: toText(file.content), oid: file.sha, byteSize: file.size } : null
+      }
+      return HttpResponse.json({ data: { repository: result } })
+    }),
+  ]
+}
+
+/** The REST endpoints under `/repos/:owner/:repo` for one repository. */
+function repositoryHandlers(entry: MockedRepository, api: string, changed: () => Promise<void>): HttpHandler[] {
+  const { repository, owner, repo } = entry
+  const base = `${api}/repos/${owner}/${repo}`
+
+  return [
     http.get(`${base}/git/ref/heads/*`, ({ request, params }) => {
       if (!isAuthenticated(request)) return unauthorized()
       const branch = decodeURIComponent(String(params[0]))
@@ -170,45 +249,6 @@ export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler
       const ref = new URL(request.url).searchParams.get('ref') ?? 'main'
       const result = repository.list(ref, '')
       return result ? HttpResponse.json(result) : notFound()
-    }),
-
-    http.post(`${api}/graphql`, async ({ request }) => {
-      if (!isAuthenticated(request)) return unauthorized()
-      const { query, variables } = (await request.json()) as { query: string; variables?: Record<string, unknown> }
-
-      if (/createCommitOnBranch/.test(query)) {
-        const input = variables?.input as CreateCommitInput | undefined
-        if (!input || input.branch.repositoryNameWithOwner !== `${owner}/${repo}`) {
-          return graphqlErrors(`Could not resolve to a Repository`, 'NOT_FOUND')
-        }
-        try {
-          const commit = await repository.commit({
-            branch: input.branch.branchName,
-            message: input.message.headline,
-            expectedHeadOid: input.expectedHeadOid,
-            additions: input.fileChanges?.additions?.map((file) => ({ path: file.path, content: fromBase64(file.contents) })),
-            deletions: input.fileChanges?.deletions?.map((file) => file.path),
-          })
-          await changed()
-          return HttpResponse.json({
-            data: { createCommitOnBranch: { commit: { oid: commit.oid, committedDate: commit.date } } },
-          })
-        } catch (error) {
-          return graphqlErrors((error as Error).message, error instanceof StaleHeadError ? 'STALE_DATA' : 'UNPROCESSABLE')
-        }
-      }
-
-      const target = /repository\(owner:\s*"([^"]+)",\s*name:\s*"([^"]+)"\)/.exec(query)
-      if (!target || target[1] !== owner || target[2] !== repo) {
-        return graphqlErrors(`Could not resolve to a Repository`, 'NOT_FOUND')
-      }
-      const result: Record<string, { text: string | null; oid: string; byteSize: number } | null> = {}
-      for (const [, alias, expression] of query.matchAll(/(\w+):\s*object\(expression:\s*"([^"]+)"\)/g)) {
-        const separator = expression.indexOf(':')
-        const file = repository.readFile(expression.slice(0, separator), expression.slice(separator + 1))
-        result[alias] = file ? { text: toText(file.content), oid: file.sha, byteSize: file.size } : null
-      }
-      return HttpResponse.json({ data: { repository: result } })
     }),
   ]
 }

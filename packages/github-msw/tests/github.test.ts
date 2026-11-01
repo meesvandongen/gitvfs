@@ -181,6 +181,45 @@ describe('gitvfs against the GitHub mock', () => {
   })
 })
 
+describe('several repositories', () => {
+  it('lists them all and routes reads and commits to the right one', async () => {
+    const site = await MockRepository.create({ files: { 'README.md': '# Site\n' } })
+    const blog = await MockRepository.create({ files: { 'README.md': '# Blog\n' } })
+    const changed: MockRepository[] = []
+    server.use(
+      ...createGitHubHandlers({
+        repositories: [
+          { owner: 'acme', repo: 'site', repository: site },
+          { owner: 'acme', repo: 'blog', repository: blog, details: { description: 'Company blog' } },
+        ],
+        onChange: (repository) => void changed.push(repository),
+      }),
+    )
+    // The blog gets the newest commit, so it is listed first.
+    await blog.commit({ branch: 'main', message: 'Post', additions: [{ path: 'post.md', content: new TextEncoder().encode('hi') }] })
+
+    const gh = github({ token: 't' })
+    const names = []
+    for await (const repo of gh.listRepositories()) names.push([repo.fullName, repo.description])
+    expect(names).toEqual([
+      ['acme/blog', 'Company blog'],
+      ['acme/site', null],
+    ])
+
+    const fs = new GitFS({ repository: gh.repository('acme/blog'), branch: 'main', cache: 'none' })
+    expect(await fs.readFile('README.md', { encoding: 'utf-8' })).toBe('# Blog\n')
+    fs.writeFile('second.md', 'two')
+    await fs.commit('Second post')
+    expect(blog.readFile('main', 'second.md')).toBeDefined()
+    expect(site.readFile('main', 'second.md')).toBeUndefined()
+    expect(changed).toEqual([blog])
+  })
+
+  it('requires at least one repository', () => {
+    expect(() => createGitHubHandlers({})).toThrow(TypeError)
+  })
+})
+
 describe('persistentRepository', () => {
   function memoryStorage(): StorageLike & { data: Map<string, string> } {
     const data = new Map<string, string>()

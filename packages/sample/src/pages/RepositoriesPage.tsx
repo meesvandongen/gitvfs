@@ -4,7 +4,6 @@ import { AsyncBoundary } from '../components/AsyncBoundary'
 import {
   getDirectoryQueryOptions,
   getRepositoriesQueryOptions,
-  type RepoCard,
 } from '../lib/git-data'
 
 export function RepositoriesPage() {

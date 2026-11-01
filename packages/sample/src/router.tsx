@@ -2,7 +2,6 @@ import { createRootRoute, createRoute, createRouter, redirect } from '@tanstack/
 import { z } from 'zod'
 import { AppFrame } from './components/AppFrame'
 import { getActiveProviderConfig, getActiveProviderToken } from './lib/provider-config'
-import { fetchUserProfile } from './lib/user-profile'
 import { EditorPage } from './pages/EditorPage'
 import { HomePage } from './pages/HomePage'
 import { RepositoriesPage } from './pages/RepositoriesPage'

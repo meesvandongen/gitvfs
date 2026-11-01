@@ -10,7 +10,6 @@ import type {
   CommitResult,
   ReadDirOptions,
 } from '../types/provider.js'
-import { NotFoundError } from '../types/errors.js'
 import { createFetchREST, createPaginate, type TokenProvider } from './shared/http.js'
 import { matchesSearch, splitFullName } from './shared/repositories.js'
 import { createFetchGraphQL } from './shared/graphql.js'
