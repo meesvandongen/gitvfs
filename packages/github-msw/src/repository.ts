@@ -40,6 +40,8 @@ export async function blobSha(content: Uint8Array): Promise<string> {
 export interface CommitRecord {
   tree: string
   parent: string | null
+  /** A merge commit's second parent: the commit that was merged in. */
+  mergeParent?: string
   message: string
   date: string
 }
@@ -82,6 +84,13 @@ export class StaleHeadError extends Error {
   constructor(branch: string, expected: string, actual: string) {
     super(`Expected branch ${branch} to point to "${expected}" but it did not (it points to "${actual}")`)
     this.name = 'StaleHeadError'
+  }
+}
+
+export class MergeConflictError extends Error {
+  constructor(paths: string[]) {
+    super(`Merge conflict in ${paths.join(', ')}`)
+    this.name = 'MergeConflictError'
   }
 }
 
@@ -222,6 +231,66 @@ export class MockRepository {
     return { oid, date }
   }
 
+  /**
+   * Merge `head` (a branch or commit) into the branch `base`, like GitHub's `POST /merges`: a merge
+   * commit with both as parents, or `null` when `base` already contains `head`. Files are merged
+   * whole: a file both sides changed differently is a `MergeConflictError`, and nothing changes.
+   */
+  async merge(input: { base: string; head: string; message?: string }): Promise<{ oid: string; date: string } | null> {
+    const ours = this.state.branches[input.base]
+    const theirs = this.resolve(input.head)
+    if (!ours) throw new Error(`Branch not found: ${input.base}`)
+    if (!theirs) throw new Error(`Ref not found: ${input.head}`)
+
+    const ourAncestors = this.ancestors(ours)
+    if (ourAncestors.has(theirs)) return null
+    const mergeBase = [...this.ancestors(theirs)].find((sha) => ourAncestors.has(sha))
+
+    const ancestorFiles = mergeBase ? this.files(mergeBase)! : {}
+    const ourFiles = this.files(ours)!
+    const theirFiles = this.files(theirs)!
+    const tree: Record<string, string> = {}
+    const conflicts: string[] = []
+    for (const path of new Set([...Object.keys(ourFiles), ...Object.keys(theirFiles)])) {
+      const [original, mine, other] = [ancestorFiles[path], ourFiles[path], theirFiles[path]]
+      let merged: string | undefined
+      if (mine === other || other === original) merged = mine
+      else if (mine === original) merged = other
+      else {
+        conflicts.push(path)
+        continue
+      }
+      if (merged) tree[path] = merged
+    }
+    if (conflicts.length > 0) throw new MergeConflictError(conflicts.sort())
+
+    const date = new Date().toISOString()
+    const oid = await this.storeCommit({
+      tree: await this.storeTree(tree),
+      parent: ours,
+      mergeParent: theirs,
+      message: input.message ?? `Merge ${input.head} into ${input.base}`,
+      date,
+    })
+    this.state.branches[input.base] = oid
+    return { oid, date }
+  }
+
+  /** A commit and everything it descends from, nearest first. */
+  private ancestors(sha: string): Set<string> {
+    const seen = new Set<string>()
+    const queue = [sha]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      if (seen.has(current)) continue
+      seen.add(current)
+      const commit = this.state.commits[current]
+      if (commit?.parent) queue.push(commit.parent)
+      if (commit?.mergeParent) queue.push(commit.mergeParent)
+    }
+    return seen
+  }
+
   createBranch(name: string, fromSha: string): void {
     if (this.state.branches[name]) throw new Error('Reference already exists')
     if (!this.state.commits[fromSha]) throw new Error('Object does not exist')
@@ -234,7 +303,7 @@ export class MockRepository {
     return true
   }
 
-  /** Newest first. */
+  /** Newest first, following first parents. */
   log(ref: string, limit = 50): Array<CommitRecord & { sha: string }> {
     const result: Array<CommitRecord & { sha: string }> = []
     let sha = this.resolve(ref) ?? null

@@ -11,6 +11,7 @@ It powers the [gitvfs-cms demo](../cms-demo), where visitors can create, edit an
 | `GET /user/repos` | `listRepositories()`: every mocked repository (describe each with `details`) |
 | `GET /repos/:owner/:repo/git/ref/heads/:branch` | branch heads, cache invalidation |
 | `POST /repos/:owner/:repo/git/refs`, `DELETE …/git/refs/heads/:branch` | creating and deleting branches |
+| `POST /repos/:owner/:repo/merges` | `updateFromBase()`: merge commits, `204` when up to date, `409` on conflicts |
 | `GET /repos/:owner/:repo/git/commits/:sha`, `…/git/trees/:sha?recursive=1` | recursive listings |
 | `GET /repos/:owner/:repo/contents/:path?ref=` | directory listings |
 | `GET /repos/:owner/:repo/git/blobs/:sha` | binary files |
@@ -50,8 +51,8 @@ In tests, use `setupServer` from `msw/node` with a plain `MockRepository`. `repo
 
 `MockRepository` holds the following, all serializable as JSON:
 - branches;
-- commits (with parents, messages and dates);
+- commits (with parents, messages and dates; merge commits have a second parent);
 - flat trees (path → blob id);
 - blobs, stored as base64.
 
-Blob ids are real Git object ids. Commit ids are random but stable within a repository.
+Blob ids are real Git object ids. Commit ids are random but stable within a repository. Merges work on whole files: a file both branches changed differently is a conflict.

@@ -296,6 +296,104 @@ describe('GitVFS', () => {
 
       expect(repository.branches.has('drafts/update')).toBe(true)
     })
+
+    const text = (branch: string, path: string) => {
+      const file = repository.branches.get(branch)?.files.find((f) => f.path === path)
+      return file ? new TextDecoder().decode(file.content) : undefined
+    }
+    const draftsFs = (options: { headValidationIntervalMs?: number } = {}) =>
+      new GitVFS({ repository, branch: 'main', writeBranch: 'drafts', cache: 'memory', ...options })
+
+    it('reads its own commits back instead of the base branch (regression)', async () => {
+      const editFs = draftsFs()
+      editFs.writeFile('readme.md', '# Edited')
+      await editFs.commit('Edit once')
+
+      // Used to read '# Hello' from main, so the next edit built on main and dropped this one.
+      expect(await editFs.readFile('readme.md', { encoding: 'utf-8' })).toBe('# Edited')
+
+      const current = (await editFs.readFile('readme.md', { encoding: 'utf-8' })) as string
+      editFs.writeFile('readme.md', `${current}, twice`)
+      await editFs.commit('Edit twice')
+
+      expect(text('drafts', 'readme.md')).toBe('# Edited, twice')
+      expect(text('main', 'readme.md')).toBe('# Hello')
+    })
+
+    it('lists files created and deleted on the write branch after committing', async () => {
+      const editFs = draftsFs()
+      editFs.writeFile('posts/new.md', 'New')
+      editFs.rm('posts/draft.md')
+      await editFs.commit('Add and remove')
+
+      expect((await editFs.readdir('posts')).map((e) => e.name).sort()).toEqual(['hello.md', 'new.md'])
+      expect(await editFs.exists('posts/draft.md')).toBe(false)
+      expect(fs.status()).toEqual([])
+      expect((await fs.readdir('posts')).map((e) => e.name).sort()).toEqual(['draft.md', 'hello.md'])
+    })
+
+    it('reads from a write branch that already exists', async () => {
+      await repository.createBranch('drafts', repository.branches.get('main')!.sha)
+      await repository.addFile('drafts', 'drafts-only.md', 'Draft')
+
+      const editFs = draftsFs()
+      expect(await editFs.readFile('drafts-only.md', { encoding: 'utf-8' })).toBe('Draft')
+    })
+
+    it('reads from the base branch until the write branch appears', async () => {
+      const editFs = draftsFs({ headValidationIntervalMs: 0 })
+      expect(await editFs.exists('drafts-only.md')).toBe(false)
+
+      await repository.createBranch('drafts', repository.branches.get('main')!.sha)
+      await repository.addFile('drafts', 'drafts-only.md', 'Draft')
+      repository.branches.get('drafts')!.sha = 'commit-sha-drafts'
+
+      expect(await editFs.readFile('drafts-only.md', { encoding: 'utf-8' })).toBe('Draft')
+    })
+
+    it('branches from the write branch once it exists', async () => {
+      const editFs = draftsFs()
+      editFs.writeFile('readme.md', '# Edited')
+      await editFs.commit('Edit')
+      await editFs.createBranch('drafts-copy')
+
+      expect(text('drafts-copy', 'readme.md')).toBe('# Edited')
+    })
+  })
+
+  describe('updateFromBase', () => {
+    it('merges the base branch in and reads the result', async () => {
+      const editFs = new GitVFS({ repository, branch: 'main', writeBranch: 'drafts', cache: 'memory' })
+      editFs.writeFile('readme.md', '# Edited')
+      await editFs.commit('Edit')
+      expect(await editFs.exists('news.md')).toBe(false)
+
+      // Someone adds a file to main; the stub merges it in like the host would.
+      await repository.addFile('main', 'news.md', 'News')
+      const mergeBranch = vi.fn(async ({ into, from }: { into: string; from: string }) => {
+        const target = repository.branches.get(into)!
+        const source = repository.branches.get(from)!
+        target.files = [...target.files, ...source.files.filter((f) => !target.files.some((t) => t.path === f.path))]
+        target.sha = 'commit-sha-merge'
+        return { sha: target.sha, date: new Date().toISOString() }
+      })
+      repository.mergeBranch = mergeBranch
+
+      expect(await editFs.updateFromBase('Update')).toMatchObject({ sha: 'commit-sha-merge' })
+      expect(mergeBranch).toHaveBeenCalledWith({ into: 'drafts', from: 'main', message: 'Update' })
+      expect(await editFs.readFile('news.md', { encoding: 'utf-8' })).toBe('News')
+      expect(await editFs.readFile('readme.md', { encoding: 'utf-8' })).toBe('# Edited')
+    })
+
+    it('needs a separate write branch', async () => {
+      repository.mergeBranch = vi.fn()
+      await expect(fs.updateFromBase()).rejects.toMatchObject({ code: 'NOT_SUPPORTED' })
+    })
+
+    it('needs a repository that can merge', async () => {
+      const editFs = new GitVFS({ repository, branch: 'main', writeBranch: 'drafts' })
+      await expect(editFs.updateFromBase()).rejects.toMatchObject({ code: 'NOT_SUPPORTED' })
+    })
   })
 
   describe('prefetch', () => {

@@ -37,6 +37,20 @@ export interface CommitResult {
   files: Record<string, { sha: string }>
 }
 
+export interface MergeOptions {
+  /** The branch that receives the merge commit. */
+  into: string
+  /** The branch merged into it. */
+  from: string
+  message?: string
+}
+
+export interface MergeResult {
+  /** The merge commit. */
+  sha: string
+  date: string
+}
+
 export interface ReadDirOptions {
   recursive?: boolean
 }
@@ -56,6 +70,12 @@ export interface GitRepository {
   createBranch(name: string, fromSha: string): Promise<BranchInfo>
   deleteBranch(name: string): Promise<void>
   commit(options: CommitOptions): Promise<CommitResult>
+  /**
+   * Merge one branch into another on the host. Resolves to `null` when `into` already contains
+   * `from`; rejects with a `ConflictError` when the branches changed the same file. Optional:
+   * `GitVFS.updateFromBase()` needs it.
+   */
+  mergeBranch?(options: MergeOptions): Promise<MergeResult | null>
 }
 
 /** A repository the signed-in account can reach, as listed by `GitProvider.listRepositories()`. */
