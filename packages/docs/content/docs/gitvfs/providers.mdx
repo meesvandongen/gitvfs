@@ -1,40 +1,88 @@
 ---
-title: Providers
-description: Connect to GitHub or GitLab, and supply tokens.
+title: Providers and repositories
+description: Connect to GitHub or GitLab, list repositories, and supply tokens.
 ---
 
-A provider implements the `GitProvider` interface for one hosting API. Import only the ones you use.
+Every app goes through the same chain. Each step hands you the next one:
+
+```
+token ──▶ provider ──▶ repository ──▶ GitFS
+          github()     .repository()   new GitFS()
+```
+
+| Step | Type | Answers | Get it from |
+| --- | --- | --- | --- |
+| Token | `TokenProvider` | Who am I? | a personal access token, [GitHub sign-in](/docs/github-auth), [OIDC](/docs/cms/authentication) |
+| Provider | `GitProvider` | Which repositories can I reach? | `github({ token })`, `gitlab({ token })` |
+| Repository | `GitRepository` | What is in this repository? | `provider.repository('acme/site')` |
+| Working copy | `GitFS` | Read, edit and commit files | `new GitFS({ repository, branch })` |
+
+```ts
+import { GitFS } from 'gitvfs'
+import { github } from 'gitvfs/providers/github'
+
+const gh = github({ token: 'github_pat_…' })
+
+for await (const repo of gh.listRepositories()) {
+  console.log(repo.fullName, repo.defaultBranch, repo.private)
+}
+
+const fs = new GitFS({ repository: gh.repository('acme/site'), branch: 'main' })
+```
+
+After you choose `github()` or `gitlab()`, the rest of your code is the same for both hosts.
 
 ## GitHub
 
 ```ts
 import { github } from 'gitvfs/providers/github'
 
-const provider = github({
-  owner: 'acme',
-  repo: 'docs',
+const gh = github({
   token: 'github_pat_…',
   // apiUrl: 'https://github.example.com/api/v3', // GitHub Enterprise Server
 })
+const site = gh.repository('acme/site') // owner/name
 ```
 
 The token needs read access to repository contents for reads, and write access to commit.
 Fine-grained personal access tokens with **Contents: read and write** on the repository are enough.
+
+`listRepositories()` returns the repositories the account owns, collaborates on, or can reach
+through an organization. With a GitHub App user token (as from
+[gitvfs-github-auth](/docs/github-auth)), it lists only the repositories the app is installed on.
 
 ## GitLab
 
 ```ts
 import { gitlab } from 'gitvfs/providers/gitlab'
 
-const provider = gitlab({
-  projectId: 1234, // or 'group/project'
+const gl = gitlab({
   token: 'glpat-…',
   // apiUrl: 'https://gitlab.example.com', // self-managed
 })
+const site = gl.repository('acme/web/site') // the full path, subgroups included
 ```
 
 Personal access tokens and OAuth tokens need the `api` scope. With OAuth you can sign users in
 instead of asking for tokens; see [Authentication](/docs/cms/authentication).
+
+`listRepositories()` returns the projects the account is a member of.
+
+## Listing repositories
+
+`listRepositories({ search, signal })` is an async iterator: it fetches one page at a time as you
+iterate, so a picker can show the first results right away, and stopping early stops the requests.
+Each item is a `RepositoryInfo`:
+
+| Field | |
+| --- | --- |
+| `fullName` | `owner/name` on GitHub, the full path on GitLab; pass it to `repository()` |
+| `name`, `owner` | the last segment, and everything before it |
+| `defaultBranch` | `null` for an empty repository |
+| `private`, `description`, `webUrl`, `updatedAt` | |
+
+Repositories come most recently updated first. `search` keeps those whose full name or description
+contains the text. The CMS ships a ready-made [`RepositoryPicker`](/docs/cms/editor#choosing-a-repository).
 
 ## Tokens
 
@@ -42,11 +90,23 @@ instead of asking for tokens; see [Authentication](/docs/cms/authentication).
 The function runs before every request, so short-lived tokens can be refreshed transparently:
 
 ```ts
-const provider = github({ owner: 'acme', repo: 'docs', token: async () => session.getAccessToken() })
+const gh = github({ token: async () => session.getAccessToken() })
 ```
 
-## Custom providers
+## Custom hosts
 
-Anything that implements `GitProvider` works with `GitFS`: `readdir`, `getFile`, `getFiles`,
+Anything that implements `GitRepository` works with `GitFS`: `readdir`, `getFile`, `getFiles`,
 `getBlob`, `getBranch`, `getLastCommitSha`, `createBranch`, `deleteBranch` and `commit`. An
-in-memory implementation is a convenient test double.
+in-memory implementation is a convenient test double. Implement `GitProvider` (`name`,
+`listRepositories` and `repository`) as well when your host can list repositories.
+
+## Upgrading from 0.1
+
+- `github({ token, owner, repo })` and `gitlab({ token, projectId })` still work but are
+  deprecated. Use `github({ token }).repository('owner/repo')` and
+  `gitlab({ token }).repository('group/project')`.
+- `new GitFS({ provider })` is now `new GitFS({ repository })`; `provider` still works but is
+  deprecated.
+- The per-repository interface is now called `GitRepository`. `GitProvider` names the new
+  account-level interface, so custom implementations of the old `GitProvider` should implement
+  `GitRepository` instead.

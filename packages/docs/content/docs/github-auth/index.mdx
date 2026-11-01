@@ -59,7 +59,7 @@ await auth.handleRedirect() // completes the sign-in when GitHub sends the user 
 if (!auth.isSignedIn()) await auth.login()
 
 const fs = new GitFS({
-  provider: github({ owner: 'acme', repo: 'site', token: auth.token }),
+  repository: github({ token: auth.token }).repository('acme/site'),
   branch: 'main',
 })
 ```

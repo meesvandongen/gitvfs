@@ -63,7 +63,7 @@ if (!auth.isSignedIn()) {
 }
 
 const fs = new GitFS({
-  provider: github({ owner: 'acme', repo: 'site', token: auth.token }),
+  repository: github({ token: auth.token }).repository('acme/site'),
   branch: 'main',
 })
 ```

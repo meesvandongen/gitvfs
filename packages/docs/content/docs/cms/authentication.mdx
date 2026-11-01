@@ -44,7 +44,7 @@ if (!session.isUserLoggedIn) {
   await session.login() // redirects to GitLab
 } else {
   const fs = new GitFS({
-    provider: gitlab({ projectId: 'acme/site', token: session.token }),
+    repository: gitlab({ token: session.token }).repository('acme/site'),
     branch: 'main',
   })
 }
@@ -78,5 +78,5 @@ ships a small token exchange handler that adds the secret, for example in a Clou
 import { createGitHubAuth } from 'gitvfs-github-auth'
 
 const auth = createGitHubAuth({ clientId: 'Iv23li…', tokenUrl: '/api/github/token' })
-const provider = github({ owner: 'acme', repo: 'site', token: auth.token })
+const site = github({ token: auth.token }).repository('acme/site')
 ```
