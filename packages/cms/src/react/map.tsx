@@ -569,7 +569,9 @@ export function GeoPointField(props: AutoFormFieldProps) {
         decimals={options.decimals}
         inputProps={props.inputProps}
         onChange={(next) => set(next, true)}
-        onClear={() => field.onChange(undefined)}
+        // null, not undefined: react-hook-form shows the default value again for undefined. AutoForm
+        // treats null as empty, so an optional field is saved as absent and a required one is flagged.
+        onClear={() => field.onChange(null)}
       />
       <NestedErrors name={props.id} />
     </div>
@@ -625,7 +627,7 @@ export function GeoCircleField(props: AutoFormFieldProps) {
         decimals={options.decimals}
         inputProps={props.inputProps}
         onChange={(next) => set({ radius: defaultRadius, ...value, ...next })}
-        onClear={() => field.onChange(undefined)}
+        onClear={() => field.onChange(null)}
       >
         <NumberInput id={`${props.id}-radius`} label="Radius (m)" value={value?.radius} onChange={(radius) => set({ ...value, radius })} />
       </PointControls>
