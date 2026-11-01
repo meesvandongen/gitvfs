@@ -11,8 +11,9 @@
   // GITHUB_CLIENT_SECRET is a secret: `wrangler secret put GITHUB_CLIENT_SECRET`.
   // Sign-in stays off until it is set.
   "vars": {
-    // A GitHub App; its callback URL is https://docs.gitvfs.mvd.im/admin. Its permissions decide
-    // what a sign-in may do, so no GITHUB_SCOPE (an OAuth App setting) is needed.
+    // A GitHub App; its callback URL is https://docs.gitvfs.mvd.im/admin, with wildcard matching
+    // so preview subdomains work too. Its permissions decide what a sign-in may do, so no
+    // GITHUB_SCOPE (an OAuth App setting) is needed.
     "GITHUB_CLIENT_ID": "Iv23liL4d3j01dbuzSpS",
     "GITHUB_ALLOWED_ORIGINS": "https://docs.gitvfs.mvd.im"
   },
@@ -26,6 +27,13 @@
     "run_worker_first": ["/api/github/*"]
   },
   "preview_urls": true,
-  // Previews do not inherit vars, so sign-in stays off there and /admin offers token sign-in.
-  "previews": {}
+  // Previews do not inherit production settings. Their URLs are subdomains of the docs domain,
+  // which the app's wildcard callback URL accepts. The secret is set separately for previews:
+  // `wrangler preview base-config secret put GITHUB_CLIENT_SECRET`; until then they offer token sign-in.
+  "previews": {
+    "vars": {
+      "GITHUB_CLIENT_ID": "Iv23liL4d3j01dbuzSpS",
+      "GITHUB_ALLOWED_ORIGINS": "https://*.docs.gitvfs.mvd.im"
+    }
+  }
 }

@@ -1,4 +1,4 @@
-import { createTokenHandler } from 'gitvfs-github-auth/server'
+import { createTokenHandler, originMatcher } from 'gitvfs-github-auth/server'
 
 interface Env {
   /** Client ID of the GitHub App or OAuth App behind "Sign in with GitHub" on /admin. */
@@ -7,7 +7,10 @@ interface Env {
   GITHUB_CLIENT_SECRET?: string
   /** OAuth Apps only: the scope to request, e.g. `public_repo` or `repo`. */
   GITHUB_SCOPE?: string
-  /** Comma-separated origins that may sign in; each needs a callback URL on the GitHub App. */
+  /**
+   * Comma-separated origins that may sign in, e.g. `https://*.docs.example.com` for previews.
+   * Each must match a callback URL of the app (with wildcard matching for subdomains).
+   */
   GITHUB_ALLOWED_ORIGINS?: string
 }
 
@@ -22,14 +25,11 @@ function json(body: unknown, status = 200): Response {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
-    const origins = (env.GITHUB_ALLOWED_ORIGINS ?? '')
-      .split(',')
-      .map((origin) => origin.trim())
-      .filter(Boolean)
-    const enabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) && origins.includes(url.origin)
+    const origins = (env.GITHUB_ALLOWED_ORIGINS ?? '').split(',')
+    const enabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) && originMatcher(origins)(url.origin)
 
     if (url.pathname === '/api/github/config') {
-      // GitHub only redirects to registered callback URLs, so other origins (previews) get none.
+      // GitHub only redirects to registered callback URLs, so other origins get none.
       return json(enabled ? { clientId: env.GITHUB_CLIENT_ID, scope: env.GITHUB_SCOPE || undefined } : { clientId: null })
     }
     if (url.pathname === '/api/github/token' && enabled) {

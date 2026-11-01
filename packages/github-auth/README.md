@@ -82,5 +82,5 @@ Tokens live in `sessionStorage` by default. Pass `storage: 'memory'` to keep the
 
 ## Limits
 
-- Callback URLs are matched exactly, without wildcards, so a sign-in only works on the URLs registered with the app. Preview deployments on other hostnames need their own callback URL. A GitHub App accepts up to ten.
+- GitHub matches the redirect URL against the app's callback URLs (a GitHub App accepts up to ten). For preview deployments on subdomains, enable **wildcard matching** on the callback URL. Then `https://docs.example.com/admin` also accepts `https://<preview>.docs.example.com/admin`. Allow the same origins in the handler with a pattern: `allowedOrigins: ['https://*.docs.example.com']` matches one subdomain label (see `originMatcher`). PKCE keeps a code that lands on another subdomain useless without the verifier.
 - Anything with access to the page can read the tokens, which holds for any browser-based sign-in. Keep the editor on its own origin and do not render untrusted HTML next to it.

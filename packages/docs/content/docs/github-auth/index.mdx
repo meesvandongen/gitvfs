@@ -101,8 +101,12 @@ See [Deployment](/docs/github-auth/deployment) for a complete Cloudflare Worker.
 
 ## Limits
 
-- GitHub matches callback URLs exactly, without wildcards. Sign-in only works on URLs registered
-  with the app (a GitHub App accepts up to ten), so preview deployments usually fall back to tokens.
+- Sign-in only works on URLs that match a callback URL of the app (a GitHub App accepts up to
+  ten). For preview deployments on subdomains, enable **wildcard matching** on the callback URL, so
+  `https://docs.example.com/admin` also accepts `https://<preview>.docs.example.com/admin`, and
+  allow the pattern in the handler: `allowedOrigins: ['https://*.docs.example.com']`. GitHub warns
+  that wildcards let codes reach any subdomain; with PKCE such a code is useless without the
+  verifier, which never leaves the tab that started the sign-in.
 - As with any browser sign-in, code running on the page can read the tokens. Host the editor on
   its own origin and never render untrusted HTML next to it; `gitvfs-cms` sandboxes its previews
   for this reason.

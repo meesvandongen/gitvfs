@@ -2,13 +2,31 @@ import type { TokenRequest, TokenResponse } from './protocol.js'
 
 export type { TokenRequest, TokenResponse }
 
+/**
+ * Match origins against patterns such as `https://docs.example.com` or `https://*.docs.example.com`.
+ * `*` stands for exactly one subdomain label, so `https://*.example.com` matches
+ * `https://preview.example.com` but neither `https://example.com` nor `https://a.b.example.com`.
+ * Scheme and port must match exactly.
+ */
+export function originMatcher(patterns: string[]): (origin: string) => boolean {
+  const regexes = patterns
+    .map((pattern) => pattern.trim().replace(/\/$/, ''))
+    .filter(Boolean)
+    .map((pattern) => {
+      const escaped = pattern.replace(/[.+?^${}()|[\]\\]/g, '\\$&').replace(/\*/g, '[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?')
+      return new RegExp(`^${escaped}$`, 'i')
+    })
+  return (origin) => regexes.some((regex) => regex.test(origin))
+}
+
 export interface TokenHandlerOptions {
   clientId: string
   /** The app's client secret. Keep it in a secret store (e.g. `wrangler secret put`), never in code. */
   clientSecret: string
   /**
-   * Origins allowed to call the handler, e.g. `['https://docs.example.com']`. Requests from any
-   * other origin, or without an `Origin` header, are rejected. Use a function for patterns.
+   * Origins allowed to call the handler, e.g. `['https://docs.example.com', 'https://*.docs.example.com']`
+   * (see `originMatcher`). Requests from any other origin, or without an `Origin` header, are
+   * rejected. A function gets the last word.
    */
   allowedOrigins: string[] | ((origin: string) => boolean)
   /** GitHub Enterprise Server: the web URL. Default: https://github.com */
@@ -72,7 +90,7 @@ export function createTokenHandler(options: TokenHandlerOptions): (request: Requ
   const githubUrl = (options.githubUrl ?? 'https://github.com').replace(/\/$/, '')
   const isAllowed = typeof options.allowedOrigins === 'function'
     ? options.allowedOrigins
-    : (origin: string) => (options.allowedOrigins as string[]).includes(origin)
+    : originMatcher(options.allowedOrigins)
   const doFetch = options.fetch ?? fetch
 
   return async (request) => {
