@@ -1,0 +1,45 @@
+{
+  "name": "gitvfs-github-auth",
+  "version": "0.1.0",
+  "description": "Sign in with GitHub from the browser using PKCE, with a tiny token exchange handler for Workers and other Fetch API runtimes",
+  "keywords": [
+    "github",
+    "oauth",
+    "pkce",
+    "github-app",
+    "cloudflare-workers",
+    "gitvfs"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meesvandongen/gitvfs.git",
+    "directory": "packages/github-auth"
+  },
+  "bugs": {
+    "url": "https://github.com/meesvandongen/gitvfs/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    },
+    "./server": {
+      "import": "./dist/server.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vp pack",
+    "test": "vp test run",
+    "test:watch": "vp test",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "happy-dom": "^20.8.4",
+    "typescript": "^5.5.0",
+    "vite-plus": "catalog:"
+  },
+  "license": "MIT"
+}

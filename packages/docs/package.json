@@ -20,6 +20,7 @@
     "fumadocs-ui": "npm:@fumadocs/base-ui@16.17.8",
     "gitvfs": "workspace:*",
     "gitvfs-cms": "workspace:*",
+    "gitvfs-github-auth": "workspace:*",
     "react": "^19.3.1",
     "react-dom": "^19.3.1",
     "react-hook-form": "^7.91.0",

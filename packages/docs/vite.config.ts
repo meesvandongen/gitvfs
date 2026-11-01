@@ -17,6 +17,7 @@ export default defineConfig({
       { find: /^gitvfs-cms\/react$/, replacement: source('../cms/src/react/index.ts') },
       { find: /^gitvfs-cms\/styles\.css$/, replacement: source('../cms/src/styles.css') },
       { find: /^gitvfs-cms$/, replacement: source('../cms/src/index.ts') },
+      { find: /^gitvfs-github-auth$/, replacement: source('../github-auth/src/index.ts') },
     ],
   },
 })
