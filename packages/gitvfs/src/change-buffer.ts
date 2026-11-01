@@ -12,6 +12,11 @@ export class ChangeBuffer {
     this.changes.set(change.path, change)
   }
 
+  /** Drop the pending change for a path. */
+  remove(path: string): void {
+    this.changes.delete(path)
+  }
+
   get(path: string): Change | undefined {
     return this.changes.get(path)
   }

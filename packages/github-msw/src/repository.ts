@@ -206,7 +206,7 @@ export class MockRepository {
     }
 
     const tree = { ...this.state.trees[this.state.commits[head].tree] }
-    // Duplicates are allowed: gitvfs can list a moved file's old path twice.
+    // Duplicate paths are tolerated rather than rejected.
     for (const path of new Set(input.deletions ?? [])) {
       const normalized = normalizePath(path)
       if (!tree[normalized]) throw new Error(`A path was requested for deletion which does not exist: ${normalized}`)

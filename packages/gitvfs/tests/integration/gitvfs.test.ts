@@ -1,4 +1,4 @@
-import { describe, it, expect, beforeEach } from 'vite-plus/test'
+import { describe, it, expect, beforeEach, vi } from 'vite-plus/test'
 import { GitFS } from '../../src/gitvfs'
 import { MockProvider } from '../helpers/mock-provider'
 import { NotFoundError } from '../../src/types/errors'
@@ -177,14 +177,76 @@ describe('GitFS', () => {
   })
 
   describe('rename', () => {
-    it('renames a file (move)', async () => {
-      fs.writeFile('posts/draft.md', 'Draft content')
-      fs.rename('posts/draft.md', 'posts/final.md')
+    const text = (path: string) => {
+      const file = provider.branches.get('main')!.files.find((f) => f.path === path)
+      return file ? new TextDecoder().decode(file.content) : undefined
+    }
 
-      const status = fs.status()
-      const paths = status.map((s) => s.path)
-      expect(paths).toContain('posts/final.md')
-      expect(paths).toContain('posts/draft.md')
+    it('keeps the content of an unchanged file', async () => {
+      fs.rename('posts/hello.md', 'posts/renamed.md')
+      await fs.commit('Rename')
+
+      expect(text('posts/renamed.md')).toBe('# Hello World')
+      expect(text('posts/hello.md')).toBeUndefined()
+    })
+
+    it('sends one move with the content and no separate deletion', async () => {
+      const commit = vi.spyOn(provider, 'commit')
+      fs.rename('posts/hello.md', 'posts/renamed.md')
+      await fs.commit('Rename')
+
+      const changes = commit.mock.calls[0][0].changes
+      expect(changes).toHaveLength(1)
+      expect(changes[0]).toMatchObject({ action: 'move', path: 'posts/renamed.md', previousPath: 'posts/hello.md' })
+      expect(new TextDecoder().decode(changes[0].content as Uint8Array)).toBe('# Hello World')
+    })
+
+    it('reads the renamed file before committing', async () => {
+      fs.rename('posts/hello.md', 'posts/renamed.md')
+      expect(await fs.readFile('posts/renamed.md', { encoding: 'utf-8' })).toBe('# Hello World')
+      expect(await fs.exists('posts/hello.md')).toBe(false)
+      expect((await fs.readdir('posts')).map((e) => e.name).sort()).toEqual(['draft.md', 'renamed.md'])
+    })
+
+    it('moves pending edits along', async () => {
+      fs.writeFile('posts/draft.md', 'Edited draft')
+      fs.rename('posts/draft.md', 'posts/final.md')
+      expect(await fs.readFile('posts/final.md', { encoding: 'utf-8' })).toBe('Edited draft')
+      await fs.commit('Edit and rename')
+
+      expect(text('posts/final.md')).toBe('Edited draft')
+      expect(text('posts/draft.md')).toBeUndefined()
+    })
+
+    it('renames a file created in the same batch without deleting anything', async () => {
+      const commit = vi.spyOn(provider, 'commit')
+      fs.writeFile('posts/new.md', 'New')
+      fs.rename('posts/new.md', 'posts/newer.md')
+      await fs.commit('Create')
+
+      expect(commit.mock.calls[0][0].changes).toEqual([{ action: 'create', path: 'posts/newer.md', content: 'New' }])
+      expect(text('posts/newer.md')).toBe('New')
+    })
+
+    it('follows a file renamed twice back to its original path', async () => {
+      fs.rename('posts/hello.md', 'posts/a.md')
+      fs.rename('posts/a.md', 'posts/b.md')
+      expect(fs.status()).toEqual(
+        expect.arrayContaining([
+          { path: 'posts/b.md', action: 'move' },
+          { path: 'posts/hello.md', action: 'delete' },
+        ]),
+      )
+      await fs.commit('Rename twice')
+
+      expect(text('posts/b.md')).toBe('# Hello World')
+      expect(text('posts/a.md')).toBeUndefined()
+      expect(text('posts/hello.md')).toBeUndefined()
+    })
+
+    it('treats a rename to the same path as nothing', () => {
+      fs.rename('posts/hello.md', 'posts/hello.md')
+      expect(fs.status()).toEqual([])
     })
   })
 

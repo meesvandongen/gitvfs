@@ -107,9 +107,26 @@ describe('gitvfs against the GitHub mock', () => {
     expect(repository.readFile('main', 'y.txt')).toBeUndefined()
   })
 
-  it('allows the duplicate deletion gitvfs sends for a moved file', async () => {
+  it('renames files with their content through the real provider', async () => {
+    const { fs, repository } = await setup()
+    fs.rename('content/posts/hello.md', 'content/posts/hi.md')
+    fs.writeFile('content/posts/second.md', '---\ntitle: Second, edited\n---\n')
+    fs.rename('content/posts/second.md', 'content/posts/2nd.md')
+    await fs.commit('Rename posts')
+
+    const read = (path: string) => {
+      const file = repository.readFile('main', path)
+      return file && new TextDecoder().decode(file.content)
+    }
+    expect(read('content/posts/hi.md')).toBe('---\ntitle: Hello\n---\n\nHi\n')
+    expect(read('content/posts/2nd.md')).toBe('---\ntitle: Second, edited\n---\n')
+    expect(read('content/posts/hello.md')).toBeUndefined()
+    expect(read('content/posts/second.md')).toBeUndefined()
+  })
+
+  it('tolerates duplicate deletions in one commit', async () => {
     const { repository } = await setup()
-    await repository.commit({ branch: 'main', message: 'Move', deletions: ['README.md', 'README.md'] })
+    await repository.commit({ branch: 'main', message: 'Delete', deletions: ['README.md', 'README.md'] })
     expect(repository.readFile('main', 'README.md')).toBeUndefined()
   })
 
