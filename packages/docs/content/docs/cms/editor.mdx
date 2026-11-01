@@ -19,6 +19,7 @@ with helpers that attach editor metadata through `.check()`:
 | `z.enum([...])` | select |
 | `z.array(...)` | repeatable list |
 | `z.object({...})` | group of fields |
+| `reference({ collection })` | an entry of another collection, see [Reference fields](#reference-fields) |
 
 `field({ label, description, order, inputProps, fieldType })` sets the other options:
 
@@ -99,6 +100,68 @@ For your site, `toGeoJSON(value)` converts a value to a GeoJSON geometry (a circ
 or a ring of points with `{ polygon: true }`), and `distance`, `pathLength` and `polygonArea` measure
 in meters.
 
+## Reference fields
+
+`reference()` points at an entry of another collection, and `references()` at an ordered list of
+them. The editor is a searchable list of that collection's entries.
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `reference({ collection: 'authors' })` | the entry's slug: `ada-lovelace` | search box with **Open** and **Clear** |
+| `references({ collection: 'posts' })` | a list of slugs | search box to add, buttons to reorder and remove |
+| `reference({ collection: ['posts', 'docs'] })` | `{ collection, slug }` | entries of all listed collections |
+| `references({ collection: ['posts', 'docs'] })` | a list of `{ collection, slug }` | |
+
+```ts
+import { reference, references } from 'gitvfs-cms'
+
+const posts = defineCollection({
+  name: 'posts',
+  folder: 'content/posts',
+  schema: z.object({
+    title: z.string(),
+    author: reference({ collection: 'authors', label: 'Author', display: ['role'] }),
+    relatedPosts: references({ collection: 'posts', max: 3 }).default([]),
+    body: z.string().check(markdown()).default(''),
+  }),
+})
+```
+
+```yaml
+---
+title: Welcome
+author: ada-lovelace
+relatedPosts:
+  - editing-frontmatter
+  - release-notes-0-2
+---
+```
+
+The slug is the entry's file name, so a reference reads well in a diff and keeps working when the
+collection moves to another folder or format. Load the referenced entry with
+`cms.readEntry('authors', post.author)`.
+
+| Option | Default | |
+| --- | --- | --- |
+| `collection` | | Collection name; a list of names stores `{ collection, slug }`. |
+| `display` | none | Text shown next to each entry's label: field names (`['role']`) or `(entry) => string`. |
+| `min`, `max` | none | `references` only: how many entries to pick. |
+
+Validation checks that values are valid slugs (and that a list has no duplicates); it does not read
+the repository. Whether the entry exists is checked in the editor instead: a slug that matches no
+entry shows a warning, not an error, so content that refers to an entry that is not committed yet
+still saves.
+
+Picking works from the keyboard: type to filter (by label, slug and `display` text), arrow keys
+move through the options, Enter picks one and Escape closes the list. In a list, each entry has
+buttons to move it up or down and to remove it. **Open** shows the referenced entry; it is there
+inside `CmsApp`, or wherever you provide navigation with `CmsNavigationProvider`.
+
+References break when the entry they point at is renamed or deleted. Before either, the editor
+looks for entries that still point at it with `cms.findReferences(collection, slug)` and names them
+in the confirmation ("Referenced by 2 entries: …"). It does not rewrite those references: open the
+listed entries and pick the new one.
+
 ## Preview
 
 The editor shows two tabs next to the form:
@@ -151,6 +214,8 @@ The [CMS demo](https://demo.cms.gitvfs.mvd.im) does this with **Switch repositor
 `CmsApp` is assembled from exported parts, so you can embed only what you need:
 
 - `CmsProvider` and `useCms()` share a `GitCms` instance.
+- `CmsNavigationProvider` lets fields open other documents (a reference's **Open** button); pass it
+  a function that shows a `CmsView` in your UI.
 - `DocumentEditor` loads, edits, previews and commits one entry or singleton.
 - `ContentForm` is the AutoForm for a content type, with the CMS field components.
 - `DocumentPreview`, `MarkdownPreview` and `PreviewFrame` render previews.

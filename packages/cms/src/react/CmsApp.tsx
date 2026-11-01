@@ -3,6 +3,7 @@ import type { GitCms } from '../cms.js'
 import type { Collection, EntrySummary } from '../config.js'
 import { CmsProvider, useCms } from './context.js'
 import { DocumentEditor, type DocumentEditorProps } from './DocumentEditor.js'
+import { CmsNavigationProvider } from './navigation.js'
 import { errorMessage, useAsync, type AsyncState } from './use-async.js'
 
 export type CmsView =
@@ -41,23 +42,25 @@ export function CmsApp(props: CmsAppProps) {
 
   return (
     <CmsProvider cms={props.cms}>
-      <div className="gcms-app">
-        <Sidebar title={props.title} footer={props.sidebarFooter} view={view} onNavigate={navigate} />
-        {view === undefined ? (
-          <main className="gcms-main gcms-empty">Configure a collection or singleton to start editing.</main>
-        ) : view.type === 'collection' ? (
-          <CollectionView {...props} view={view} onNavigate={navigate} />
-        ) : (
-          <main className="gcms-main">
-            <DocumentEditor
-              contentType={props.cms.getSingleton(view.name)}
-              renderPreview={props.previews?.[view.name]}
-              uiComponents={props.uiComponents}
-              formComponents={props.formComponents}
-            />
-          </main>
-        )}
-      </div>
+      <CmsNavigationProvider navigate={navigate}>
+        <div className="gcms-app">
+          <Sidebar title={props.title} footer={props.sidebarFooter} view={view} onNavigate={navigate} />
+          {view === undefined ? (
+            <main className="gcms-main gcms-empty">Configure a collection or singleton to start editing.</main>
+          ) : view.type === 'collection' ? (
+            <CollectionView {...props} view={view} onNavigate={navigate} />
+          ) : (
+            <main className="gcms-main">
+              <DocumentEditor
+                contentType={props.cms.getSingleton(view.name)}
+                renderPreview={props.previews?.[view.name]}
+                uiComponents={props.uiComponents}
+                formComponents={props.formComponents}
+              />
+            </main>
+          )}
+        </div>
+      </CmsNavigationProvider>
     </CmsProvider>
   )
 }

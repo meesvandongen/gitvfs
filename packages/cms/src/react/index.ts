@@ -33,5 +33,8 @@ export type {
   PreviewFrameProps,
   PreviewProps,
 } from './preview.js'
+export { CmsNavigationProvider, useCmsNavigate } from './navigation.js'
+export type { CmsNavigate } from './navigation.js'
+export { ReferenceField, ReferencesField } from './references.js'
 export { useAsync } from './use-async.js'
 export type { AsyncState } from './use-async.js'

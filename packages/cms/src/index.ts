@@ -60,3 +60,26 @@ export type {
   MapTiles,
 } from './geo.js'
 export { isValidSlug, slugify } from './slug.js'
+export {
+  describeReferences,
+  displayText,
+  findReferences,
+  isReferenceValue,
+  matchesQuery,
+  reference,
+  referenceFields,
+  referenceKey,
+  referencesIn,
+  references,
+  toReferenceValues,
+} from './references.js'
+export type {
+  ReferenceCustomData,
+  ReferenceDisplay,
+  ReferenceField,
+  ReferenceFieldConfig,
+  ReferenceOptions,
+  ReferenceSource,
+  ReferenceValue,
+  ReferencesOptions,
+} from './references.js'

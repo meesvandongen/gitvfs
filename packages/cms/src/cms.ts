@@ -7,6 +7,7 @@ import type {
   Singleton,
 } from './config.js'
 import { parseDocument, serializeDocument } from './document.js'
+import { findReferences, type ReferenceSource } from './references.js'
 import { isValidSlug } from './slug.js'
 
 export interface CmsOptions {
@@ -202,6 +203,14 @@ export class GitCms {
       )
       return { path, commit }
     })
+  }
+
+  /**
+   * Entries and singletons whose `reference` / `references` fields point at an entry, so editors
+   * can warn before renaming or deleting it. Reads every document that could hold such a reference.
+   */
+  findReferences(collection: string, slug: string): Promise<ReferenceSource[]> {
+    return findReferences(this, collection, slug)
   }
 
   /** Read a singleton. A missing file yields `exists: false` and empty data. */

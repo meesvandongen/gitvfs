@@ -6,11 +6,12 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 
 | Content | Format | Features |
 | --- | --- | --- |
-| Blog posts | markdown | every built-in field type (text, textarea, date, select, number, checkboxes, a list, a nested object, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
+| Blog posts | markdown | every built-in field type (text, textarea, date, select, number, checkboxes, a list, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
 | Documentation | MDX | the site's own stylesheet in the preview (`previewStylesheets`) |
 | Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
 | Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
+| Blog posts, Homepage | markdown | references: each post's author (one post points at an author that does not exist), up to three related posts in order, and a homepage highlight that can be a post or a doc (`{ collection, slug }`); deleting a referenced author lists the posts that use it |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 
 The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.
