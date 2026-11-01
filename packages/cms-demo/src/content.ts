@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPolygon, markdown, textarea } from 'gitvfs-cms'
+import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPoints, geoPolygon, markdown, textarea } from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
 // and singletons, custom fields and previews, and files the schema does not fully describe.
@@ -123,6 +123,14 @@ export const places = defineCollection({
     }).optional(),
     serviceArea: geoPolygon({ label: 'Service area', center: amsterdam, zoom: 11 }).optional(),
     route: geoLine({ label: 'Walking route from the station', center: amsterdam, zoom: 14, maxPoints: 20 }).optional(),
+    branches: geoPoints({
+      label: 'Branches',
+      description: 'Pickup points: click the map or search to add one, and name it in the list',
+      labels: true,
+      center: amsterdam,
+      zoom: 12,
+      maxPoints: 10,
+    }).optional(),
   }),
 })
 
@@ -334,6 +342,16 @@ route:
     lng: 4.8921
   - lat: 52.374
     lng: 4.8897
+branches:
+  - lat: 52.3791
+    lng: 4.9003
+    label: Central Station
+  - lat: 52.3579
+    lng: 4.8813
+    label: Museumplein
+  - lat: 52.3843
+    lng: 4.9025
+    label: Ferry pier Noord
 `,
   'data/places/warehouse-west.yml': `title: Warehouse west
 kind: warehouse

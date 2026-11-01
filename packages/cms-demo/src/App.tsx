@@ -1,7 +1,7 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
-import { createCms } from 'gitvfs-cms'
+import { createCms, nominatimGeocoder, type MapOptions } from 'gitvfs-cms'
 import { CmsApp, RepositoryPicker } from 'gitvfs-cms/react'
 import type { MockRepository } from 'gitvfs-github-msw'
 import { ColorField } from './ColorField'
@@ -9,6 +9,11 @@ import { collections, singletons } from './content'
 import { AuthorPreview, EventPreview } from './previews'
 
 const DOCS_URL = 'https://docs.gitvfs.mvd.im/docs/cms'
+
+// Address search on every map field, through OpenStreetMap's public Nominatim instance: searches
+// run on Enter only, at most one per second, and repeated ones come from a cache, as its usage
+// policy asks (https://operations.osmfoundation.org/policies/nominatim/).
+const mapDefaults: MapOptions = { geocoder: nominatimGeocoder({ language: 'en' }) }
 
 export interface DemoRepository {
   fullName: string
@@ -104,6 +109,7 @@ export function App({ repositories, subscribe, reset }: AppProps) {
             cms={cms}
             title="Acme content"
             formComponents={{ color: ColorField }}
+            mapDefaults={mapDefaults}
             previews={{ authors: AuthorPreview, events: EventPreview }}
             sidebarFooter={
               <div className="demo-history">
