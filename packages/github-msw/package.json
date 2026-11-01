@@ -1,0 +1,45 @@
+{
+  "name": "gitvfs-github-msw",
+  "version": "0.1.0",
+  "description": "A mock of the GitHub API (the parts gitvfs uses) for Mock Service Worker, backed by an in-browser repository",
+  "keywords": [
+    "github",
+    "msw",
+    "mock",
+    "gitvfs",
+    "testing"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/meesvandongen/gitvfs.git",
+    "directory": "packages/github-msw"
+  },
+  "bugs": {
+    "url": "https://github.com/meesvandongen/gitvfs/issues"
+  },
+  "type": "module",
+  "exports": {
+    ".": {
+      "import": "./dist/index.js"
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "build": "vp pack",
+    "test": "vp test run",
+    "test:watch": "vp test",
+    "typecheck": "tsc --noEmit"
+  },
+  "peerDependencies": {
+    "msw": "^3.0.0"
+  },
+  "devDependencies": {
+    "gitvfs": "workspace:*",
+    "msw": "^3.0.3",
+    "typescript": "^5.5.0",
+    "vite-plus": "catalog:"
+  },
+  "license": "MIT"
+}
