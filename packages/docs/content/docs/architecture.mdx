@@ -42,7 +42,8 @@ optional peer dependencies, needed only when that subpath is imported. The same 
 ## gitvfs-github-auth
 
 GitHub sign-in is its own package because it has its own runtime: half of it runs on a server.
-It has no dependencies and does not depend on gitvfs either; `auth.token` simply matches the
+Its only dependency is [kukkii](https://github.com/meesvandongen/kukkii), for the encrypted session
+cookie. It does not depend on gitvfs either; `auth.token` simply matches the
 `TokenProvider` signature. Apps that are not CMSes, such as the gitvfs demo, can use it alone.
 
 ## Why subpaths instead of more packages

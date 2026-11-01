@@ -78,7 +78,27 @@ const fs = new GitFS({
 
 Errors are `GitHubAuthError`s with a `code`: `not_signed_in`, `session_expired`, `state_mismatch`, `token_exchange_failed`, or GitHub's own error (`access_denied`, `bad_verification_code`, `bad_refresh_token`, …).
 
-Tokens live in `sessionStorage` by default. Pass `storage: 'memory'` to keep them only for the current page load (the PKCE verifier still survives the redirect), or `storage: 'local'` to keep them across browser restarts.
+## Where tokens live
+
+By default, tokens (including the refresh token) live in `sessionStorage`. Pass `storage: 'memory'` to keep them only for the current page load (the PKCE verifier still survives the redirect), or `storage: 'local'` to keep them across browser restarts.
+
+Any script on the page can read web storage. **Cookie sessions** keep the refresh token out of JavaScript altogether:
+
+```ts
+// server
+createTokenHandler({ clientId, clientSecret, allowedOrigins, session: { secret: env.GITHUB_SESSION_SECRET, path: '/api/github' } })
+
+// browser
+const auth = createGitHubAuth({ clientId, tokenUrl: '/api/github/token', session: 'cookie' })
+await auth.handleRedirect()
+if (!(await auth.restoreSession())) await auth.login()
+```
+
+- The handler seals the refresh token with [kukkii](https://github.com/meesvandongen/kukkii) (iron: AES-256-CBC plus HMAC-SHA256). It stores the result in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie, and rotates it on every refresh.
+- The sealed payload carries its own expiry, so a copied cookie stops working when the session ends, and it reveals nothing about the token.
+- The browser holds only the short-lived access token (8 hours for GitHub Apps), in memory. `restoreSession()` gets a new one after a reload, and `signOut()` has the handler clear the cookie.
+- For OAuth Apps without expiring tokens, the cookie holds the access token instead.
+- The secret must be at least 32 characters (`openssl rand -base64 32`).
 
 ## Limits
 

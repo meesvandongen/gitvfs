@@ -8,8 +8,8 @@
   "alias": {
     "gitvfs-github-auth/server": "../github-auth/src/server.ts"
   },
-  // GITHUB_CLIENT_SECRET is a secret: `wrangler secret put GITHUB_CLIENT_SECRET`.
-  // Sign-in stays off until it is set.
+  // Secrets (`wrangler secret put`): GITHUB_CLIENT_SECRET turns sign-in on; the optional
+  // GITHUB_SESSION_SECRET (32+ characters) keeps refresh tokens in an encrypted HttpOnly cookie.
   "vars": {
     // A GitHub App; its callback URL is https://docs.gitvfs.mvd.im/admin, with wildcard matching
     // so preview subdomains work too. Its permissions decide what a sign-in may do, so no

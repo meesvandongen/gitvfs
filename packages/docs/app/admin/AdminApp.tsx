@@ -62,13 +62,19 @@ async function ensureBranch({ token, branch }: Session): Promise<void> {
 async function loadGitHubAuth(): Promise<GitHubAuth | null> {
   try {
     const response = await fetch('/api/github/config')
-    const config = (await response.json()) as { clientId?: string | null; scope?: string }
+    const config = (await response.json()) as {
+      clientId?: string | null
+      scope?: string
+      session?: 'cookie' | 'storage'
+    }
     if (!config.clientId) return null
     return createGitHubAuth({
       clientId: config.clientId,
       tokenUrl: '/api/github/token',
       redirectUri: `${location.origin}/admin`,
       scope: config.scope,
+      // With a session secret, the Worker keeps the refresh token in an encrypted HttpOnly cookie.
+      session: config.session === 'cookie' ? 'cookie' : 'storage',
     })
   } catch {
     return null
@@ -95,13 +101,13 @@ export default function AdminApp() {
       if (auth) {
         try {
           const returned = await auth.handleRedirect()
-          if (returned || auth.isSignedIn()) {
+          if (returned || (await auth.restoreSession())) {
             session = { method: 'github', token: auth.token, branch: storedBranch() }
             // The branch may be new: create it right after signing in.
             if (returned) await ensureBranch(session)
           }
         } catch (caught) {
-          auth.signOut()
+          await auth.signOut()
           session = null
           error = caught instanceof NotFoundError
             ? `Signed in, but GitHub does not let this sign-in see ${gitConfig.user}/${gitConfig.repo}. For a GitHub App, install it on the repository; for an OAuth App, check its scope.`
@@ -119,8 +125,8 @@ export default function AdminApp() {
     return <p className="p-8 text-fd-muted-foreground">Loading editor…</p>
   }
 
-  const signOut = () => {
-    if (boot.session?.method === 'github') boot.auth?.signOut()
+  const signOut = async () => {
+    if (boot.session?.method === 'github') await boot.auth?.signOut()
     storageSet(TOKEN_KEY, null)
     setBoot({ ...boot, session: null, error: undefined })
   }
@@ -136,7 +142,7 @@ export default function AdminApp() {
   )
 }
 
-function Editor(props: { session: Session; auth: GitHubAuth | null; onSignOut: () => void }) {
+function Editor(props: { session: Session; auth: GitHubAuth | null; onSignOut: () => Promise<void> }) {
   const { session } = props
   const [login, setLogin] = useState<string | null>(null)
 
@@ -173,7 +179,7 @@ function Editor(props: { session: Session; auth: GitHubAuth | null; onSignOut: (
             <span className="gcms-muted">
               {gitConfig.user}/{gitConfig.repo} @ {session.branch}
             </span>
-            <button type="button" className="gcms-button gcms-button--small" onClick={props.onSignOut}>
+            <button type="button" className="gcms-button gcms-button--small" onClick={() => void props.onSignOut()}>
               Sign out
             </button>
           </div>

@@ -71,11 +71,16 @@ elsewhere.
 }
 ```
 
-Set the secret once per Worker:
+Set the secrets once per Worker:
 
 ```sh
 pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
+# optional: keep refresh tokens in an encrypted HttpOnly cookie (32+ characters)
+openssl rand -base64 32 | pnpm exec wrangler secret put GITHUB_SESSION_SECRET
 ```
+
+With `GITHUB_SESSION_SECRET` set, the Worker passes `session: { secret, path: '/api/github' }` to
+`createTokenHandler`, and `/api/github/config` tells the page to use `session: 'cookie'`.
 
 Deploy the Worker script first. Cloudflare refuses variables and secrets on a Worker that only has
 static assets ("Variables cannot be added to a Worker that only has static assets"), so when you
