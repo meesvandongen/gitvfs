@@ -11,11 +11,9 @@
   // GITHUB_CLIENT_SECRET is a secret: `wrangler secret put GITHUB_CLIENT_SECRET`.
   // Sign-in stays off until it is set.
   "vars": {
-    // An OAuth App; its callback URL is https://docs.gitvfs.mvd.im/admin.
-    "GITHUB_CLIENT_ID": "Ov23li0e84j6EPR2Sliz",
-    // OAuth Apps need a scope to commit; public_repo is enough for this public repository.
-    // GitHub Apps ignore it and use the app's permissions instead.
-    "GITHUB_SCOPE": "public_repo",
+    // A GitHub App; its callback URL is https://docs.gitvfs.mvd.im/admin. Its permissions decide
+    // what a sign-in may do, so no GITHUB_SCOPE (an OAuth App setting) is needed.
+    "GITHUB_CLIENT_ID": "Iv23liL4d3j01dbuzSpS",
     "GITHUB_ALLOWED_ORIGINS": "https://docs.gitvfs.mvd.im"
   },
   // Static output of `pnpm run build`; Workers Builds runs the build, then deploys or previews.

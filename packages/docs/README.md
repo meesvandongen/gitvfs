@@ -26,7 +26,7 @@ Deployed by Cloudflare [Workers Builds](https://developers.cloudflare.com/worker
 
 `/admin` offers **Sign in with GitHub** through [gitvfs-github-auth](../github-auth) when the Worker in `worker/index.ts` is configured for the current origin. Otherwise it falls back to personal access tokens.
 
-The app is an OAuth App (client ID `Ov23li0e84j6EPR2Sliz`) with callback URL `https://docs.gitvfs.mvd.im/admin`. `GITHUB_CLIENT_ID`, `GITHUB_SCOPE` (`public_repo`) and `GITHUB_ALLOWED_ORIGINS` are set in `wrangler.jsonc`. The client secret is a Worker secret:
+The app is a GitHub App (client ID `Iv23liL4d3j01dbuzSpS`) with callback URL `https://docs.gitvfs.mvd.im/admin` and **Contents: read and write**, installed on this repository. `GITHUB_CLIENT_ID` and `GITHUB_ALLOWED_ORIGINS` are set in `wrangler.jsonc`; `GITHUB_SCOPE` is only for OAuth Apps. The client secret is a Worker secret:
 
 ```sh
 pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
