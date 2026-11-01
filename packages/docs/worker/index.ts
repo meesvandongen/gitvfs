@@ -1,10 +1,12 @@
 import { createTokenHandler } from 'gitvfs-github-auth/server'
 
 interface Env {
-  /** Client ID of the GitHub App behind "Sign in with GitHub" on /admin. */
+  /** Client ID of the GitHub App or OAuth App behind "Sign in with GitHub" on /admin. */
   GITHUB_CLIENT_ID?: string
   /** Set with `wrangler secret put GITHUB_CLIENT_SECRET`. */
   GITHUB_CLIENT_SECRET?: string
+  /** OAuth Apps only: the scope to request, e.g. `public_repo` or `repo`. */
+  GITHUB_SCOPE?: string
   /** Comma-separated origins that may sign in; each needs a callback URL on the GitHub App. */
   GITHUB_ALLOWED_ORIGINS?: string
 }
@@ -28,7 +30,7 @@ export default {
 
     if (url.pathname === '/api/github/config') {
       // GitHub only redirects to registered callback URLs, so other origins (previews) get none.
-      return json({ clientId: enabled ? env.GITHUB_CLIENT_ID : null })
+      return json(enabled ? { clientId: env.GITHUB_CLIENT_ID, scope: env.GITHUB_SCOPE || undefined } : { clientId: null })
     }
     if (url.pathname === '/api/github/token' && enabled) {
       return createTokenHandler({

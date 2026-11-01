@@ -56,18 +56,19 @@ async function ensureBranch({ token, branch }: Session): Promise<void> {
 }
 
 /**
- * The docs Worker serves the GitHub App's client ID when sign-in is set up for the current
+ * The docs Worker serves the app's client ID (and scope) when sign-in is set up for the current
  * origin (see worker/index.ts). Elsewhere, such as on preview URLs, only tokens work.
  */
 async function loadGitHubAuth(): Promise<GitHubAuth | null> {
   try {
     const response = await fetch('/api/github/config')
-    const config = (await response.json()) as { clientId?: string | null }
+    const config = (await response.json()) as { clientId?: string | null; scope?: string }
     if (!config.clientId) return null
     return createGitHubAuth({
       clientId: config.clientId,
       tokenUrl: '/api/github/token',
       redirectUri: `${location.origin}/admin`,
+      scope: config.scope,
     })
   } catch {
     return null
@@ -103,7 +104,7 @@ export default function AdminApp() {
           auth.signOut()
           session = null
           error = caught instanceof NotFoundError
-            ? `Signed in, but the GitHub App cannot see ${gitConfig.user}/${gitConfig.repo}. Install the app on the repository and try again.`
+            ? `Signed in, but GitHub does not let this sign-in see ${gitConfig.user}/${gitConfig.repo}. For a GitHub App, install it on the repository; for an OAuth App, check its scope.`
             : errorText(caught)
         }
       }

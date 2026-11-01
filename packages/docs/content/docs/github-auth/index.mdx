@@ -37,7 +37,9 @@ refreshed automatically).
    authorization tokens** enabled.
 4. Generate a client secret, and install the app on the repositories it may edit.
 
-An OAuth App works too; pass `scope: 'repo'` (or `public_repo`) to the browser client.
+An OAuth App works too. Its client ID starts with `Ov23`, and its tokens can only write with a
+scope: pass `scope: 'public_repo'` for public repositories, or `scope: 'repo'` (which grants access
+to all of the user's private repositories) to the browser client.
 
 ## Browser
 

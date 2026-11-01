@@ -14,6 +14,7 @@ import { createTokenHandler } from 'gitvfs-github-auth/server'
 interface Env {
   GITHUB_CLIENT_ID?: string
   GITHUB_CLIENT_SECRET?: string
+  GITHUB_SCOPE?: string
   GITHUB_ALLOWED_ORIGINS?: string
 }
 
@@ -24,7 +25,7 @@ export default {
     const enabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) && origins.includes(url.origin)
 
     if (url.pathname === '/api/github/config') {
-      return Response.json({ clientId: enabled ? env.GITHUB_CLIENT_ID : null })
+      return Response.json(enabled ? { clientId: env.GITHUB_CLIENT_ID, scope: env.GITHUB_SCOPE } : { clientId: null })
     }
     if (url.pathname === '/api/github/token' && enabled) {
       return createTokenHandler({
@@ -50,6 +51,8 @@ elsewhere, such as on preview URLs that are not registered with the app.
   "main": "./worker/index.ts",
   "vars": {
     "GITHUB_CLIENT_ID": "Iv23li…",
+    // OAuth Apps only; GitHub Apps ignore it.
+    "GITHUB_SCOPE": "public_repo",
     "GITHUB_ALLOWED_ORIGINS": "https://docs.example.com",
   },
   "assets": {
@@ -66,6 +69,11 @@ Set the secret once per Worker:
 ```sh
 pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
 ```
+
+Deploy the Worker script first. Cloudflare refuses variables and secrets on a Worker that only has
+static assets ("Variables cannot be added to a Worker that only has static assets"), so when you
+add the Worker to an existing assets-only site, the first deployment with `main` has to happen
+before the secret can be set. Until the secret exists, sign-in simply stays off.
 
 Variables set at the top level apply to production only. [Worker
 Previews](https://developers.cloudflare.com/workers/previews/) do not inherit them, which keeps

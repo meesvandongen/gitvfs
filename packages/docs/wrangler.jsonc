@@ -9,9 +9,13 @@
     "gitvfs-github-auth/server": "../github-auth/src/server.ts"
   },
   // GITHUB_CLIENT_SECRET is a secret: `wrangler secret put GITHUB_CLIENT_SECRET`.
-  // Sign-in stays off until GITHUB_CLIENT_ID is set.
+  // Sign-in stays off until it is set.
   "vars": {
-    "GITHUB_CLIENT_ID": "",
+    // An OAuth App; its callback URL is https://docs.gitvfs.mvd.im/admin.
+    "GITHUB_CLIENT_ID": "Ov23li0e84j6EPR2Sliz",
+    // OAuth Apps need a scope to commit; public_repo is enough for this public repository.
+    // GitHub Apps ignore it and use the app's permissions instead.
+    "GITHUB_SCOPE": "public_repo",
     "GITHUB_ALLOWED_ORIGINS": "https://docs.gitvfs.mvd.im"
   },
   // Static output of `pnpm run build`; Workers Builds runs the build, then deploys or previews.
