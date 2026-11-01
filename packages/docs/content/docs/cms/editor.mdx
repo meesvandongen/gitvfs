@@ -26,8 +26,78 @@ with helpers that attach editor metadata through `.check()`:
 title: z.string().min(1).check(field({ label: 'Title', description: 'Shown in the browser tab' })),
 ```
 
+Optional groups (`z.object({...}).optional()`) that the user leaves blank are saved as absent, so
+their required parts only apply once something is filled in.
+
 Use `.default('')` on optional text such as the body: AutoForm treats empty inputs as missing, so a
 plain required string rejects an empty body.
+
+## Map fields
+
+Four helpers return ready-made schemas edited on a map. Values are plain `{ lat, lng }` objects in
+WGS 84 degrees, which read well in frontmatter, JSON and YAML (and avoid GeoJSON's
+`[longitude, latitude]` order):
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `geoPoint()` | `{ lat, lng }` | click to place, drag the marker |
+| `geoCircle()` | `{ lat, lng, radius }`, radius in meters | a point with a range: drag the edge handle or use the slider |
+| `geoLine()` | `[{ lat, lng }, ...]` | click to add points, for routes |
+| `geoPolygon()` | `[{ lat, lng }, ...]` | click to add corners, for areas; shows the area |
+
+```ts
+import { geoCircle, geoPoint, geoPolygon } from 'gitvfs-cms'
+
+const shops = defineCollection({
+  name: 'shops',
+  folder: 'data/shops',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string(),
+    location: geoPoint({ label: 'Location', center: { lat: 52.37, lng: 4.9 }, zoom: 11 }),
+    delivery: geoCircle({ label: 'Delivery range', minRadius: 250, maxRadius: 15_000 }).optional(),
+    area: geoPolygon({ label: 'Service area', maxPoints: 50 }).optional(),
+  }),
+})
+```
+
+```yaml
+location:
+  lat: 52.374
+  lng: 4.8897
+delivery:
+  lat: 52.374
+  lng: 4.8897
+  radius: 3000
+```
+
+Every map field also has latitude and longitude inputs that accept a pasted pair such as
+`52.3731, 4.8922` (the format Google Maps copies), a **Use my location** button, and keyboard
+controls (arrow keys pan, `+` and `-` zoom). Scrolling over the map scrolls the form; hold Ctrl or
+⌘ to zoom with the wheel.
+
+| Option | Default | |
+| --- | --- | --- |
+| `center`, `zoom` | `{ lat: 20, lng: 0 }`, `2` | Where an empty field opens. |
+| `pointZoom` | `15` | Zoom used to show a single point. |
+| `decimals` | `6` | Precision of picked coordinates (about 10 cm). |
+| `height` | `320` | Map height in pixels. |
+| `tiles` | `OSM_TILES` | Tile layer: `{ url, attribution, attributionUrl?, maxZoom?, subdomains? }`. |
+| `defaultRadius`, `minRadius`, `maxRadius` | `1000`, `0`, none | `geoCircle` only; `maxRadius` adds a slider. |
+| `minPoints`, `maxPoints` | `2` or `3`, none | `geoLine` and `geoPolygon`. |
+
+The map is built in, without a map library. Tiles come from OpenStreetMap by default; for heavy
+use, read their [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) and point
+`tiles` at another provider, for example with your own helper:
+
+```ts
+const tiles = { url: 'https://tiles.example.com/{z}/{x}/{y}.png', attribution: '© Example' }
+const place = (config = {}) => geoPoint({ tiles, ...config })
+```
+
+For your site, `toGeoJSON(value)` converts a value to a GeoJSON geometry (a circle becomes its center,
+or a ring of points with `{ polygon: true }`), and `distance`, `pathLength` and `polygonArea` measure
+in meters.
 
 ## Preview
 

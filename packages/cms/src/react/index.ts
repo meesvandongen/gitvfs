@@ -8,13 +8,17 @@ export {
   ContentForm,
   applyMarkdownFormat,
   formComponents,
+  pruneBlankOptionals,
   toDateInputValue,
   uiComponents,
+  unsetMissingOptionals,
   useField,
 } from './autoform.js'
 export type { ContentFormProps } from './autoform.js'
 export type { AutoFormFieldProps as FieldProps } from '@autoform/react'
 export { CmsProvider, useCms } from './context.js'
+export { GeoCircleField, GeoLineField, GeoPointField, GeoPolygonField, SlippyMap, fitView } from './map.js'
+export type { MapOverlayHelpers, MapView, SlippyMapProps } from './map.js'
 export {
   DocumentPreview,
   MarkdownPreview,

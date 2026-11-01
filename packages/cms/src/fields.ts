@@ -10,6 +10,10 @@ export type CmsFieldType =
   | 'select'
   | 'textarea'
   | 'markdown'
+  | 'geopoint'
+  | 'geocircle'
+  | 'geoline'
+  | 'geopolygon'
 
 export type CmsFieldConfig = FieldConfig<null, CmsFieldType | (string & {})>
 

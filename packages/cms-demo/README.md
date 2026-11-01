@@ -9,7 +9,8 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Blog posts | markdown | every built-in field type (text, textarea, date, select, number, checkboxes, a list, a nested object, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
 | Documentation | MDX | the site's own stylesheet in the preview (`previewStylesheets`) |
 | Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
-| Events | YAML | an optional nested object, a list of objects with numbers, a custom preview |
+| Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
+| Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 
 The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.

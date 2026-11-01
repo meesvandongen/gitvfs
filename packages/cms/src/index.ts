@@ -28,4 +28,35 @@ export {
 export type { ParsedDocument } from './document.js'
 export { field, markdown, textarea } from './fields.js'
 export type { CmsFieldConfig, CmsFieldType, FieldConfigCheck } from './fields.js'
+export {
+  OSM_TILES,
+  destination,
+  distance,
+  formatArea,
+  formatDistance,
+  geoCircle,
+  geoLine,
+  geoPoint,
+  geoPolygon,
+  isGeoPoint,
+  metersPerPixel,
+  parseCoordinates,
+  pathLength,
+  polygonArea,
+  project,
+  roundCoordinate,
+  toGeoJSON,
+  unproject,
+  wrapLongitude,
+} from './geo.js'
+export type {
+  GeoCircle,
+  GeoCircleOptions,
+  GeoCustomData,
+  GeoFieldConfig,
+  GeoPoint,
+  GeoShapeOptions,
+  MapOptions,
+  MapTiles,
+} from './geo.js'
 export { isValidSlug, slugify } from './slug.js'

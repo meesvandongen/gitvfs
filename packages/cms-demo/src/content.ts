@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { defineCollection, defineSingleton, field, markdown, textarea } from 'gitvfs-cms'
+import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPolygon, markdown, textarea } from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
 // and singletons, custom fields and previews, and files the schema does not fully describe.
@@ -85,6 +85,7 @@ export const events = defineCollection({
       .object({
         venue: z.string().min(1),
         city: z.string().min(1),
+        coordinates: geoPoint({ label: 'Pin on the map', height: 240 }).optional(),
       })
       .optional()
       .check(field({ label: 'Location' })),
@@ -98,6 +99,31 @@ export const events = defineCollection({
       .default([]),
   }),
   sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
+})
+
+const amsterdam = { lat: 52.372, lng: 4.9 }
+
+export const places = defineCollection({
+  name: 'places',
+  label: 'Places',
+  folder: 'data/places',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    kind: z.enum(['shop', 'office', 'warehouse']),
+    location: geoPoint({ label: 'Location', description: 'Click the map, drag the marker, or paste "52.37, 4.89"', center: amsterdam, zoom: 11 }),
+    delivery: geoCircle({
+      label: 'Delivery range',
+      description: 'A point with a radius in meters',
+      center: amsterdam,
+      zoom: 11,
+      minRadius: 250,
+      maxRadius: 15_000,
+      defaultRadius: 2_000,
+    }).optional(),
+    serviceArea: geoPolygon({ label: 'Service area', center: amsterdam, zoom: 11 }).optional(),
+    route: geoLine({ label: 'Walking route from the station', center: amsterdam, zoom: 14, maxPoints: 20 }).optional(),
+  }),
 })
 
 export const site = defineSingleton({
@@ -140,7 +166,7 @@ export const theme = defineSingleton({
   }),
 })
 
-export const collections = [posts, docs, authors, events]
+export const collections = [posts, docs, authors, events, places]
 export const singletons = [site, homepage, theme]
 
 /** The repository visitors start with, and go back to on reset. */
@@ -272,11 +298,48 @@ online: false
 location:
   venue: The Library
   city: Amsterdam
+  coordinates:
+    lat: 52.3765
+    lng: 4.9081
 tickets:
   - name: Regular
     price: 0
   - name: Supporter
     price: 25
+`,
+  'data/places/canal-shop.yml': `title: Canal shop
+kind: shop
+location:
+  lat: 52.374
+  lng: 4.8897
+delivery:
+  lat: 52.374
+  lng: 4.8897
+  radius: 3000
+serviceArea:
+  - lat: 52.3925
+    lng: 4.8701
+  - lat: 52.3908
+    lng: 4.9203
+  - lat: 52.3561
+    lng: 4.9291
+  - lat: 52.3502
+    lng: 4.8735
+route:
+  - lat: 52.3789
+    lng: 4.9003
+  - lat: 52.3767
+    lng: 4.8962
+  - lat: 52.3752
+    lng: 4.8921
+  - lat: 52.374
+    lng: 4.8897
+`,
+  'data/places/warehouse-west.yml': `title: Warehouse west
+kind: warehouse
+location:
+  lat: 52.3874
+  lng: 4.8212
 `,
   'data/events/cms-office-hours.yml': `title: CMS office hours
 starts: 2026-12-04

@@ -2,8 +2,16 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { GitVFS, type GitProvider, type RepositoryInfo } from 'gitvfs'
 import { z } from 'zod'
-import { createCms, defineCollection, defineSingleton, markdown } from '../src'
-import { CmsApp, RepositoryPicker, applyMarkdownFormat, buildPreviewDocument, toDateInputValue } from '../src/react'
+import { createCms, defineCollection, defineSingleton, geoCircle, geoPoint, geoPolygon, markdown } from '../src'
+import {
+  CmsApp,
+  RepositoryPicker,
+  applyMarkdownFormat,
+  buildPreviewDocument,
+  pruneBlankOptionals,
+  toDateInputValue,
+  unsetMissingOptionals,
+} from '../src/react'
 import { MemoryRepository } from './helpers/memory-repository'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -140,6 +148,117 @@ describe('CmsApp', () => {
   })
 })
 
+describe('map fields', () => {
+  const places = defineCollection({
+    name: 'places',
+    label: 'Places',
+    folder: 'places',
+    format: 'yaml',
+    schema: z.object({
+      title: z.string().min(1),
+      location: geoPoint({ label: 'Location' }),
+      delivery: geoCircle({ label: 'Delivery range', maxRadius: 5000 }).optional(),
+      area: geoPolygon({ label: 'Area' }).optional(),
+      // An ordinary optional group: left blank, it must not block saving.
+      contact: z.object({ phone: z.string().min(1) }).optional(),
+    }),
+  })
+
+  function setupPlaces(file: string) {
+    const remote = new MemoryRepository({ 'places/shop.yml': file })
+    const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [places] })
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    return remote
+  }
+
+  async function openShop() {
+    const entry = await waitFor(() => byText('Shopshop'))
+    await act(async () => entry.click())
+    return waitFor(() => container.querySelector<HTMLInputElement>('input[id="location"]'))
+  }
+
+  function pointer(target: Element, type: string, x: number, y: number) {
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX: x, clientY: y }))
+  }
+
+  it('edits coordinates by typing, pasting and clicking the map', async () => {
+    const remote = setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n')
+    const lat = await openShop()
+    expect(lat.value).toBe('52.3731')
+    const lng = container.querySelector<HTMLInputElement>('input[id="location-lng"]')!
+    expect(lng.value).toBe('4.8922')
+    expect(container.querySelector('.gcms-map-tile')?.getAttribute('src')).toMatch(/^https:\/\/tile\.openstreetmap\.org\/15\//)
+    expect(container.querySelectorAll('.gcms-map-marker')).toHaveLength(1)
+    // Untouched optional map fields stay empty instead of becoming invalid `{}` objects.
+    expect(byText('Unsaved', 'span')).toBeUndefined()
+
+    await act(async () => typeInto(lat, '52.09'))
+    await act(async () => typeInto(lng, '5.12'))
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('places/shop.yml')).toBe('title: Shop\nlocation:\n  lat: 52.09\n  lng: 5.12\n')
+
+    // A click without movement in the middle of the map picks the map's center.
+    const viewport = container.querySelector('.gcms-map-viewport')!
+    await act(async () => {
+      pointer(viewport, 'pointerdown', 300, 160)
+      pointer(viewport, 'pointerup', 300, 160)
+    })
+    expect(lat.value).toBe('52.09')
+    expect(lng.value).toBe('5.12')
+    // Dragging pans the map instead of moving the marker.
+    await act(async () => {
+      pointer(viewport, 'pointerdown', 300, 160)
+      pointer(viewport, 'pointermove', 400, 160)
+      pointer(viewport, 'pointerup', 400, 160)
+    })
+    expect(lng.value).toBe('5.12')
+    await act(async () => {
+      pointer(viewport, 'pointerdown', 300, 160)
+      pointer(viewport, 'pointerup', 300, 160)
+    })
+    expect(Number(lng.value)).toBeLessThan(5.12)
+  })
+
+  it('places a circle and draws a polygon', async () => {
+    const remote = setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n')
+    await openShop()
+
+    const [, circleMap, areaMap] = [...container.querySelectorAll('.gcms-map-viewport')]
+    await act(async () => {
+      pointer(circleMap, 'pointerdown', 300, 160)
+      pointer(circleMap, 'pointerup', 300, 160)
+    })
+    const radius = container.querySelector<HTMLInputElement>('input[id="delivery-radius"]')!
+    expect(radius.value).toBe('1000')
+    expect(container.querySelector<HTMLInputElement>('input[type="range"]')!.max).toBe('5000')
+
+    for (const [x, y] of [[250, 120], [350, 120], [300, 200], [280, 210]]) {
+      await act(async () => {
+        pointer(areaMap, 'pointerdown', x, y)
+        pointer(areaMap, 'pointerup', x, y)
+      })
+    }
+    expect(container.querySelector('polygon')).toBeTruthy()
+    expect(byText('4 corners', 'summary')).toBeTruthy()
+    await act(async () => byText('Remove last corner')!.click())
+    expect(byText('3 corners', 'summary')).toBeTruthy()
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    const saved = remote.text('places/shop.yml')!
+    expect(saved).toContain('delivery:\n  lat: 20\n  lng: 0\n  radius: 1000\n')
+    expect(saved.match(/- lat: /g)).toHaveLength(3)
+  })
+
+  it('shows what is wrong with stored coordinates', async () => {
+    setupPlaces('title: Shop\nlocation:\n  lat: 123\n  lng: 4.8922\n')
+    await openShop()
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => byText('Latitude is at most 90', 'p'))
+  })
+})
+
 describe('editor helpers', () => {
   it('wraps the selection or a placeholder', () => {
     expect(applyMarkdownFormat('make this bold', 5, 9, { kind: 'wrap', before: '**', after: '**', placeholder: 'x' }))
@@ -156,6 +275,24 @@ describe('editor helpers', () => {
     expect(toDateInputValue(new Date('2024-05-01T00:00:00Z'))).toBe('2024-05-01')
     expect(toDateInputValue('2024-05-01T10:00:00Z')).toBe('2024-05-01')
     expect(toDateInputValue(undefined)).toBe('')
+  })
+
+  it('leaves missing optional groups empty, at any depth', () => {
+    const schema = z.object({
+      title: z.string(),
+      place: z.object({ city: z.string(), pin: z.object({ lat: z.number() }).optional() }).optional(),
+      seo: z.object({ title: z.string().optional() }),
+    })
+    const unset = unsetMissingOptionals(schema as never, { title: 'x', seo: {} })
+    expect(unset).toEqual({ title: 'x', place: undefined, seo: { title: undefined } })
+    expect('place' in unset).toBe(true)
+    expect(unsetMissingOptionals(schema as never, { place: { city: 'A' } }).place).toEqual({ city: 'A', pin: undefined })
+
+    // What the form holds once AutoForm's inputs for an untouched group have mounted.
+    expect(pruneBlankOptionals(schema as never, { title: 'x', place: { city: '', pin: {} }, seo: { title: undefined } }))
+      .toEqual({ title: 'x', place: undefined, seo: { title: undefined } })
+    expect(pruneBlankOptionals(schema as never, { place: { city: 'A', pin: { lat: undefined } } }))
+      .toEqual({ place: { city: 'A', pin: undefined } })
   })
 
   it('locks down the preview document', () => {
