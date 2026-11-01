@@ -6,8 +6,8 @@ description: Connect to GitHub or GitLab, list repositories, and supply tokens.
 Every app goes through the same chain. Each step hands you the next one:
 
 ```
-token ──▶ provider ──▶ repository ──▶ GitFS
-          github()     .repository()   new GitFS()
+token ──▶ provider ──▶ repository ──▶ GitVFS
+          github()     .repository()   new GitVFS()
 ```
 
 | Step | Type | Answers | Get it from |
@@ -15,10 +15,10 @@ token ──▶ provider ──▶ repository ──▶ GitFS
 | Token | `TokenProvider` | Who am I? | a personal access token, [GitHub sign-in](/docs/github-auth), [OIDC](/docs/cms/authentication) |
 | Provider | `GitProvider` | Which repositories can I reach? | `github({ token })`, `gitlab({ token })` |
 | Repository | `GitRepository` | What is in this repository? | `provider.repository('acme/site')` |
-| Working copy | `GitFS` | Read, edit and commit files | `new GitFS({ repository, branch })` |
+| Working copy | `GitVFS` | Read, edit and commit files | `new GitVFS({ repository, branch })` |
 
 ```ts
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 
 const gh = github({ token: 'github_pat_…' })
@@ -27,7 +27,7 @@ for await (const repo of gh.listRepositories()) {
   console.log(repo.fullName, repo.defaultBranch, repo.private)
 }
 
-const fs = new GitFS({ repository: gh.repository('acme/site'), branch: 'main' })
+const fs = new GitVFS({ repository: gh.repository('acme/site'), branch: 'main' })
 ```
 
 After you choose `github()` or `gitlab()`, the rest of your code is the same for both hosts.
@@ -95,7 +95,7 @@ const gh = github({ token: async () => session.getAccessToken() })
 
 ## Custom hosts
 
-Anything that implements `GitRepository` works with `GitFS`: `readdir`, `getFile`, `getFiles`,
+Anything that implements `GitRepository` works with `GitVFS`: `readdir`, `getFile`, `getFiles`,
 `getBlob`, `getBranch`, `getLastCommitSha`, `createBranch`, `deleteBranch` and `commit`. An
 in-memory implementation is a convenient test double. Implement `GitProvider` (`name`,
 `listRepositories` and `repository`) as well when your host can list repositories.
@@ -105,7 +105,10 @@ in-memory implementation is a convenient test double. Implement `GitProvider` (`
 - `github({ token, owner, repo })` and `gitlab({ token, projectId })` still work but are
   deprecated. Use `github({ token }).repository('owner/repo')` and
   `gitlab({ token }).repository('group/project')`.
-- `new GitFS({ provider })` is now `new GitFS({ repository })`; `provider` still works but is
+- `GitFS` is now `GitVFS`, matching the package name, and likewise `GitVFSOptions`,
+  `GitVFSBaseOptions` and `GitVFSError` (whose `name` is now `'GitVFSError'`). The old names still
+  work but are deprecated.
+- `new GitFS({ provider })` is now `new GitVFS({ repository })`; `provider` still works but is
   deprecated.
 - The per-repository interface is now called `GitRepository`. `GitProvider` names the new
   account-level interface, so custom implementations of the old `GitProvider` should implement

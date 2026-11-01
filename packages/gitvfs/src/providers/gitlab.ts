@@ -311,7 +311,7 @@ class GitLabRepository implements GitRepository {
 export function gitlab(options: GitLabOptions): GitRepository
 /**
  * GitLab as seen by one account. List projects with `listRepositories()`, and get one with
- * `repository('group/project')` to pass to `GitFS`.
+ * `repository('group/project')` to pass to `GitVFS`.
  */
 export function gitlab(options: GitLabProviderOptions): GitProvider
 export function gitlab(options: GitLabProviderOptions | GitLabOptions): GitProvider | GitRepository {

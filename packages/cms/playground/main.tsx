@@ -1,6 +1,6 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { z } from 'zod'
 import { createCms, defineCollection, defineSingleton, field, markdown, textarea } from '../src'
 import { CmsApp } from '../src/react'
@@ -71,7 +71,7 @@ const site = defineSingleton({
 })
 
 const cms = createCms({
-  fs: new GitFS({ repository, branch: 'main', cache: 'none' }),
+  fs: new GitVFS({ repository, branch: 'main', cache: 'none' }),
   collections: [posts, pages],
   singletons: [site],
 })

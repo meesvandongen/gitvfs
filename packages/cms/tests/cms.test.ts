@@ -1,4 +1,4 @@
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { z } from 'zod'
 import { ContentValidationError, createCms, defineCollection, defineSingleton, markdown } from '../src'
 import { MemoryRepository } from './helpers/memory-repository'
@@ -23,7 +23,7 @@ const settings = defineSingleton({
 
 function setup(files: Record<string, string> = {}) {
   const remote = new MemoryRepository(files)
-  const fs = new GitFS({ repository: remote, branch: 'main', cache: 'none' })
+  const fs = new GitVFS({ repository: remote, branch: 'main', cache: 'none' })
   const cms = createCms({ fs, collections: [posts], singletons: [settings] })
   return { remote, cms }
 }
@@ -185,7 +185,7 @@ describe('content type definitions', () => {
   })
 
   it('rejects duplicate names', () => {
-    const fs = new GitFS({ repository: new MemoryRepository(), branch: 'main' })
+    const fs = new GitVFS({ repository: new MemoryRepository(), branch: 'main' })
     expect(() => createCms({ fs, collections: [posts], singletons: [{ ...settings, name: 'posts' }] })).toThrow(
       /Duplicate/,
     )

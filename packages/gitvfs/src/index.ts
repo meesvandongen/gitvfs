@@ -1,6 +1,6 @@
-export { GitFS } from './gitvfs.js'
+export { GitVFS, GitFS } from './gitvfs.js'
 export type { DirEntry, StatResult } from './gitvfs.js'
-export type { GitFSOptions, GitFSBaseOptions, CacheConfig } from './types/options.js'
+export type { GitVFSOptions, GitVFSBaseOptions, GitFSOptions, GitFSBaseOptions, CacheConfig } from './types/options.js'
 export type {
   GitProvider,
   GitRepository,
@@ -17,6 +17,7 @@ export type {
 export type { CacheAdapter } from './cache/types.js'
 export type { Change } from './change-buffer.js'
 export {
+  GitVFSError,
   GitFSError,
   NotFoundError,
   RateLimitError,

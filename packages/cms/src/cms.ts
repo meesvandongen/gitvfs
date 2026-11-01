@@ -1,4 +1,4 @@
-import { NotFoundError, type CommitResult, type GitFS } from 'gitvfs'
+import { NotFoundError, type CommitResult, type GitVFS } from 'gitvfs'
 import type {
   Collection,
   CommitMessageContext,
@@ -10,8 +10,8 @@ import { parseDocument, serializeDocument } from './document.js'
 import { isValidSlug } from './slug.js'
 
 export interface CmsOptions {
-  /** The repository to manage. The CMS commits through it, so give it a GitFS of its own. */
-  fs: GitFS
+  /** The repository to manage. The CMS commits through it, so give it a GitVFS of its own. */
+  fs: GitVFS
   collections?: Collection<any>[]
   singletons?: Singleton<any>[]
 }
@@ -84,7 +84,7 @@ function defaultCommitMessage({ action, path, previousPath }: CommitMessageConte
 }
 
 export class GitCms {
-  readonly fs: GitFS
+  readonly fs: GitVFS
   readonly collections: Collection[]
   readonly singletons: Singleton[]
   private queue: Promise<unknown> = Promise.resolve()
@@ -312,7 +312,7 @@ export class GitCms {
     }
   }
 
-  /** Run write operations one at a time; they share the GitFS change buffer. */
+  /** Run write operations one at a time; they share the GitVFS change buffer. */
   private exclusive<T>(fn: () => Promise<T>): Promise<T> {
     const run = this.queue.then(fn, fn)
     this.queue = run.catch(() => undefined)

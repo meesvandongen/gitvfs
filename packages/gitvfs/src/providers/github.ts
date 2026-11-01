@@ -330,7 +330,7 @@ class GitHubRepository implements GitRepository {
 export function github(options: GitHubOptions): GitRepository
 /**
  * GitHub as seen by one account. List repositories with `listRepositories()`, and get one with
- * `repository('owner/name')` to pass to `GitFS`.
+ * `repository('owner/name')` to pass to `GitVFS`.
  */
 export function github(options: GitHubProviderOptions): GitProvider
 export function github(options: GitHubProviderOptions | GitHubOptions): GitProvider | GitRepository {

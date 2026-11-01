@@ -35,7 +35,7 @@ await setupWorker(...createGitHubHandlers({ repository, owner: 'acme', repo: 'si
 
 // Anything using gitvfs now talks to the mock:
 const gh = github({ token: 'demo' })
-const fs = new GitFS({ repository: gh.repository('acme/site'), branch: 'main' })
+const fs = new GitVFS({ repository: gh.repository('acme/site'), branch: 'main' })
 ```
 
 To serve several repositories, pass `repositories: [{ owner, repo, repository, details? }, …]` instead of `repository`, `owner` and `repo`. `onChange` receives the repository that changed.

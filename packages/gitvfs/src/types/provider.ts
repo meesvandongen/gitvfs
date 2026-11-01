@@ -42,7 +42,7 @@ export interface ReadDirOptions {
 }
 
 /**
- * One repository on a Git host: reads files and branches, and commits. `GitFS` works on top of it.
+ * One repository on a Git host: reads files and branches, and commits. `GitVFS` works on top of it.
  * Get one from a provider with `provider.repository('owner/name')`, or implement it for another
  * host.
  */
@@ -88,7 +88,7 @@ export interface ListRepositoriesOptions {
  * ```ts
  * const gh = github({ token })
  * for await (const repo of gh.listRepositories()) console.log(repo.fullName)
- * const fs = new GitFS({ repository: gh.repository('acme/site'), branch: 'main' })
+ * const fs = new GitVFS({ repository: gh.repository('acme/site'), branch: 'main' })
  * ```
  */
 export interface GitProvider {

@@ -50,14 +50,14 @@ export const site = defineSingleton({
 ## Mount the editor
 
 ```tsx
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createCms } from 'gitvfs-cms'
 import { CmsApp } from 'gitvfs-cms/react'
 import 'gitvfs-cms/styles.css'
 
 const cms = createCms({
-  fs: new GitFS({ repository: github({ token }).repository('acme/site'), branch: 'main' }),
+  fs: new GitVFS({ repository: github({ token }).repository('acme/site'), branch: 'main' }),
   collections: [posts],
   singletons: [site],
 })

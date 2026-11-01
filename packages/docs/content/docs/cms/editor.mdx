@@ -61,7 +61,7 @@ function Admin({ gh }: { gh: GitProvider }) {
         provider={gh}
         onSelect={(repo) =>
           setCms(createCms({
-            fs: new GitFS({ repository: gh.repository(repo.fullName), branch: repo.defaultBranch ?? 'main' }),
+            fs: new GitVFS({ repository: gh.repository(repo.fullName), branch: repo.defaultBranch ?? 'main' }),
             collections: [posts],
           }))
         }

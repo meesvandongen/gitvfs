@@ -1,11 +1,11 @@
 import { describe, it, expect, beforeEach, vi } from 'vite-plus/test'
-import { GitFS } from '../../src/gitvfs'
+import { GitFS, GitVFS } from '../../src/gitvfs'
 import { MockRepository } from '../helpers/mock-repository'
-import { NotFoundError } from '../../src/types/errors'
+import { GitFSError, GitVFSError, NotFoundError } from '../../src/types/errors'
 
-describe('GitFS', () => {
+describe('GitVFS', () => {
   let repository: MockRepository
-  let fs: GitFS
+  let fs: GitVFS
 
   beforeEach(async () => {
     repository = new MockRepository()
@@ -13,7 +13,7 @@ describe('GitFS', () => {
     await repository.addFile('main', 'posts/hello.md', '# Hello World')
     await repository.addFile('main', 'posts/draft.md', 'Draft content')
 
-    fs = new GitFS({
+    fs = new GitVFS({
       repository,
       branch: 'main',
       cache: 'memory',
@@ -279,7 +279,7 @@ describe('GitFS', () => {
 
   describe('writeBranch (editorial workflow)', () => {
     it('auto-creates writeBranch on first commit', async () => {
-      const editFs = new GitFS({
+      const editFs = new GitVFS({
         repository,
         branch: 'main',
         writeBranch: 'drafts/update',
@@ -309,12 +309,19 @@ describe('GitFS', () => {
 
   describe('options', () => {
     it('still accepts the deprecated provider option', async () => {
-      const legacy = new GitFS({ provider: repository, branch: 'main', cache: 'none' })
+      const legacy = new GitVFS({ provider: repository, branch: 'main', cache: 'none' })
       expect(await legacy.readFile('readme.md', { encoding: 'utf-8' })).toBe('# Hello')
     })
 
+    it('still exports the old GitFS names', async () => {
+      const legacy = new GitFS({ repository, branch: 'main', cache: 'none' })
+      expect(legacy).toBeInstanceOf(GitVFS)
+      expect(GitFSError).toBe(GitVFSError)
+      await expect(legacy.readFile('missing.md')).rejects.toBeInstanceOf(GitFSError)
+    })
+
     it('requires a repository', () => {
-      expect(() => new GitFS({ branch: 'main' } as never)).toThrow(TypeError)
+      expect(() => new GitVFS({ branch: 'main' } as never)).toThrow(TypeError)
     })
   })
 })

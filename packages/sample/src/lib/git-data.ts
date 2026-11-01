@@ -1,5 +1,5 @@
 import { queryOptions, type QueryClient } from '@tanstack/react-query'
-import { GitFS, type DirEntry, type GitProvider } from 'gitvfs'
+import { GitVFS, type DirEntry, type GitProvider } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { gitlab } from 'gitvfs/providers/gitlab'
 import type { Provider } from './provider-config'
@@ -28,7 +28,7 @@ export function createProvider(params: { kind: Provider; token: string; apiUrl?:
     : gitlab({ token: params.token, apiUrl: params.apiUrl })
 }
 
-const gitFsRegistry = new Map<string, GitFS>()
+const gitFsRegistry = new Map<string, GitVFS>()
 
 function getRepoSessionKey(params: RepoSession): string {
   return [params.kind, params.apiUrl ?? '', params.repository, params.branch, params.token].join(':')
@@ -68,15 +68,15 @@ export async function fetchAvailableRepositories(params: {
   return repos
 }
 
-export function createGitFs(params: RepoSession): GitFS {
-  return new GitFS({
+export function createGitFs(params: RepoSession): GitVFS {
+  return new GitVFS({
     repository: createProvider(params).repository(params.repository),
     branch: params.branch,
     headValidationIntervalMs: 30_000,
   })
 }
 
-export function getGitFs(params: RepoSession): GitFS {
+export function getGitFs(params: RepoSession): GitVFS {
   const key = getRepoSessionKey(params)
   const existing = gitFsRegistry.get(key)
 
@@ -126,12 +126,12 @@ export function updateCachedFileText(
   queryClient.setQueryData(getFileTextQueryOptions(params, path).queryKey, content)
 }
 
-export async function readTextFile(fs: GitFS, path: string): Promise<string> {
+export async function readTextFile(fs: GitVFS, path: string): Promise<string> {
   return await fs.readFile(path, { encoding: 'utf-8' }) as string
 }
 
 export async function saveFileAndCommit(params: {
-  fs: GitFS
+  fs: GitVFS
   path: string
   content: string
 }): Promise<void> {

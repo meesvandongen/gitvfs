@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AuthError, GitFS, NotFoundError, type TokenProvider } from 'gitvfs'
+import { AuthError, GitVFS, NotFoundError, type TokenProvider } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createCms } from 'gitvfs-cms'
 import { CmsApp } from 'gitvfs-cms/react'
@@ -158,7 +158,7 @@ function Editor(props: { session: Session; auth: GitHubAuth | null; onSignOut: (
   const cms = useMemo(
     () =>
       createCms({
-        fs: new GitFS({
+        fs: new GitVFS({
           repository: docsRepository(session.token),
           branch: session.branch,
         }),

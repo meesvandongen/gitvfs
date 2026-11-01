@@ -1,6 +1,6 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { GitFS, type GitProvider, type RepositoryInfo } from 'gitvfs'
+import { GitVFS, type GitProvider, type RepositoryInfo } from 'gitvfs'
 import { z } from 'zod'
 import { createCms, defineCollection, defineSingleton, markdown } from '../src'
 import { CmsApp, RepositoryPicker, applyMarkdownFormat, buildPreviewDocument, toDateInputValue } from '../src/react'
@@ -66,7 +66,7 @@ function setup() {
     'site.yml': 'title: Demo\n',
   })
   const cms = createCms({
-    fs: new GitFS({ repository: remote, branch: 'main', cache: 'none' }),
+    fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }),
     collections: [posts],
     singletons: [settings],
   })

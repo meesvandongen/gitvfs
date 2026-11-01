@@ -1,4 +1,4 @@
-import { AuthError, NetworkError, RateLimitError, NotFoundError, GitFSError } from '../../types/errors.js'
+import { AuthError, NetworkError, RateLimitError, NotFoundError, GitVFSError } from '../../types/errors.js'
 
 export type TokenProvider = string | (() => string | Promise<string>)
 
@@ -48,7 +48,7 @@ async function request(options: HttpOptions, path: string, init: RequestOptions 
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
-    throw new GitFSError(`HTTP ${response.status}: ${text}`, 'HTTP_ERROR')
+    throw new GitVFSError(`HTTP ${response.status}: ${text}`, 'HTTP_ERROR')
   }
 
   return response

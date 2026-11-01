@@ -27,11 +27,11 @@ pnpm add gitvfs
 ## Quick start
 
 ```ts
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 
 const gh = github({ token: () => localStorage.getItem('github_token') ?? '' })
-const fs = new GitFS({ repository: gh.repository('acme/docs'), branch: 'main' })
+const fs = new GitVFS({ repository: gh.repository('acme/docs'), branch: 'main' })
 
 const readme = await fs.readFile('README.md', { encoding: 'utf-8' })
 fs.writeFile('notes/todo.txt', 'hello from gitvfs\n')
@@ -39,7 +39,7 @@ await fs.commit('Add todo file')
 ```
 
 Every app follows the same chain: a **token** gives you a **provider** (`github()`, `gitlab()`),
-the provider gives you a **repository**, and `GitFS` is your working copy of one of its branches.
+the provider gives you a **repository**, and `GitVFS` is your working copy of one of its branches.
 
 ```ts
 for await (const repo of gh.listRepositories()) console.log(repo.fullName)

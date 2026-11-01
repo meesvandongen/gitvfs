@@ -34,7 +34,7 @@ if (shouldLoadApp) import('./main')
 Then create a session and hand its token to the provider:
 
 ```ts
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { gitlab } from 'gitvfs/providers/gitlab'
 import { createOidcSession, gitlabOidc } from 'gitvfs-cms/oidc'
 
@@ -43,7 +43,7 @@ const session = await createOidcSession(gitlabOidc({ clientId: 'your-application
 if (!session.isUserLoggedIn) {
   await session.login() // redirects to GitLab
 } else {
-  const fs = new GitFS({
+  const fs = new GitVFS({
     repository: gitlab({ token: session.token }).repository('acme/site'),
     branch: 'main',
   })

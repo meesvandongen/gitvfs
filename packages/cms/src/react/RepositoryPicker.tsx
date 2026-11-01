@@ -19,7 +19,7 @@ const BATCH = 100
 
 /**
  * Lists the repositories the signed-in account can reach and lets the user pick one. Pair it with
- * `provider.repository(picked.fullName)` to create the `GitFS` for `createCms`.
+ * `provider.repository(picked.fullName)` to create the `GitVFS` for `createCms`.
  */
 export function RepositoryPicker(props: RepositoryPickerProps) {
   const { provider } = props

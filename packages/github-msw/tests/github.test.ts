@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node'
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createGitHubHandlers, MockRepository, persistentRepository, type StorageLike } from '../src'
 
@@ -29,7 +29,7 @@ async function setup(files: Record<string, string> = {}) {
     }),
   )
   const remote = github({ token: 'demo-token' }).repository('acme/site')
-  const fs = new GitFS({ repository: remote, branch: 'main', cache: 'none' })
+  const fs = new GitVFS({ repository: remote, branch: 'main', cache: 'none' })
   return { repository, remote, fs, changes }
 }
 
@@ -80,7 +80,7 @@ describe('gitvfs against the GitHub mock', () => {
     expect(changes).toEqual([result.sha])
 
     // A fresh reader sees the new head.
-    const reader = new GitFS({ repository: github({ token: 't' }).repository('acme/site'), branch: 'main', cache: 'none' })
+    const reader = new GitVFS({ repository: github({ token: 't' }).repository('acme/site'), branch: 'main', cache: 'none' })
     expect(await reader.readFile('content/posts/new.md', { encoding: 'utf-8' })).toBe('---\ntitle: New\n---\n')
   })
 
@@ -133,7 +133,7 @@ describe('gitvfs against the GitHub mock', () => {
 
   it('creates branches and commits to a separate write branch', async () => {
     const { repository, remote } = await setup()
-    const fs = new GitFS({ repository: remote, branch: 'main', writeBranch: 'drafts', cache: 'none' })
+    const fs = new GitVFS({ repository: remote, branch: 'main', writeBranch: 'drafts', cache: 'none' })
     fs.writeFile('content/posts/draft.md', 'draft\n')
     await fs.commit('Draft')
     expect(repository.branchNames().sort()).toEqual(['drafts', 'main'])
@@ -206,7 +206,7 @@ describe('several repositories', () => {
       ['acme/site', null],
     ])
 
-    const fs = new GitFS({ repository: gh.repository('acme/blog'), branch: 'main', cache: 'none' })
+    const fs = new GitVFS({ repository: gh.repository('acme/blog'), branch: 'main', cache: 'none' })
     expect(await fs.readFile('README.md', { encoding: 'utf-8' })).toBe('# Blog\n')
     fs.writeFile('second.md', 'two')
     await fs.commit('Second post')

@@ -32,7 +32,7 @@ const { sha } = await fs.commit('Publish hello post')
 ## Branches
 
 ```ts
-const fs = new GitFS({ repository, branch: 'main', writeBranch: 'content-edits' })
+const fs = new GitVFS({ repository, branch: 'main', writeBranch: 'content-edits' })
 ```
 
 With a `writeBranch`, reads come from `branch` and commits go to `writeBranch`, which is created
@@ -42,7 +42,7 @@ pull request. Use `createBranch(name)` and `checkout(branch)` to manage branches
 ## Auto-commit
 
 ```ts
-const fs = new GitFS({
+const fs = new GitVFS({
   repository,
   branch: 'main',
   autoCommit: true,

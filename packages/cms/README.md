@@ -16,7 +16,7 @@ pnpm add oidc-spa
 
 ```tsx
 import { z } from 'zod'
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createCms, defineCollection, defineSingleton, markdown } from 'gitvfs-cms'
 import { CmsApp } from 'gitvfs-cms/react'
@@ -41,7 +41,7 @@ const site = defineSingleton({
 })
 
 const cms = createCms({
-  fs: new GitFS({ repository: github({ token }).repository('acme/site'), branch: 'main' }),
+  fs: new GitVFS({ repository: github({ token }).repository('acme/site'), branch: 'main' }),
   collections: [posts],
   singletons: [site],
 })

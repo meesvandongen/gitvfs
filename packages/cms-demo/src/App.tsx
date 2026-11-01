@@ -1,5 +1,5 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createCms } from 'gitvfs-cms'
 import { CmsApp, RepositoryPicker } from 'gitvfs-cms/react'
@@ -56,7 +56,7 @@ export function App({ repositories, subscribe, reset }: AppProps) {
   const cms = useMemo(
     () =>
       createCms({
-        fs: new GitFS({ repository: provider.repository(current), branch: 'main' }),
+        fs: new GitVFS({ repository: provider.repository(current), branch: 'main' }),
         collections,
         singletons,
       }),

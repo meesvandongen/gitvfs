@@ -5,7 +5,7 @@ import type {
   CommitResult,
   ReadDirOptions,
 } from './types/provider.js'
-import type { GitFSOptions, CacheConfig } from './types/options.js'
+import type { GitVFSOptions, CacheConfig } from './types/options.js'
 import type { CacheAdapter } from './cache/types.js'
 import { ChangeBuffer, type Change } from './change-buffer.js'
 import { CacheManager } from './cache/manager.js'
@@ -33,7 +33,7 @@ export interface ReadDirResultOptions {
 }
 
 function createCacheAdapter(
-  cache: GitFSOptions['cache'],
+  cache: GitVFSOptions['cache'],
 ): CacheAdapter {
   if (!cache || cache === 'memory') return new MemoryCacheAdapter()
   if (cache === 'none') return new NoneCacheAdapter()
@@ -49,7 +49,7 @@ function createCacheAdapter(
   return new MemoryCacheAdapter()
 }
 
-export class GitFS {
+export class GitVFS {
   private repository: GitRepository
   private readBranch: string
   private writeBranch: string
@@ -65,9 +65,9 @@ export class GitFS {
   private commitMessageFn?: (changes: Change[]) => string
   private autoCommitTimer: ReturnType<typeof setTimeout> | null = null
 
-  constructor(options: GitFSOptions) {
+  constructor(options: GitVFSOptions) {
     const repository = options.repository ?? options.provider
-    if (!repository) throw new TypeError('GitFS needs a repository, e.g. github({ token }).repository("owner/name")')
+    if (!repository) throw new TypeError('GitVFS needs a repository, e.g. github({ token }).repository("owner/name")')
     this.repository = repository
     this.readBranch = options.branch
     this.writeBranch = options.writeBranch ?? options.branch
@@ -523,3 +523,8 @@ export class GitFS {
     }, this.autoCommitDelay)
   }
 }
+
+/** @deprecated Renamed to `GitVFS`, matching the package name. */
+export const GitFS = GitVFS
+/** @deprecated Renamed to `GitVFS`, matching the package name. */
+export type GitFS = GitVFS
