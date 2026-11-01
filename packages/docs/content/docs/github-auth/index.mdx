@@ -85,7 +85,7 @@ Failures throw a `GitHubAuthError` whose `code` is `not_signed_in`, `session_exp
 | Mode | Refresh token | Access token |
 | --- | --- | --- |
 | `session: 'storage'` (default) | `sessionStorage` (or `storage`) | `sessionStorage` |
-| `session: 'cookie'` | encrypted `HttpOnly` cookie, never in JavaScript | memory only |
+| `session: 'cookie'` | encrypted `HttpOnly` cookie, never in JavaScript | `sessionStorage` (or `storage`) |
 
 Web storage is readable by any script on the page. With cookie sessions, the token handler seals
 the refresh token with [kukkii](https://github.com/meesvandongen/kukkii) (AES-256-CBC plus
@@ -103,8 +103,10 @@ await auth.handleRedirect()
 if (!(await auth.restoreSession())) await auth.login()
 ```
 
-`restoreSession()` gets a fresh access token through the cookie after a reload, and `signOut()`
-has the handler clear the cookie.
+Either way, API requests go straight from the browser to `api.github.com` with the access token;
+the handler only takes part in signing in and in the refresh every eight hours. With cookie
+sessions, `restoreSession()` and `auth.token` fetch a new access token through the cookie when the
+stored one is missing or expired, and `signOut()` has the handler clear the cookie.
 
 ## Token handler
 

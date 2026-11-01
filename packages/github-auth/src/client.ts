@@ -26,8 +26,8 @@ export interface GitHubAuthOptions {
   /**
    * `storage` (default): tokens, including the refresh token, are kept in `storage`.
    * `cookie`: the token handler keeps the refresh token in an encrypted `HttpOnly` cookie (its
-   * `session` option); JavaScript only ever holds the short-lived access token, in memory, and
-   * `restoreSession()` gets a new one after a reload.
+   * `session` option). JavaScript only holds the short-lived access token, in `storage`, and
+   * gets a new one through the cookie when it expires or is missing (`restoreSession()`).
    */
   session?: 'storage' | 'cookie'
   /**
@@ -156,15 +156,10 @@ export class GitHubAuth {
     const prefix = options.storageKey ?? 'gitvfs-github-auth'
     this.tokensKey = `${prefix}:tokens`
     this.pendingKey = `${prefix}:pending`
-    if (this.cookieSession) {
-      this.storage = memoryStorage()
-      this.pendingStorage = browserStorage('session')
-      // Drop tokens an earlier storage-mode session may have left behind.
-      this.pendingStorage.removeItem(this.tokensKey)
-    } else {
-      this.storage = resolveStorage(options.storage)
-      this.pendingStorage = options.storage === 'memory' ? browserStorage('session') : this.storage
-    }
+    this.storage = resolveStorage(options.storage)
+    this.pendingStorage = options.storage === 'memory' ? browserStorage('session') : this.storage
+    // A refresh token left behind by an earlier storage-mode session must not linger in cookie mode.
+    if (this.cookieSession && this.getTokens()?.refreshToken) this.forget()
   }
 
   /** A gitvfs `TokenProvider`: returns a valid access token, refreshing it when needed. */

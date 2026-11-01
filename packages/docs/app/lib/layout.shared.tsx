@@ -1,5 +1,5 @@
 import type { BaseLayoutProps } from 'fumadocs-ui/layouts/shared'
-import { appName, gitConfig } from './shared'
+import { appName, cmsDemoUrl, demoUrl, gitConfig } from './shared'
 
 export function baseOptions(): BaseLayoutProps {
   return {
@@ -8,8 +8,8 @@ export function baseOptions(): BaseLayoutProps {
     },
     links: [
       { text: 'Docs', url: '/docs' },
-      { text: 'Edit docs', url: '/admin' },
-      { text: 'Demo', url: 'https://gitvfs-demo.mvd.im/', external: true },
+      { text: 'CMS demo', url: cmsDemoUrl, external: true },
+      { text: 'Repository demo', url: demoUrl, external: true },
     ],
     githubUrl: `https://github.com/${gitConfig.user}/${gitConfig.repo}`,
   }

@@ -192,8 +192,8 @@ describe('GitHubAuth with cookie sessions', () => {
     return calls
   }
 
-  it('keeps tokens out of web storage and sends the cookie', async () => {
-    sessionStorage.setItem('gitvfs-github-auth:tokens', '{"accessToken":"stale"}')
+  it('keeps the refresh token out of web storage and sends the cookie', async () => {
+    sessionStorage.setItem('gitvfs-github-auth:tokens', JSON.stringify({ accessToken: 'old', refreshToken: 'ghr_old' }))
     const auth = createCookieAuth()
     expect(sessionStorage.getItem('gitvfs-github-auth:tokens')).toBeNull()
 
@@ -203,11 +203,24 @@ describe('GitHubAuth with cookie sessions', () => {
 
     expect(calls[0].credentials).toBe('include')
     expect(await auth.token()).toBe('ghu_1')
-    const stored = Array.from({ length: sessionStorage.length }, (_, i) => sessionStorage.getItem(sessionStorage.key(i)!))
-    expect(stored.join()).not.toContain('ghu_1')
+    const stored = JSON.parse(sessionStorage.getItem('gitvfs-github-auth:tokens')!)
+    expect(stored.accessToken).toBe('ghu_1')
+    expect(stored.refreshToken).toBeUndefined()
   })
 
-  it('restores a session after a reload through the cookie', async () => {
+  it('reuses the stored access token after a reload without a request', async () => {
+    const state = new URL(await createCookieAuth().createAuthorizeUrl()).searchParams.get('state')
+    mockFetch([{ body: { access_token: 'ghu_1', expires_in: 28800, session_expires_in: 1000 } }])
+    await createCookieAuth().handleRedirect(`https://docs.example.com/admin?code=c&state=${state}`)
+
+    const calls = mockFetch([])
+    const reloaded = createCookieAuth()
+    expect(await reloaded.restoreSession()).toBe(true)
+    expect(await reloaded.token()).toBe('ghu_1')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('gets an access token through the cookie when none is stored', async () => {
     const calls = mockFetch([{ body: { access_token: 'ghu_2', expires_in: 28800, session_expires_in: 1000 } }])
     const auth = createCookieAuth()
     expect(auth.isSignedIn()).toBe(false)

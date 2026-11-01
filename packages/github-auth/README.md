@@ -96,7 +96,7 @@ if (!(await auth.restoreSession())) await auth.login()
 
 - The handler seals the refresh token with [kukkii](https://github.com/meesvandongen/kukkii) (iron: AES-256-CBC plus HMAC-SHA256). It stores the result in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie, and rotates it on every refresh.
 - The sealed payload carries its own expiry, so a copied cookie stops working when the session ends, and it reveals nothing about the token.
-- The browser holds only the short-lived access token (8 hours for GitHub Apps), in memory. `restoreSession()` gets a new one after a reload, and `signOut()` has the handler clear the cookie.
+- The browser holds only the short-lived access token (8 hours for GitHub Apps), in `storage`. API requests go straight from the browser to `api.github.com` with it; nothing is proxied. When it expires or is missing, `restoreSession()` and `auth.token` get a new one through the cookie, and `signOut()` has the handler clear the cookie.
 - For OAuth Apps without expiring tokens, the cookie holds the access token instead.
 - The secret must be at least 32 characters (`openssl rand -base64 32`).
 

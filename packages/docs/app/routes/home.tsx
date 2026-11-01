@@ -1,6 +1,7 @@
 import { HomeLayout } from 'fumadocs-ui/layouts/home'
 import { Link } from 'react-router'
 import { baseOptions } from '@/lib/layout.shared'
+import { cmsDemoUrl } from '@/lib/shared'
 
 export function meta() {
   return [
@@ -48,9 +49,9 @@ export default function Home() {
             >
               Read the docs
             </Link>
-            <Link className="rounded-full border px-4 py-2.5 text-sm font-medium" to="/admin">
-              Edit these docs with gitvfs-cms
-            </Link>
+            <a className="rounded-full border px-4 py-2.5 text-sm font-medium" href={cmsDemoUrl}>
+              Try the CMS demo
+            </a>
           </div>
         </section>
         <section className="grid gap-4 md:grid-cols-3">
@@ -65,6 +66,13 @@ export default function Home() {
             </Link>
           ))}
         </section>
+        <p className="text-xs text-fd-muted-foreground">
+          These docs edit themselves with gitvfs-cms;{' '}
+          <Link className="underline" to="/admin">
+            maintainers sign in here
+          </Link>
+          .
+        </p>
       </main>
     </HomeLayout>
   )
