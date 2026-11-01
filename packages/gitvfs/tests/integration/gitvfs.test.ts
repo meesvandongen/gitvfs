@@ -1,7 +1,7 @@
 import { describe, it, expect, beforeEach, vi } from 'vite-plus/test'
-import { GitFS, GitVFS } from '../../src/gitvfs'
+import { GitVFS } from '../../src/gitvfs'
 import { MockRepository } from '../helpers/mock-repository'
-import { GitFSError, GitVFSError, NotFoundError } from '../../src/types/errors'
+import { NotFoundError } from '../../src/types/errors'
 
 describe('GitVFS', () => {
   let repository: MockRepository
@@ -304,24 +304,6 @@ describe('GitVFS', () => {
       // After prefetch, reading should use cache (no additional API calls)
       const content = await fs.readFile('readme.md', { encoding: 'utf-8' })
       expect(content).toBe('# Hello')
-    })
-  })
-
-  describe('options', () => {
-    it('still accepts the deprecated provider option', async () => {
-      const legacy = new GitVFS({ provider: repository, branch: 'main', cache: 'none' })
-      expect(await legacy.readFile('readme.md', { encoding: 'utf-8' })).toBe('# Hello')
-    })
-
-    it('still exports the old GitFS names', async () => {
-      const legacy = new GitFS({ repository, branch: 'main', cache: 'none' })
-      expect(legacy).toBeInstanceOf(GitVFS)
-      expect(GitFSError).toBe(GitVFSError)
-      await expect(legacy.readFile('missing.md')).rejects.toBeInstanceOf(GitFSError)
-    })
-
-    it('requires a repository', () => {
-      expect(() => new GitVFS({ branch: 'main' } as never)).toThrow(TypeError)
     })
   })
 })

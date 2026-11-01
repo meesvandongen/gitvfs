@@ -102,14 +102,13 @@ in-memory implementation is a convenient test double. Implement `GitProvider` (`
 
 ## Upgrading from 0.1
 
-- `github({ token, owner, repo })` and `gitlab({ token, projectId })` still work but are
-  deprecated. Use `github({ token }).repository('owner/repo')` and
-  `gitlab({ token }).repository('group/project')`.
-- `GitFS` is now `GitVFS`, matching the package name, and likewise `GitVFSOptions`,
-  `GitVFSBaseOptions` and `GitVFSError` (whose `name` is now `'GitVFSError'`). The old names still
-  work but are deprecated.
-- `new GitFS({ provider })` is now `new GitVFS({ repository })`; `provider` still works but is
-  deprecated.
-- The per-repository interface is now called `GitRepository`. `GitProvider` names the new
-  account-level interface, so custom implementations of the old `GitProvider` should implement
-  `GitRepository` instead.
+The API changed in ways that break 0.1 code; the old names are gone.
+
+| 0.1 | Now |
+| --- | --- |
+| `GitFS`, `GitFSOptions`, `GitFSError` | `GitVFS`, `GitVFSOptions`, `GitVFSError` (its `name` is `'GitVFSError'`) |
+| `new GitFS({ provider, branch })` | `new GitVFS({ repository, branch })` |
+| `github({ token, owner: 'acme', repo: 'site' })` | `github({ token }).repository('acme/site')` |
+| `gitlab({ token, projectId: 'group/project' })` | `gitlab({ token }).repository('group/project')` |
+| `gitlab({ token, projectId: 1234 })` | `gitlab({ token }).repository('group/project')`: numeric ids are no longer accepted |
+| implementing `GitProvider` for one repository | implement `GitRepository`; `GitProvider` is now the account-level interface |

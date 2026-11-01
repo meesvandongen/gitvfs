@@ -31,14 +31,16 @@ const { repository, save, reset } = await persistentRepository({
   seed: () => MockRepository.create({ files: { 'content/hello.md': '# Hello\n' } }),
 })
 
-await setupWorker(...createGitHubHandlers({ repository, owner: 'acme', repo: 'site', onChange: save })).start()
+await setupWorker(
+  ...createGitHubHandlers({ repositories: [{ owner: 'acme', repo: 'site', repository }], onChange: save }),
+).start()
 
 // Anything using gitvfs now talks to the mock:
 const gh = github({ token: 'demo' })
 const fs = new GitVFS({ repository: gh.repository('acme/site'), branch: 'main' })
 ```
 
-To serve several repositories, pass `repositories: [{ owner, repo, repository, details? }, …]` instead of `repository`, `owner` and `repo`. `onChange` receives the repository that changed.
+List more entries in `repositories` to serve several; `details` sets the description, visibility and default branch that `/user/repos` reports. `onChange` receives the repository that changed.
 
 `persistentRepository` saves the repository to `localStorage` after every change and restores it on the next visit. `reset()` goes back to the seed.
 

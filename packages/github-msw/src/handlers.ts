@@ -18,12 +18,8 @@ export interface MockedRepository {
 }
 
 export interface GitHubHandlerOptions {
-  /** The repositories to serve. For a single one, `repository`, `owner` and `repo` are a shorthand. */
-  repositories?: MockedRepository[]
-  repository?: MockRepository
-  owner?: string
-  repo?: string
-  details?: RepositoryDetails
+  /** The repositories to serve, at least one. */
+  repositories: MockedRepository[]
   /** Default: https://api.github.com */
   apiUrl?: string
   /** The profile `GET /user` returns. */
@@ -59,16 +55,6 @@ interface CreateCommitInput {
   }
 }
 
-function mockedRepositories(options: GitHubHandlerOptions): MockedRepository[] {
-  const list = [...(options.repositories ?? [])]
-  if (options.repository) {
-    if (!options.owner || !options.repo) throw new TypeError('Pass owner and repo with repository')
-    list.push({ owner: options.owner, repo: options.repo, repository: options.repository, details: options.details })
-  }
-  if (list.length === 0) throw new TypeError('Pass at least one repository')
-  return list
-}
-
 function describeRepository(entry: MockedRepository, login: string) {
   const { owner, repo, repository, details } = entry
   const defaultBranch = details?.defaultBranch
@@ -95,7 +81,8 @@ function describeRepository(entry: MockedRepository, login: string) {
  * Requests for other repositories fall through to the network.
  */
 export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler[] {
-  const entries = mockedRepositories(options)
+  const entries = options.repositories
+  if (entries.length === 0) throw new TypeError('Pass at least one repository')
   const api = (options.apiUrl ?? 'https://api.github.com').replace(/\/$/, '')
   const login = options.user?.login ?? 'demo'
   const find = (owner: string, repo: string) => entries.find((entry) => entry.owner === owner && entry.repo === repo)

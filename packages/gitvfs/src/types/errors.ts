@@ -46,7 +46,3 @@ export class NetworkError extends GitVFSError {
   }
 }
 
-/** @deprecated Renamed to `GitVFSError`. */
-export const GitFSError = GitVFSError
-/** @deprecated Renamed to `GitVFSError`. */
-export type GitFSError = GitVFSError

@@ -21,10 +21,7 @@ async function setup(files: Record<string, string> = {}) {
   const changes: string[] = []
   server.use(
     ...createGitHubHandlers({
-      repository,
-      owner: 'acme',
-      repo: 'site',
-      details: { description: 'The Acme website', private: true },
+      repositories: [{ owner: 'acme', repo: 'site', repository, details: { description: 'The Acme website', private: true } }],
       onChange: () => void changes.push(repository.branchHead('main')!),
     }),
   )
@@ -216,7 +213,7 @@ describe('several repositories', () => {
   })
 
   it('requires at least one repository', () => {
-    expect(() => createGitHubHandlers({})).toThrow(TypeError)
+    expect(() => createGitHubHandlers({ repositories: [] })).toThrow(TypeError)
   })
 })
 

@@ -24,10 +24,9 @@ export interface GitLabProviderOptions {
   apiUrl?: string
 }
 
-/** @deprecated Use `gitlab({ token }).repository('group/project')`. */
-export interface GitLabOptions extends GitLabProviderOptions {
-  /** A numeric id or the full path (`group/subgroup/project`). */
-  projectId: string | number
+interface GitLabRepositoryOptions extends GitLabProviderOptions {
+  /** The full path, `group/subgroup/project`. */
+  fullPath: string
 }
 
 function instanceUrl(options: GitLabProviderOptions): string {
@@ -76,20 +75,18 @@ class GitLabProvider implements GitProvider {
     if (!fullName.includes('/') || fullName.startsWith('/') || fullName.endsWith('/')) {
       throw new TypeError(`Expected a GitLab project as "group/project", got "${fullName}"`)
     }
-    return new GitLabRepository({ ...this.options, projectId: fullName })
+    return new GitLabRepository({ ...this.options, fullPath: fullName })
   }
 }
 
 class GitLabRepository implements GitRepository {
+  /** GitLab's REST API takes the URL-encoded full path wherever it takes a project id. */
   private projectId: string
   private fetchREST: ReturnType<typeof createFetchREST>
   private fetchGraphQL: ReturnType<typeof createFetchGraphQL>
-  private fullPath: string | undefined
 
-  constructor(options: GitLabOptions) {
-    this.projectId = String(options.projectId)
-    // A full path is already what GraphQL needs; a numeric id is looked up once.
-    if (this.projectId.includes('/')) this.fullPath = this.projectId
+  constructor(options: GitLabRepositoryOptions) {
+    this.projectId = options.fullPath
     const baseUrl = instanceUrl(options)
     this.fetchREST = createFetchREST({
       token: options.token,
@@ -99,15 +96,6 @@ class GitLabRepository implements GitRepository {
       token: options.token,
       url: `${baseUrl}/api/graphql`,
     })
-  }
-
-  private async getFullPath(): Promise<string> {
-    if (this.fullPath) return this.fullPath
-    const project = (await this.fetchREST(`/projects/${encodeURIComponent(this.projectId)}`)) as {
-      path_with_namespace: string
-    }
-    this.fullPath = project.path_with_namespace
-    return this.fullPath
   }
 
   async readdir(ref: string, path: string, options?: ReadDirOptions): Promise<TreeEntry[]> {
@@ -144,7 +132,7 @@ class GitLabRepository implements GitRepository {
   }
 
   async getFiles(ref: string, paths: string[]): Promise<Map<string, FileContent>> {
-    const fullPath = await this.getFullPath()
+    const fullPath = this.projectId
     const result = new Map<string, FileContent>()
     const chunkSize = 100
 
@@ -307,14 +295,10 @@ class GitLabRepository implements GitRepository {
   }
 }
 
-/** @deprecated Use `gitlab({ token }).repository('group/project')`. */
-export function gitlab(options: GitLabOptions): GitRepository
 /**
  * GitLab as seen by one account. List projects with `listRepositories()`, and get one with
  * `repository('group/project')` to pass to `GitVFS`.
  */
-export function gitlab(options: GitLabProviderOptions): GitProvider
-export function gitlab(options: GitLabProviderOptions | GitLabOptions): GitProvider | GitRepository {
-  if ('projectId' in options) return new GitLabRepository(options as GitLabOptions)
+export function gitlab(options: GitLabProviderOptions): GitProvider {
   return new GitLabProvider(options)
 }

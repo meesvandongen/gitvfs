@@ -171,12 +171,4 @@ describe('GitLab provider (account level)', () => {
     )
     expect(() => gl.repository('site')).toThrow(TypeError)
   })
-
-  it('still accepts the deprecated projectId form', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify({ name: 'main', commit: { id: 'abc' } }), { status: 200 }),
-    )
-    await gitlab({ token: 't', projectId: 12345 }).getBranch('main')
-    expect((fetchSpy.mock.calls[0][0] as string)).toContain('/projects/12345/')
-  })
 })

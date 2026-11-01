@@ -24,8 +24,7 @@ export interface GitHubProviderOptions {
   apiUrl?: string
 }
 
-/** @deprecated Use `github({ token }).repository('owner/repo')`. */
-export interface GitHubOptions extends GitHubProviderOptions {
+interface GitHubRepositoryOptions extends GitHubProviderOptions {
   owner: string
   repo: string
 }
@@ -94,7 +93,7 @@ class GitHubRepository implements GitRepository {
   private fetchREST: ReturnType<typeof createFetchREST>
   private fetchGraphQL: ReturnType<typeof createFetchGraphQL>
 
-  constructor(options: GitHubOptions) {
+  constructor(options: GitHubRepositoryOptions) {
     this.owner = options.owner
     this.repo = options.repo
     const baseUrl = apiUrlOf(options)
@@ -326,14 +325,10 @@ class GitHubRepository implements GitRepository {
   }
 }
 
-/** @deprecated Use `github({ token }).repository('owner/repo')`. */
-export function github(options: GitHubOptions): GitRepository
 /**
  * GitHub as seen by one account. List repositories with `listRepositories()`, and get one with
  * `repository('owner/name')` to pass to `GitVFS`.
  */
-export function github(options: GitHubProviderOptions): GitProvider
-export function github(options: GitHubProviderOptions | GitHubOptions): GitProvider | GitRepository {
-  if ('owner' in options || 'repo' in options) return new GitHubRepository(options as GitHubOptions)
+export function github(options: GitHubProviderOptions): GitProvider {
   return new GitHubProvider(options)
 }

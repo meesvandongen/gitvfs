@@ -66,9 +66,7 @@ export class GitVFS {
   private autoCommitTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: GitVFSOptions) {
-    const repository = options.repository ?? options.provider
-    if (!repository) throw new TypeError('GitVFS needs a repository, e.g. github({ token }).repository("owner/name")')
-    this.repository = repository
+    this.repository = options.repository
     this.readBranch = options.branch
     this.writeBranch = options.writeBranch ?? options.branch
     this.headValidationIntervalMs = options.headValidationIntervalMs ?? 30_000
@@ -524,7 +522,3 @@ export class GitVFS {
   }
 }
 
-/** @deprecated Renamed to `GitVFS`, matching the package name. */
-export const GitFS = GitVFS
-/** @deprecated Renamed to `GitVFS`, matching the package name. */
-export type GitFS = GitVFS

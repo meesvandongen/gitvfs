@@ -226,13 +226,4 @@ describe('GitHub provider (account level)', () => {
     await github({ token: 't', apiUrl: 'https://ghe.example.com/api/v3' }).repository('acme/site').getFiles('main', ['a.md'])
     expect((fetchSpy.mock.calls[0][0] as string)).toBe('https://ghe.example.com/api/graphql')
   })
-
-  it('still accepts the deprecated owner/repo form', async () => {
-    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
-      new Response(JSON.stringify({ object: { sha: 'abc' } }), { status: 200 }),
-    )
-    const repository = github({ token: 't', owner: 'acme', repo: 'site' })
-    expect(await repository.getBranch('main')).toEqual({ name: 'main', sha: 'abc' })
-    expect((fetchSpy.mock.calls[0][0] as string)).toContain('/repos/acme/site/')
-  })
 })
