@@ -31,8 +31,12 @@ description: Every method of GitVFS and the errors it throws.
 
 ## Branches
 
+- Reads come from `writeBranch` once it exists, and from `branch` until then.
 - `createBranch(name)` branches from the current read branch.
-- `checkout(branch)` switches both the read and write branch.
+- `checkout(branch)` makes `branch` the base, read and write branch.
+- `updateFromBase(message?)` merges `branch` into `writeBranch` on the host and returns the merge
+  commit (`{ sha, date }`), or `null` when there was nothing to merge. Needs a repository with
+  `mergeBranch` (GitHub).
 
 ## Errors
 
@@ -43,5 +47,5 @@ All errors extend `GitVFSError` and carry a `code`:
 | `NotFoundError` | `NOT_FOUND` | The file, directory or branch does not exist. |
 | `AuthError` | `AUTH` | The token is missing, invalid or lacks access (401/403). |
 | `RateLimitError` | `RATE_LIMIT` | The API rate limit was hit; see `retryAfter`. |
-| `ConflictError` | `CONFLICT` | The branch moved since it was read. |
+| `ConflictError` | `CONFLICT` | The branch moved since it was read, or a merge conflicts. |
 | `NetworkError` | `NETWORK` | The request did not reach the API. |

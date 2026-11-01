@@ -1,4 +1,4 @@
-import { AuthError, NetworkError, RateLimitError, NotFoundError, GitVFSError } from '../../types/errors.js'
+import { AuthError, ConflictError, NetworkError, RateLimitError, NotFoundError, GitVFSError } from '../../types/errors.js'
 
 export type TokenProvider = string | (() => string | Promise<string>)
 
@@ -46,6 +46,11 @@ async function request(options: HttpOptions, path: string, init: RequestOptions 
     throw new RateLimitError('Rate limit exceeded', retryAfter)
   }
 
+  if (response.status === 409) {
+    const text = await response.text().catch(() => '')
+    throw new ConflictError(`Conflict: ${text}`)
+  }
+
   if (!response.ok) {
     const text = await response.text().catch(() => '')
     throw new GitVFSError(`HTTP ${response.status}: ${text}`, 'HTTP_ERROR')
@@ -54,9 +59,11 @@ async function request(options: HttpOptions, path: string, init: RequestOptions 
   return response
 }
 
+/** Resolves to the parsed JSON body, the bytes with `raw`, or `null` for `204 No Content`. */
 export function createFetchREST(options: HttpOptions) {
   return async function fetchREST(path: string, init: RequestOptions = {}): Promise<unknown> {
     const response = await request(options, path, init)
+    if (response.status === 204) return null
     if (init.raw) {
       return new Uint8Array(await response.arrayBuffer())
     }

@@ -1,5 +1,5 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
-import { fromBase64, StaleHeadError, toBase64, toText, type MockRepository } from './repository.js'
+import { fromBase64, MergeConflictError, StaleHeadError, toBase64, toText, type MockRepository } from './repository.js'
 
 export interface RepositoryDetails {
   description?: string
@@ -77,7 +77,7 @@ function describeRepository(entry: MockedRepository, login: string) {
 
 /**
  * MSW request handlers for the parts of the GitHub API that gitvfs uses: the account's repository
- * list, refs, commits, trees, blobs, contents, the GraphQL file query and `createCommitOnBranch`.
+ * list, refs, merges, commits, trees, blobs, contents, the GraphQL file query and `createCommitOnBranch`.
  * Requests for other repositories fall through to the network.
  */
 export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler[] {
@@ -179,6 +179,31 @@ function repositoryHandlers(entry: MockedRepository, api: string, changed: () =>
       return new HttpResponse(null, { status: 204 })
     }),
 
+    http.post(`${base}/merges`, async ({ request }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const body = (await request.json()) as { base?: string; head?: string; commit_message?: string }
+      if (!body.base || !body.head) return HttpResponse.json({ message: 'Invalid request' }, { status: 422 })
+      if (!repository.branchHead(body.base) || !repository.resolve(body.head)) return notFound()
+      let commit: { oid: string; date: string } | null
+      try {
+        commit = await repository.merge({ base: body.base, head: body.head, message: body.commit_message })
+      } catch (error) {
+        if (error instanceof MergeConflictError) return HttpResponse.json({ message: 'Merge conflict' }, { status: 409 })
+        throw error
+      }
+      if (!commit) return new HttpResponse(null, { status: 204 })
+      await changed()
+      const record = repository.getCommit(commit.oid)!
+      return HttpResponse.json(
+        {
+          sha: commit.oid,
+          commit: { message: record.message, tree: { sha: record.tree }, committer: { date: commit.date } },
+          parents: [{ sha: record.parent }, { sha: record.mergeParent }],
+        },
+        { status: 201 },
+      )
+    }),
+
     http.get(`${base}/git/commits/:sha`, ({ request, params }) => {
       if (!isAuthenticated(request)) return unauthorized()
       const commit = repository.getCommit(String(params.sha))
@@ -187,7 +212,7 @@ function repositoryHandlers(entry: MockedRepository, api: string, changed: () =>
         sha: params.sha,
         message: commit.message,
         tree: { sha: commit.tree },
-        parents: commit.parent ? [{ sha: commit.parent }] : [],
+        parents: [commit.parent, commit.mergeParent].filter(Boolean).map((sha) => ({ sha })),
         committer: { date: commit.date },
       })
     }),

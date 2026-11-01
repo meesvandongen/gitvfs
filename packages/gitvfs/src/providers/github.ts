@@ -8,9 +8,11 @@ import type {
   BranchInfo,
   CommitOptions,
   CommitResult,
+  MergeOptions,
+  MergeResult,
   ReadDirOptions,
 } from '../types/provider.js'
-import { NotFoundError } from '../types/errors.js'
+import { ConflictError, NotFoundError } from '../types/errors.js'
 import { createFetchREST, createPaginate, type TokenProvider } from './shared/http.js'
 import { matchesSearch } from './shared/repositories.js'
 import { createFetchGraphQL } from './shared/graphql.js'
@@ -244,6 +246,23 @@ class GitHubRepository implements GitRepository {
       `/repos/${this.owner}/${this.repo}/git/refs/heads/${name}`,
       { method: 'DELETE' },
     )
+  }
+
+  async mergeBranch(options: MergeOptions): Promise<MergeResult | null> {
+    let result: { sha: string; commit: { committer: { date: string } } } | null
+    try {
+      result = (await this.fetchREST(`/repos/${this.owner}/${this.repo}/merges`, {
+        method: 'POST',
+        body: JSON.stringify({ base: options.into, head: options.from, commit_message: options.message }),
+      })) as typeof result
+    } catch (error) {
+      if (error instanceof ConflictError) {
+        throw new ConflictError(`Merging ${options.from} into ${options.into} conflicts: both changed the same files`)
+      }
+      throw error
+    }
+    // 204 No Content: `into` already contains `from`.
+    return result && { sha: result.sha, date: result.commit.committer.date }
   }
 
   async commit(options: CommitOptions): Promise<CommitResult> {

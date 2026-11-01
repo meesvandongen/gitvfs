@@ -13,6 +13,8 @@ export type {
   CommitOptions,
   CommitResult,
   CommitFileChange,
+  MergeOptions,
+  MergeResult,
 } from './types/provider.js'
 export type { CacheAdapter } from './cache/types.js'
 export type { Change } from './change-buffer.js'

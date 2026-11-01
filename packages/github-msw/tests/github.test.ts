@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node'
-import { GitVFS } from 'gitvfs'
+import { ConflictError, GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createGitHubHandlers, MockRepository, persistentRepository, type StorageLike } from '../src'
 
@@ -136,6 +136,39 @@ describe('gitvfs against the GitHub mock', () => {
     expect(repository.branchNames().sort()).toEqual(['drafts', 'main'])
     expect(repository.readFile('drafts', 'content/posts/draft.md')).toBeDefined()
     expect(repository.readFile('main', 'content/posts/draft.md')).toBeUndefined()
+  })
+
+  it('reads back commits on the write branch and merges main into it', async () => {
+    const { repository, remote } = await setup()
+    const fs = new GitVFS({ repository: remote, branch: 'main', writeBranch: 'drafts', cache: 'none' })
+    expect(await fs.updateFromBase()).toBeNull() // No write branch yet.
+
+    fs.writeFile('README.md', '# Draft\n')
+    await fs.commit('Draft')
+    expect(await fs.readFile('README.md', { encoding: 'utf-8' })).toBe('# Draft\n')
+
+    const add = (path: string, text: string) => ({ path, content: new TextEncoder().encode(text) })
+    await repository.commit({ branch: 'main', message: 'News', additions: [add('news.md', 'News\n')] })
+    const merge = await fs.updateFromBase('Update drafts')
+
+    expect(merge?.sha).toBe(repository.branchHead('drafts'))
+    expect(repository.getCommit(merge!.sha)).toMatchObject({ message: 'Update drafts', mergeParent: repository.branchHead('main') })
+    expect(await fs.readFile('news.md', { encoding: 'utf-8' })).toBe('News\n')
+    expect(await fs.readFile('README.md', { encoding: 'utf-8' })).toBe('# Draft\n')
+    expect(await fs.updateFromBase()).toBeNull() // Already up to date.
+
+    // Both branches change the same file: a conflict, and nothing moves.
+    await repository.commit({ branch: 'main', message: 'Readme', additions: [add('README.md', '# Main\n')] })
+    const head = repository.branchHead('drafts')
+    await expect(fs.updateFromBase()).rejects.toBeInstanceOf(ConflictError)
+    expect(repository.branchHead('drafts')).toBe(head)
+  })
+
+  it('deletes branches through the real provider', async () => {
+    const { repository, remote } = await setup()
+    await remote.createBranch('old', repository.branchHead('main')!)
+    await remote.deleteBranch('old')
+    expect(repository.branchNames()).toEqual(['main'])
   })
 
   it('serves blobs and the signed-in user', async () => {

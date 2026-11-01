@@ -3,6 +3,7 @@ import type {
   TreeEntry,
   FileContent,
   CommitResult,
+  MergeResult,
   ReadDirOptions,
 } from './types/provider.js'
 import type { GitVFSOptions, CacheConfig } from './types/options.js'
@@ -11,7 +12,7 @@ import { ChangeBuffer, type Change } from './change-buffer.js'
 import { CacheManager } from './cache/manager.js'
 import { MemoryCacheAdapter } from './cache/memory.js'
 import { NoneCacheAdapter } from './cache/none.js'
-import { NotFoundError } from './types/errors.js'
+import { GitVFSError, NotFoundError } from './types/errors.js'
 import { basename, dirname, normalize } from './utils/path.js'
 import { encodeText, decodeText } from './utils/encoding.js'
 
@@ -51,8 +52,11 @@ function createCacheAdapter(
 
 export class GitVFS {
   private repository: GitRepository
-  private readBranch: string
+  /** The `branch` option: where the write branch starts, and what `updateFromBase()` merges in. */
+  private baseBranch: string
   private writeBranch: string
+  /** Where reads come from: the write branch once it exists, else the base branch. */
+  private readBranch: string
   private buffer = new ChangeBuffer()
   private cache: CacheManager
   private knownEntries = new Map<string, TreeEntry>()
@@ -67,8 +71,9 @@ export class GitVFS {
 
   constructor(options: GitVFSOptions) {
     this.repository = options.repository
-    this.readBranch = options.branch
+    this.baseBranch = options.branch
     this.writeBranch = options.writeBranch ?? options.branch
+    this.readBranch = options.branch
     this.headValidationIntervalMs = options.headValidationIntervalMs ?? 30_000
     this.autoCommit = options.autoCommit ?? false
     this.autoCommitDelay = options.autoCommitDelay ?? 2000
@@ -76,6 +81,21 @@ export class GitVFS {
 
     const adapter = createCacheAdapter(options.cache)
     this.cache = new CacheManager(adapter, `${options.branch}`)
+  }
+
+  /**
+   * The branch to read from and its head: the write branch once it exists, so commits made there
+   * stay visible, else the base branch it will be created from.
+   */
+  private async resolveReadHead(): Promise<{ branch: string; sha: string }> {
+    if (this.writeBranch !== this.baseBranch) {
+      try {
+        return { branch: this.writeBranch, sha: await this.repository.getLastCommitSha(this.writeBranch) }
+      } catch (error) {
+        if (!(error instanceof NotFoundError)) throw error
+      }
+    }
+    return { branch: this.baseBranch, sha: await this.repository.getLastCommitSha(this.baseBranch) }
   }
 
   private async ensureCacheFresh(): Promise<string> {
@@ -88,9 +108,12 @@ export class GitVFS {
       return this.headSha
     }
 
-    const currentHead = await this.repository.getLastCommitSha(this.readBranch)
-    const previousHead = this.headSha
-    const cachedHead = previousHead ?? await this.cache.getHeadSha(this.readBranch)
+    const { branch, sha: currentHead } = await this.resolveReadHead()
+    const switched = branch !== this.readBranch
+    this.readBranch = branch
+    // Known entries are not tracked per branch: forget the old branch's.
+    if (switched) this.knownEntries.clear()
+    const cachedHead = (switched ? null : this.headSha) ?? await this.cache.getHeadSha(branch)
 
     if (cachedHead !== currentHead) {
       await this.cache.clear()
@@ -99,7 +122,7 @@ export class GitVFS {
 
     this.headSha = currentHead
     this.lastHeadValidationAt = now
-    await this.cache.setHeadSha(this.readBranch, currentHead)
+    await this.cache.setHeadSha(branch, currentHead)
     return currentHead
   }
 
@@ -407,15 +430,14 @@ export class GitVFS {
     }
     const changes = await this.resolveChanges()
 
-    // Ensure we have the head SHA for the write branch
     let headSha: string
     try {
       headSha = await this.repository.getLastCommitSha(this.writeBranch)
-    } catch {
-      // Write branch doesn't exist yet — create it from read branch
-      const readHead = await this.repository.getLastCommitSha(this.readBranch)
-      await this.repository.createBranch(this.writeBranch, readHead)
-      headSha = readHead
+    } catch (error) {
+      if (!(error instanceof NotFoundError) || this.writeBranch === this.baseBranch) throw error
+      // The write branch doesn't exist yet: create it from the base branch.
+      headSha = await this.repository.getLastCommitSha(this.baseBranch)
+      await this.repository.createBranch(this.writeBranch, headSha)
     }
 
     const result = await this.repository.commit({
@@ -430,7 +452,16 @@ export class GitVFS {
       expectedHeadOid: headSha,
     })
 
-    // Update cache with new file SHAs
+    await this.cache.clear()
+    this.buffer.clear()
+    this.knownEntries.clear()
+    // From now on reads come from the write branch, which now points at this commit.
+    this.readBranch = this.writeBranch
+    this.headSha = result.sha
+    this.lastHeadValidationAt = Date.now()
+    await this.cache.setHeadSha(this.writeBranch, result.sha)
+
+    // Cache what was just written, so it need not be fetched again.
     for (const [path, info] of Object.entries(result.files)) {
       const change = changes.find((c) => c.path === path)
       if (change?.content !== undefined) {
@@ -446,12 +477,6 @@ export class GitVFS {
         await this.cache.setFileContent(this.writeBranch, path, file)
       }
     }
-
-    await this.cache.clear()
-    this.buffer.clear()
-    this.knownEntries.clear()
-    this.headSha = this.readBranch === this.writeBranch ? result.sha : null
-    this.lastHeadValidationAt = this.headSha === null ? 0 : Date.now()
 
     return result
   }
@@ -489,17 +514,61 @@ export class GitVFS {
 
   /** Create a new branch from the current read branch. */
   async createBranch(name: string): Promise<void> {
-    const headSha = await this.repository.getLastCommitSha(this.readBranch)
-    await this.repository.createBranch(name, headSha)
+    const { sha } = await this.resolveReadHead()
+    await this.repository.createBranch(name, sha)
   }
 
-  /** Switch the read branch (and optionally the write branch). */
+  /** Switch to `branch`: it becomes the base, read and write branch. */
   checkout(branch: string): void {
+    this.baseBranch = branch
     this.readBranch = branch
     this.writeBranch = branch
     this.knownEntries.clear()
     this.headSha = null
     this.lastHeadValidationAt = 0
+  }
+
+  /**
+   * Merge the latest `branch` into `writeBranch` on the host, so the write branch picks up what
+   * changed there since it was created. Returns the merge commit, or `null` when there was nothing
+   * to merge (or the write branch does not exist yet, so reads already come from `branch`).
+   * Staged changes stay staged. Throws a `ConflictError` when both branches changed the same file;
+   * resolve that on the host, for example in the pull request.
+   */
+  async updateFromBase(message?: string): Promise<MergeResult | null> {
+    if (this.writeBranch === this.baseBranch) {
+      throw new GitVFSError('updateFromBase() needs a writeBranch different from branch', 'NOT_SUPPORTED')
+    }
+    if (!this.repository.mergeBranch) {
+      throw new GitVFSError('This repository cannot merge branches', 'NOT_SUPPORTED')
+    }
+
+    let result: MergeResult | null
+    try {
+      result = await this.repository.mergeBranch({ into: this.writeBranch, from: this.baseBranch, message })
+    } catch (error) {
+      // No write branch yet: reads already come from the base branch.
+      if (error instanceof NotFoundError && !(await this.writeBranchExists())) return null
+      throw error
+    }
+
+    if (result) {
+      // The write branch moved: revalidate (and drop the cache) on the next read.
+      this.knownEntries.clear()
+      this.headSha = null
+      this.lastHeadValidationAt = 0
+    }
+    return result
+  }
+
+  private async writeBranchExists(): Promise<boolean> {
+    try {
+      await this.repository.getBranch(this.writeBranch)
+      return true
+    } catch (error) {
+      if (error instanceof NotFoundError) return false
+      throw error
+    }
   }
 
   private scheduleAutoCommit(): void {
