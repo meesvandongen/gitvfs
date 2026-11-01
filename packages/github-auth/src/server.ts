@@ -145,7 +145,8 @@ async function readSession(request: Request, session: SessionOptions): Promise<S
 
 async function writeSession(headers: Headers, session: SessionOptions, payload: SessionPayload): Promise<void> {
   const { name, options } = sessionCookie(session)
-  const maxAge = Math.max(0, Math.floor((payload.exp - Date.now()) / 1000))
+  // Round up: the payload expiry is checked on every read, and rounding down would cut a second.
+  const maxAge = Math.max(0, Math.ceil((payload.exp - Date.now()) / 1000))
   await setSealedCookie(headers, JSON.stringify(payload), session.secret, name, { ...options, maxAge })
 }
 
