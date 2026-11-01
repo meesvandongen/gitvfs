@@ -1,5 +1,5 @@
 import { createPkcePair, randomString } from './pkce.js'
-import type { TokenRequest, TokenResponse } from './protocol.js'
+import type { SignOutRequest, TokenRequest, TokenResponse } from './protocol.js'
 
 /** Same shape as gitvfs's `TokenProvider`, so `auth.token` can be passed to a provider directly. */
 export type TokenProvider = () => Promise<string>
@@ -24,8 +24,15 @@ export interface GitHubAuthOptions {
   /** REST API URL used by `fetchUser`. Default: https://api.github.com */
   apiUrl?: string
   /**
-   * Where tokens are kept. `session` (default) survives reloads but not closing the tab, `local`
-   * survives restarts, `memory` lasts until reload. Or pass any Storage-like object.
+   * `storage` (default): tokens, including the refresh token, are kept in `storage`.
+   * `cookie`: the token handler keeps the refresh token in an encrypted `HttpOnly` cookie (its
+   * `session` option). JavaScript only holds the short-lived access token, in `storage`, and
+   * gets a new one through the cookie when it expires or is missing (`restoreSession()`).
+   */
+  session?: 'storage' | 'cookie'
+  /**
+   * Where tokens are kept in `storage` mode. `session` (default) survives reloads but not closing
+   * the tab, `local` survives restarts, `memory` lasts until reload. Or pass any Storage-like object.
    */
   storage?: 'session' | 'local' | 'memory' | StorageLike
   /** Prefix for storage keys. Default: `gitvfs-github-auth` */
@@ -40,6 +47,8 @@ export interface GitHubTokens {
   expiresAt?: number
   refreshToken?: string
   refreshTokenExpiresAt?: number
+  /** Cookie sessions: epoch milliseconds when the session cookie expires. */
+  sessionExpiresAt?: number
 }
 
 export interface GitHubUser {
@@ -124,6 +133,7 @@ export function toTokens(response: TokenResponse, now = Date.now()): GitHubToken
     refreshTokenExpiresAt: response.refresh_token_expires_in
       ? now + response.refresh_token_expires_in * 1000
       : undefined,
+    sessionExpiresAt: response.session_expires_in ? now + response.session_expires_in * 1000 : undefined,
   }
 }
 
@@ -138,14 +148,18 @@ export class GitHubAuth {
   private readonly pendingStorage: StorageLike
   private readonly tokensKey: string
   private readonly pendingKey: string
+  private readonly cookieSession: boolean
   private refreshing: Promise<GitHubTokens> | null = null
 
   constructor(private readonly options: GitHubAuthOptions) {
-    this.storage = resolveStorage(options.storage)
-    this.pendingStorage = options.storage === 'memory' ? browserStorage('session') : this.storage
+    this.cookieSession = options.session === 'cookie'
     const prefix = options.storageKey ?? 'gitvfs-github-auth'
     this.tokensKey = `${prefix}:tokens`
     this.pendingKey = `${prefix}:pending`
+    this.storage = resolveStorage(options.storage)
+    this.pendingStorage = options.storage === 'memory' ? browserStorage('session') : this.storage
+    // A refresh token left behind by an earlier storage-mode session must not linger in cookie mode.
+    if (this.cookieSession && this.getTokens()?.refreshToken) this.forget()
   }
 
   /** A gitvfs `TokenProvider`: returns a valid access token, refreshing it when needed. */
@@ -215,38 +229,61 @@ export class GitHubAuth {
     return readJson<GitHubTokens>(this.storage, this.tokensKey)
   }
 
+  /**
+   * Whether tokens are at hand. With cookie sessions this only knows about the current page load;
+   * call `restoreSession()` after a reload.
+   */
   isSignedIn(): boolean {
     const tokens = this.getTokens()
     if (!tokens) return false
     return !this.isExpired(tokens) || this.canRefresh(tokens)
   }
 
+  /**
+   * Pick up an existing session: with cookie sessions, ask the token handler for a fresh access
+   * token using the session cookie. Resolves to whether the user is signed in.
+   */
+  async restoreSession(): Promise<boolean> {
+    if (this.isSignedIn()) return true
+    if (!this.cookieSession) return false
+    try {
+      await this.getAccessToken()
+      return true
+    } catch {
+      return false
+    }
+  }
+
   /** A valid access token. Refreshes expired tokens; throws `GitHubAuthError` when signed out. */
   async getAccessToken(): Promise<string> {
     const tokens = this.getTokens()
+    if (tokens && !this.isExpired(tokens)) return tokens.accessToken
+    if (this.cookieSession) return (await this.refresh({ grant_type: 'refresh_token' })).accessToken
     if (!tokens) throw new GitHubAuthError('not_signed_in', 'Sign in with GitHub first')
-    if (!this.isExpired(tokens)) return tokens.accessToken
     if (!this.canRefresh(tokens)) {
-      this.signOut()
+      this.forget()
       throw new GitHubAuthError('session_expired', 'Your GitHub session expired; sign in again')
     }
+    return (await this.refresh({ grant_type: 'refresh_token', refresh_token: tokens.refreshToken! })).accessToken
+  }
 
-    this.refreshing ??= this.requestTokens({
-      grant_type: 'refresh_token',
-      refresh_token: tokens.refreshToken!,
-    })
+  private refresh(request: TokenRequest): Promise<GitHubTokens> {
+    this.refreshing ??= this.requestTokens(request)
       .then((next) => {
         this.storeTokens(next)
         return next
       })
       .catch((error: unknown) => {
-        this.signOut()
+        this.forget()
+        if (error instanceof GitHubAuthError && error.code === 'no_session') {
+          throw new GitHubAuthError('not_signed_in', 'Sign in with GitHub first')
+        }
         throw error
       })
       .finally(() => {
         this.refreshing = null
       })
-    return (await this.refreshing).accessToken
+    return this.refreshing
   }
 
   /** The signed-in user's GitHub profile. */
@@ -262,8 +299,23 @@ export class GitHubAuth {
     return (await response.json()) as GitHubUser
   }
 
-  /** Forget the tokens in this browser. GitHub keeps the app authorized for the user. */
-  signOut(): void {
+  /**
+   * Forget the tokens in this browser, and with cookie sessions have the handler clear the session
+   * cookie. GitHub keeps the app authorized for the user.
+   */
+  async signOut(): Promise<void> {
+    this.forget()
+    if (!this.cookieSession) return
+    const request: SignOutRequest = { action: 'sign_out' }
+    await fetch(this.options.tokenUrl, {
+      method: 'POST',
+      credentials: 'include',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(request),
+    }).catch(() => undefined)
+  }
+
+  private forget(): void {
     this.storage.removeItem(this.tokensKey)
   }
 
@@ -272,6 +324,7 @@ export class GitHubAuth {
   }
 
   private canRefresh(tokens: GitHubTokens): boolean {
+    if (this.cookieSession) return tokens.sessionExpiresAt === undefined || Date.now() < tokens.sessionExpiresAt
     return Boolean(tokens.refreshToken)
       && (tokens.refreshTokenExpiresAt === undefined || Date.now() < tokens.refreshTokenExpiresAt)
   }
@@ -285,6 +338,8 @@ export class GitHubAuth {
     try {
       response = await fetch(this.options.tokenUrl, {
         method: 'POST',
+        // The session cookie must travel with the request, also when tokenUrl is on another origin.
+        credentials: this.cookieSession ? 'include' : 'same-origin',
         headers: { 'Content-Type': 'application/json', Accept: 'application/json' },
         body: JSON.stringify(body),
       })

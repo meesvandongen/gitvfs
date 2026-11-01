@@ -1,6 +1,6 @@
 // Browser-like environments strip the Origin header from Request objects; the handler runs server-side.
 // @vitest-environment node
-import { createTokenHandler, parseTokenRequest } from '../src/server'
+import { createTokenHandler, originMatcher, parseTokenRequest } from '../src/server'
 
 const ORIGIN = 'https://docs.example.com'
 
@@ -134,5 +134,36 @@ describe('parseTokenRequest', () => {
     expect(parseTokenRequest({ ...exchange, code: 42 })).toBeNull()
     expect(parseTokenRequest({ grant_type: 'refresh_token', refresh_token: '' })).toBeNull()
     expect(parseTokenRequest(exchange)).toEqual({ ...exchange, redirect_uri: undefined })
+  })
+})
+
+describe('originMatcher', () => {
+  const matches = originMatcher(['https://docs.example.com', 'https://*.docs.example.com/'])
+
+  it('matches exact origins and one subdomain label for *', () => {
+    expect(matches('https://docs.example.com')).toBe(true)
+    expect(matches('https://claude-branch-1.docs.example.com')).toBe(true)
+    expect(matches('https://0d0c2c12.docs.example.com')).toBe(true)
+  })
+
+  it('rejects other hosts, schemes, ports and nested subdomains', () => {
+    expect(matches('https://a.b.docs.example.com')).toBe(false)
+    expect(matches('http://preview.docs.example.com')).toBe(false)
+    expect(matches('https://preview.docs.example.com:8443')).toBe(false)
+    expect(matches('https://docs.example.com.evil.test')).toBe(false)
+    expect(matches('https://evildocs.example.com')).toBe(false)
+    expect(matches('https://preview.docsXexample.com')).toBe(false)
+    expect(matches('null')).toBe(false)
+  })
+
+  it('lets the handler accept wildcard origins', async () => {
+    const handler = createTokenHandler({
+      clientId: 'id',
+      clientSecret: 'secret',
+      allowedOrigins: ['https://*.docs.example.com'],
+      fetch: async () => new Response(JSON.stringify({ access_token: 'ghu_x' })),
+    })
+    expect((await handler(post(exchange, 'https://preview.docs.example.com'))).status).toBe(200)
+    expect((await handler(post(exchange, 'https://docs.example.com'))).status).toBe(403)
   })
 })

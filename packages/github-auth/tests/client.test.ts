@@ -158,7 +158,7 @@ describe('GitHubAuth', () => {
 
   it('signs out', async () => {
     const { auth } = await signIn()
-    auth.signOut()
+    await auth.signOut()
     expect(auth.isSignedIn()).toBe(false)
   })
 })
@@ -173,5 +173,76 @@ describe('toTokens', () => {
       refreshToken: 'r',
       refreshTokenExpiresAt: 21_000,
     })
+  })
+})
+
+describe('GitHubAuth with cookie sessions', () => {
+  function createCookieAuth() {
+    return createGitHubAuth({ clientId: 'Iv1.client', tokenUrl, redirectUri: 'https://docs.example.com/admin', session: 'cookie' })
+  }
+
+  function mockFetch(responses: Array<{ status?: number; body?: unknown }>) {
+    const calls: Array<{ body: Record<string, unknown>; credentials?: RequestCredentials }> = []
+    vi.stubGlobal('fetch', vi.fn(async (_url: string, init?: RequestInit) => {
+      calls.push({ body: JSON.parse(init?.body as string), credentials: init?.credentials })
+      const next = responses.shift()
+      if (!next) throw new Error('unexpected request')
+      return new Response(next.body === undefined ? null : JSON.stringify(next.body), { status: next.status ?? 200 })
+    }))
+    return calls
+  }
+
+  it('keeps the refresh token out of web storage and sends the cookie', async () => {
+    sessionStorage.setItem('gitvfs-github-auth:tokens', JSON.stringify({ accessToken: 'old', refreshToken: 'ghr_old' }))
+    const auth = createCookieAuth()
+    expect(sessionStorage.getItem('gitvfs-github-auth:tokens')).toBeNull()
+
+    const state = new URL(await auth.createAuthorizeUrl()).searchParams.get('state')
+    const calls = mockFetch([{ body: { access_token: 'ghu_1', expires_in: 28800, session_expires_in: 15897600 } }])
+    await auth.handleRedirect(`https://docs.example.com/admin?code=c&state=${state}`)
+
+    expect(calls[0].credentials).toBe('include')
+    expect(await auth.token()).toBe('ghu_1')
+    const stored = JSON.parse(sessionStorage.getItem('gitvfs-github-auth:tokens')!)
+    expect(stored.accessToken).toBe('ghu_1')
+    expect(stored.refreshToken).toBeUndefined()
+  })
+
+  it('reuses the stored access token after a reload without a request', async () => {
+    const state = new URL(await createCookieAuth().createAuthorizeUrl()).searchParams.get('state')
+    mockFetch([{ body: { access_token: 'ghu_1', expires_in: 28800, session_expires_in: 1000 } }])
+    await createCookieAuth().handleRedirect(`https://docs.example.com/admin?code=c&state=${state}`)
+
+    const calls = mockFetch([])
+    const reloaded = createCookieAuth()
+    expect(await reloaded.restoreSession()).toBe(true)
+    expect(await reloaded.token()).toBe('ghu_1')
+    expect(calls).toHaveLength(0)
+  })
+
+  it('gets an access token through the cookie when none is stored', async () => {
+    const calls = mockFetch([{ body: { access_token: 'ghu_2', expires_in: 28800, session_expires_in: 1000 } }])
+    const auth = createCookieAuth()
+    expect(auth.isSignedIn()).toBe(false)
+    expect(await auth.restoreSession()).toBe(true)
+    expect(calls[0]).toEqual({ body: { grant_type: 'refresh_token' }, credentials: 'include' })
+    expect(await auth.token()).toBe('ghu_2')
+  })
+
+  it('reports a missing session as signed out', async () => {
+    mockFetch([{ status: 401, body: { error: 'no_session', error_description: 'No valid session' } }])
+    const auth = createCookieAuth()
+    expect(await auth.restoreSession()).toBe(false)
+    mockFetch([{ status: 401, body: { error: 'no_session' } }])
+    await expect(auth.token()).rejects.toMatchObject({ code: 'not_signed_in' })
+  })
+
+  it('asks the handler to clear the cookie on sign-out', async () => {
+    const calls = mockFetch([{ body: { access_token: 'ghu_1', expires_in: 28800 } }, { status: 204 }])
+    const auth = createCookieAuth()
+    await auth.restoreSession()
+    await auth.signOut()
+    expect(calls[1]).toEqual({ body: { action: 'sign_out' }, credentials: 'include' })
+    expect(auth.isSignedIn()).toBe(false)
   })
 })

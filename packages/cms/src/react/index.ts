@@ -8,8 +8,10 @@ export {
   formComponents,
   toDateInputValue,
   uiComponents,
+  useField,
 } from './autoform.js'
 export type { ContentFormProps } from './autoform.js'
+export type { AutoFormFieldProps as FieldProps } from '@autoform/react'
 export { CmsProvider, useCms } from './context.js'
 export {
   DocumentPreview,

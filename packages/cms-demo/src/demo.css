@@ -1,0 +1,129 @@
+html,
+body,
+#root {
+  height: 100%;
+  margin: 0;
+}
+
+body {
+  font-family: system-ui, -apple-system, 'Segoe UI', sans-serif;
+}
+
+.demo-shell {
+  display: flex;
+  flex-direction: column;
+  height: 100%;
+}
+
+.demo-banner {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.25rem 0.75rem;
+  padding: 0.5rem 1rem;
+  background: #1d2330;
+  color: #e4e8ee;
+  font-size: 0.82rem;
+}
+
+.demo-banner a {
+  margin-left: auto;
+  color: #9cc0ff;
+}
+
+.demo-app {
+  flex: 1;
+  min-height: 0;
+}
+
+.demo-app .gcms-app {
+  height: 100%;
+  min-height: 0;
+}
+
+.demo-history ol {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  margin: 0 0 0.75rem;
+  padding: 0;
+  list-style: none;
+  font-size: 0.75rem;
+}
+
+.demo-history li span {
+  display: block;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.demo-history time {
+  color: var(--gcms-muted);
+  font-family: var(--gcms-mono);
+  font-size: 0.7rem;
+}
+
+.demo-color {
+  display: flex;
+  gap: 0.5rem;
+  align-items: center;
+}
+
+.demo-color input[type='color'] {
+  width: 2.5rem;
+  height: 2.2rem;
+  padding: 0;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: none;
+}
+
+.demo-preview {
+  padding: 1.5rem;
+  overflow: auto;
+}
+
+.demo-author,
+.demo-event {
+  max-width: 24rem;
+  margin: 0 auto;
+  padding: 1.5rem;
+  border: 1px solid var(--gcms-border);
+  border-top: 4px solid var(--gcms-accent);
+  border-radius: var(--gcms-radius);
+}
+
+.demo-author h2,
+.demo-event h2 {
+  margin: 0.5rem 0 0.25rem;
+}
+
+.demo-avatar {
+  display: grid;
+  place-items: center;
+  width: 3rem;
+  height: 3rem;
+  border-radius: 50%;
+  color: #ffffff;
+  font-size: 1.4rem;
+  font-weight: 700;
+}
+
+.demo-role {
+  margin: 0;
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+}
+
+.demo-event table {
+  width: 100%;
+  border-collapse: collapse;
+}
+
+.demo-event td {
+  padding: 0.3rem 0;
+  border-top: 1px solid var(--gcms-border);
+}

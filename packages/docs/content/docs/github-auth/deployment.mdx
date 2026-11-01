@@ -9,7 +9,7 @@ only for `/api/github/*`.
 ## The Worker
 
 ```ts title="worker/index.ts"
-import { createTokenHandler } from 'gitvfs-github-auth/server'
+import { createTokenHandler, originMatcher } from 'gitvfs-github-auth/server'
 
 interface Env {
   GITHUB_CLIENT_ID?: string
@@ -21,8 +21,9 @@ interface Env {
 export default {
   async fetch(request: Request, env: Env): Promise<Response> {
     const url = new URL(request.url)
-    const origins = (env.GITHUB_ALLOWED_ORIGINS ?? '').split(',').map((o) => o.trim()).filter(Boolean)
-    const enabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) && origins.includes(url.origin)
+    // Comma-separated, with patterns such as https://*.docs.example.com for previews.
+    const origins = (env.GITHUB_ALLOWED_ORIGINS ?? '').split(',')
+    const enabled = Boolean(env.GITHUB_CLIENT_ID && env.GITHUB_CLIENT_SECRET) && originMatcher(origins)(url.origin)
 
     if (url.pathname === '/api/github/config') {
       return Response.json(enabled ? { clientId: env.GITHUB_CLIENT_ID, scope: env.GITHUB_SCOPE } : { clientId: null })
@@ -41,7 +42,7 @@ export default {
 
 `/api/github/config` lets the page find out whether sign-in is available on the current origin.
 The editor shows **Sign in with GitHub** only when it is, and falls back to personal access tokens
-elsewhere, such as on preview URLs that are not registered with the app.
+elsewhere.
 
 ## Configuration
 
@@ -60,25 +61,43 @@ elsewhere, such as on preview URLs that are not registered with the app.
     // Only the token routes run the Worker; everything else is served as a static file.
     "run_worker_first": ["/api/github/*"],
   },
-  "previews": {},
+  // Previews do not inherit production settings.
+  "previews": {
+    "vars": {
+      "GITHUB_CLIENT_ID": "Iv23li…",
+      "GITHUB_ALLOWED_ORIGINS": "https://*.docs.example.com",
+    },
+  },
 }
 ```
 
-Set the secret once per Worker:
+Set the secrets once per Worker:
 
 ```sh
 pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
+# optional: keep refresh tokens in an encrypted HttpOnly cookie (32+ characters)
+openssl rand -base64 32 | pnpm exec wrangler secret put GITHUB_SESSION_SECRET
 ```
+
+With `GITHUB_SESSION_SECRET` set, the Worker passes `session: { secret, path: '/api/github' }` to
+`createTokenHandler`, and `/api/github/config` tells the page to use `session: 'cookie'`.
 
 Deploy the Worker script first. Cloudflare refuses variables and secrets on a Worker that only has
 static assets ("Variables cannot be added to a Worker that only has static assets"), so when you
 add the Worker to an existing assets-only site, the first deployment with `main` has to happen
 before the secret can be set. Until the secret exists, sign-in simply stays off.
 
-Variables set at the top level apply to production only. [Worker
-Previews](https://developers.cloudflare.com/workers/previews/) do not inherit them, which keeps
-sign-in off on previews unless you add the variables to the `previews` block and register the
-preview URL with the app.
+Variables at the top level apply to production only; [Worker
+Previews](https://developers.cloudflare.com/workers/previews/) get theirs from the `previews` block.
+Preview URLs are subdomains of the production domain (`<branch>.docs.example.com`), so they sign in
+with the same app once its callback URL has **wildcard matching** enabled. The secret is set
+separately, once, in the base config that all previews share:
+
+```sh
+pnpm exec wrangler preview base-config secret put GITHUB_CLIENT_SECRET
+```
+
+Without it, previews offer token sign-in only.
 
 ## Local development
 

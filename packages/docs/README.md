@@ -32,13 +32,24 @@ The app is a GitHub App (client ID `Iv23liL4d3j01dbuzSpS`) with callback URL `ht
 pnpm exec wrangler secret put GITHUB_CLIENT_SECRET
 ```
 
-Cloudflare only accepts the secret once the deployed Worker has its script, not just static assets. Until the secret is set, sign-in stays off.
+Optionally, set `GITHUB_SESSION_SECRET` (32+ characters) to keep refresh tokens in an encrypted `HttpOnly` cookie instead of the browser's session storage. Without it, sign-in still works, with tokens in `sessionStorage`:
 
-Previews do not inherit these variables, so they offer token sign-in only.
+```sh
+openssl rand -base64 32 | pnpm exec wrangler secret put GITHUB_SESSION_SECRET
+openssl rand -base64 32 | pnpm exec wrangler preview base-config secret put GITHUB_SESSION_SECRET
+```
+
+Cloudflare only accepts secrets once the deployed Worker has its script, not just static assets. Until the client secret is set, sign-in stays off.
+
+Previews get their own variables from the `previews` block in `wrangler.jsonc` and allow `https://*.docs.gitvfs.mvd.im`. The app's callback URL has wildcard matching enabled, so preview subdomains sign in too. Previews need the secret separately:
+
+```sh
+pnpm exec wrangler preview base-config secret put GITHUB_CLIENT_SECRET
+```
 
 ## Assets
 
-`wrangler.jsonc` serves `build/client` as static assets, and only `/api/github/*` runs the Worker. Its empty `previews` block enables [Worker Previews](https://developers.cloudflare.com/workers/previews/). To try the production build on the Workers runtime:
+`wrangler.jsonc` serves `build/client` as static assets, and only `/api/github/*` runs the Worker. Its `previews` block enables [Worker Previews](https://developers.cloudflare.com/workers/previews/). To try the production build on the Workers runtime:
 
 ```sh
 pnpm run build

@@ -13,7 +13,11 @@ import type {
 import { ZodProvider } from '@autoform/zod'
 import type { ContentType } from '../config.js'
 
-function useField(name: string) {
+/**
+ * The form binding (`value`, `onChange`, `onBlur`, `name`, `ref`) for a field, for custom field
+ * components: `const field = useField(props.id)`.
+ */
+export function useField(name: string) {
   return useFieldRHF({ name }).field
 }
 

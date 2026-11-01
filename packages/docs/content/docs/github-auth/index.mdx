@@ -80,6 +80,34 @@ expired; concurrent requests share one refresh. `auth.fetchUser()` returns the u
 Failures throw a `GitHubAuthError` whose `code` is `not_signed_in`, `session_expired`,
 `state_mismatch`, `token_exchange_failed`, or GitHub's own error such as `access_denied`.
 
+## Where tokens live
+
+| Mode | Refresh token | Access token |
+| --- | --- | --- |
+| `session: 'storage'` (default) | `sessionStorage` (or `storage`) | `sessionStorage` |
+| `session: 'cookie'` | encrypted `HttpOnly` cookie, never in JavaScript | `sessionStorage` (or `storage`) |
+
+Web storage is readable by any script on the page. With cookie sessions, the token handler seals
+the refresh token with [kukkii](https://github.com/meesvandongen/kukkii) (AES-256-CBC plus
+HMAC-SHA256) into an `HttpOnly`, `Secure`, `SameSite=Strict` cookie, rotates it on every refresh,
+and checks an expiry inside the sealed payload. A stolen access token works for at most eight hours,
+and the cookie value reveals nothing.
+
+```ts
+// server: a secret of at least 32 characters, e.g. `openssl rand -base64 32`
+createTokenHandler({ clientId, clientSecret, allowedOrigins, session: { secret, path: '/api/github' } })
+
+// browser
+const auth = createGitHubAuth({ clientId, tokenUrl: '/api/github/token', session: 'cookie' })
+await auth.handleRedirect()
+if (!(await auth.restoreSession())) await auth.login()
+```
+
+Either way, API requests go straight from the browser to `api.github.com` with the access token;
+the handler only takes part in signing in and in the refresh every eight hours. With cookie
+sessions, `restoreSession()` and `auth.token` fetch a new access token through the cookie when the
+stored one is missing or expired, and `signOut()` has the handler clear the cookie.
+
 ## Token handler
 
 ```ts
@@ -101,8 +129,12 @@ See [Deployment](/docs/github-auth/deployment) for a complete Cloudflare Worker.
 
 ## Limits
 
-- GitHub matches callback URLs exactly, without wildcards. Sign-in only works on URLs registered
-  with the app (a GitHub App accepts up to ten), so preview deployments usually fall back to tokens.
+- Sign-in only works on URLs that match a callback URL of the app (a GitHub App accepts up to
+  ten). For preview deployments on subdomains, enable **wildcard matching** on the callback URL, so
+  `https://docs.example.com/admin` also accepts `https://<preview>.docs.example.com/admin`, and
+  allow the pattern in the handler: `allowedOrigins: ['https://*.docs.example.com']`. GitHub warns
+  that wildcards let codes reach any subdomain; with PKCE such a code is useless without the
+  verifier, which never leaves the tab that started the sign-in.
 - As with any browser sign-in, code running on the page can read the tokens. Host the editor on
   its own origin and never render untrusted HTML next to it; `gitvfs-cms` sandboxes its previews
   for this reason.

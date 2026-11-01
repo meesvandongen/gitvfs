@@ -145,6 +145,11 @@
   overflow: auto;
 }
 
+/* Singletons have no entry list, so their editor also takes the list's column. */
+.gcms-sidebar + .gcms-main {
+  grid-column: 2 / -1;
+}
+
 .gcms-empty {
   padding: 2rem;
   color: var(--gcms-muted);
@@ -487,5 +492,9 @@
   .gcms-list {
     border-right: 0;
     border-bottom: 1px solid var(--gcms-border);
+  }
+
+  .gcms-sidebar + .gcms-main {
+    grid-column: auto;
   }
 }

@@ -9,4 +9,4 @@ export type {
 } from './client.js'
 export { codeChallenge, createPkcePair, randomString } from './pkce.js'
 export type { PkcePair } from './pkce.js'
-export type { TokenRequest, TokenResponse } from './protocol.js'
+export type { SignOutRequest, TokenRequest, TokenResponse } from './protocol.js'

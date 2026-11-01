@@ -78,9 +78,29 @@ const fs = new GitFS({
 
 Errors are `GitHubAuthError`s with a `code`: `not_signed_in`, `session_expired`, `state_mismatch`, `token_exchange_failed`, or GitHub's own error (`access_denied`, `bad_verification_code`, `bad_refresh_token`, …).
 
-Tokens live in `sessionStorage` by default. Pass `storage: 'memory'` to keep them only for the current page load (the PKCE verifier still survives the redirect), or `storage: 'local'` to keep them across browser restarts.
+## Where tokens live
+
+By default, tokens (including the refresh token) live in `sessionStorage`. Pass `storage: 'memory'` to keep them only for the current page load (the PKCE verifier still survives the redirect), or `storage: 'local'` to keep them across browser restarts.
+
+Any script on the page can read web storage. **Cookie sessions** keep the refresh token out of JavaScript altogether:
+
+```ts
+// server
+createTokenHandler({ clientId, clientSecret, allowedOrigins, session: { secret: env.GITHUB_SESSION_SECRET, path: '/api/github' } })
+
+// browser
+const auth = createGitHubAuth({ clientId, tokenUrl: '/api/github/token', session: 'cookie' })
+await auth.handleRedirect()
+if (!(await auth.restoreSession())) await auth.login()
+```
+
+- The handler seals the refresh token with [kukkii](https://github.com/meesvandongen/kukkii) (iron: AES-256-CBC plus HMAC-SHA256). It stores the result in an `HttpOnly`, `Secure`, `SameSite=Strict` cookie, and rotates it on every refresh.
+- The sealed payload carries its own expiry, so a copied cookie stops working when the session ends, and it reveals nothing about the token.
+- The browser holds only the short-lived access token (8 hours for GitHub Apps), in `storage`. API requests go straight from the browser to `api.github.com` with it; nothing is proxied. When it expires or is missing, `restoreSession()` and `auth.token` get a new one through the cookie, and `signOut()` has the handler clear the cookie.
+- For OAuth Apps without expiring tokens, the cookie holds the access token instead.
+- The secret must be at least 32 characters (`openssl rand -base64 32`).
 
 ## Limits
 
-- Callback URLs are matched exactly, without wildcards, so a sign-in only works on the URLs registered with the app. Preview deployments on other hostnames need their own callback URL. A GitHub App accepts up to ten.
+- GitHub matches the redirect URL against the app's callback URLs (a GitHub App accepts up to ten). For preview deployments on subdomains, enable **wildcard matching** on the callback URL. Then `https://docs.example.com/admin` also accepts `https://<preview>.docs.example.com/admin`. Allow the same origins in the handler with a pattern: `allowedOrigins: ['https://*.docs.example.com']` matches one subdomain label (see `originMatcher`). PKCE keeps a code that lands on another subdomain useless without the verifier.
 - Anything with access to the page can read the tokens, which holds for any browser-based sign-in. Keep the editor on its own origin and do not render untrusted HTML next to it.

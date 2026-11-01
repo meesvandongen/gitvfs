@@ -197,8 +197,19 @@ export class GitFS {
           ? change.content
           : encodeText(change.content)
       }
+      if (change.action === 'move' && change.previousPath) {
+        // A pending rename: the content still lives at the old path remotely.
+        const content = await this.readRemote(change.previousPath)
+        return options?.encoding === 'utf-8' ? decodeText(content) : content
+      }
     }
 
+    const content = await this.readRemote(normalized)
+    return options?.encoding === 'utf-8' ? decodeText(content) : content
+  }
+
+  /** Read a file from the read branch, ignoring pending changes. */
+  private async readRemote(normalized: string): Promise<Uint8Array> {
     const entry = await this.findEntry(normalized)
     if (!entry || entry.type !== 'blob') {
       throw new NotFoundError(`File not found: ${normalized}`)
@@ -208,7 +219,7 @@ export class GitFS {
     const cached = await this.cache.getFileContent(this.readBranch, normalized)
     if (cached) {
       this.rememberFile(cached)
-      return options?.encoding === 'utf-8' ? decodeText(cached.content) : cached.content
+      return cached.content
     }
 
     // Fetch from provider
@@ -216,8 +227,7 @@ export class GitFS {
     this.rememberFile(file)
     this.rememberSyntheticDirectories(normalized)
     await this.cache.setFileContent(this.readBranch, normalized, file)
-
-    return options?.encoding === 'utf-8' ? decodeText(file.content) : file.content
+    return file.content
   }
 
   /** List directory entries. */
@@ -360,25 +370,23 @@ export class GitFS {
     this.scheduleAutoCommit()
   }
 
-  /** Stage a rename (move). */
+  /** Stage a rename (move). Pending edits to the file move along with it. */
   rename(oldPath: string, newPath: string): void {
     const normOld = normalize(oldPath)
     const normNew = normalize(newPath)
+    if (normOld === normNew) return
 
-    // If the file has pending content in the buffer, use that
     const existing = this.buffer.get(normOld)
-    if (existing && existing.content !== undefined) {
-      this.buffer.add({ action: 'delete', path: normOld })
-      this.buffer.add({ action: 'create', path: normNew, content: existing.content })
+    if (existing?.action === 'move') {
+      // Renamed again: keep moving from the original path, whose deletion is already staged.
+      this.buffer.remove(normOld)
+      this.buffer.add({ ...existing, path: normNew })
     } else {
-      this.buffer.add({
-        action: 'move',
-        path: normNew,
-        previousPath: normOld,
-      })
-      // Also mark old path as deleted for overlay
+      this.buffer.add({ action: 'move', path: normNew, previousPath: normOld, content: existing?.content })
+      // Mark the old path as deleted for overlay reads; the move implies it at commit time.
       this.buffer.add({ action: 'delete', path: normOld })
     }
+    this.rememberSyntheticDirectories(normNew)
     this.scheduleAutoCommit()
   }
 
@@ -394,10 +402,10 @@ export class GitFS {
 
   /** Commit pending changes to the remote. */
   async commit(message: string): Promise<CommitResult> {
-    const changes = this.buffer.all()
-    if (changes.length === 0) {
+    if (this.buffer.size === 0) {
       throw new Error('No changes to commit')
     }
+    const changes = await this.resolveChanges()
 
     // Ensure we have the head SHA for the write branch
     let headSha: string
@@ -446,6 +454,37 @@ export class GitFS {
     this.lastHeadValidationAt = this.headSha === null ? 0 : Date.now()
 
     return result
+  }
+
+  /**
+   * The pending changes as providers need them. Moves carry the file's content, since not every
+   * provider can move a file without it (GitHub's API cannot), and imply the deletion that
+   * `rename` stages for overlay reads. A move from a path that never existed remotely, such as a
+   * file created in this batch, is a plain create.
+   */
+  private async resolveChanges(): Promise<Change[]> {
+    const pending = this.buffer.all()
+    const movedFrom = new Set(
+      pending.filter((c) => c.action === 'move' && c.previousPath).map((c) => c.previousPath),
+    )
+    const changes: Change[] = []
+    for (const change of pending) {
+      if (change.action === 'delete' && movedFrom.has(change.path)) continue
+      if (change.action !== 'move' || !change.previousPath) {
+        changes.push(change)
+        continue
+      }
+      const sourceExists = (await this.findEntry(change.previousPath))?.type === 'blob'
+      if (!sourceExists) {
+        if (change.content === undefined) throw new NotFoundError(`File not found: ${change.previousPath}`)
+        changes.push({ action: 'create', path: change.path, content: change.content })
+      } else if (change.content === undefined) {
+        changes.push({ ...change, content: await this.readRemote(change.previousPath) })
+      } else {
+        changes.push(change)
+      }
+    }
+    return changes
   }
 
   /** Create a new branch from the current read branch. */

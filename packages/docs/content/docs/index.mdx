@@ -7,6 +7,9 @@ gitvfs is a small family of packages for apps that keep their data in a Git repo
 it straight from the browser, through the GitHub or GitLab API. There is no server to run and no
 database to keep in sync: the repository is the source of truth, and every change is a commit.
 
+Try everything in the [CMS demo](https://demo.cms.gitvfs.mvd.im/): it runs the real editor against a
+GitHub API mocked in your browser, so you can create, edit and delete freely.
+
 <Cards>
   <Card title="gitvfs" href="/docs/gitvfs" description="Read, stage and commit files with a filesystem-style API." />
   <Card title="gitvfs-cms" href="/docs/cms" description="Edit markdown, JSON and YAML content with forms and a live preview." />
@@ -23,6 +26,7 @@ database to keep in sync: the repository is the source of truth, and every chang
 | `gitvfs-cms` | Content types described with zod (`defineCollection`, `defineSingleton`) and a `GitCms` that reads, validates and commits them. |
 | `gitvfs-cms/react` | `CmsApp`, a complete editor UI built with [AutoForm](https://autoform.vantezzen.io/), plus the pieces to build your own. |
 | `gitvfs-cms/oidc` | A token provider backed by [oidc-spa](https://www.oidc-spa.dev/), so users sign in instead of pasting tokens. |
+| `gitvfs-github-msw` | A [Mock Service Worker](https://mswjs.io) mock of the GitHub API that gitvfs uses, backed by an in-browser repository: for demos and tests. |
 | `gitvfs-github-auth` | Sign in with GitHub from the browser (PKCE), plus `gitvfs-github-auth/server`, the token exchange handler GitHub's secret requires. |
 
 ## These docs edit themselves
