@@ -1,12 +1,19 @@
 import { describe, it, expect, vi, beforeEach } from 'vite-plus/test'
 import { gitlab } from '../../src/providers/gitlab'
-import type { GitProvider } from '../../src/types/provider'
+import type { GitRepository } from '../../src/types/provider'
+
+
+async function collect<T>(items: AsyncIterable<T>): Promise<T[]> {
+  const result: T[] = []
+  for await (const item of items) result.push(item)
+  return result
+}
 
 describe('GitLab Provider', () => {
-  let provider: GitProvider
+  let repository: GitRepository
 
   beforeEach(() => {
-    provider = gitlab({ token: 'test-token', projectId: '12345' })
+    repository = gitlab({ token: 'test-token' }).repository('acme/website')
     vi.restoreAllMocks()
   })
 
@@ -22,7 +29,7 @@ describe('GitLab Provider', () => {
       ),
     )
 
-    const entries = await provider.readdir('main', 'src')
+    const entries = await repository.readdir('main', 'src')
     expect(entries).toEqual([
       { path: 'src/index.ts', type: 'blob', sha: 'blob-sha-1' },
       { path: 'src/lib', type: 'tree', sha: 'tree-sha-1' },
@@ -38,7 +45,7 @@ describe('GitLab Provider', () => {
       ),
     )
 
-    const branch = await provider.getBranch('main')
+    const branch = await repository.getBranch('main')
     expect(branch).toEqual({ name: 'main', sha: 'abc123' })
   })
 
@@ -50,12 +57,11 @@ describe('GitLab Provider', () => {
       ),
     )
 
-    const branch = await provider.createBranch('feature/new', 'from-sha')
+    const branch = await repository.createBranch('feature/new', 'from-sha')
     expect(branch.name).toBe('feature/new')
   })
 
   it('getFile fetches via REST with base64 decoding', async () => {
-    // First call: project info (for getFullPath)
     const fetchSpy = vi.spyOn(globalThis, 'fetch')
 
     // REST call for file
@@ -71,7 +77,7 @@ describe('GitLab Provider', () => {
       ),
     )
 
-    const file = await provider.getFile('main', 'readme.md')
+    const file = await repository.getFile('main', 'readme.md')
     expect(new TextDecoder().decode(file.content)).toBe('Hello')
     expect(file.sha).toBe('blob-sha-1')
   })
@@ -86,7 +92,7 @@ describe('GitLab Provider', () => {
       ),
     )
 
-    const result = await provider.commit({
+    const result = await repository.commit({
       branch: 'main',
       message: 'Add file',
       changes: [
@@ -107,5 +113,62 @@ describe('GitLab Provider', () => {
     expect(body.actions).toHaveLength(2)
     expect(body.actions[0].action).toBe('create')
     expect(body.actions[1].action).toBe('delete')
+  })
+})
+
+describe('GitLab provider (account level)', () => {
+  beforeEach(() => vi.restoreAllMocks())
+
+  const project = (fullPath: string, visibility = 'private') => ({
+    path_with_namespace: fullPath,
+    path: fullPath.split('/').at(-1),
+    namespace: { full_path: fullPath.split('/').slice(0, -1).join('/') },
+    default_branch: 'main',
+    visibility,
+    description: null,
+    web_url: `https://gitlab.example.com/${fullPath}`,
+    last_activity_at: '2026-10-01T00:00:00Z',
+  })
+
+  it('lists projects across pages, with subgroups in the owner', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch')
+    fetchSpy.mockResolvedValueOnce(
+      new Response(JSON.stringify([project('acme/web/site')]), {
+        status: 200,
+        // No Link header: fall back to X-Next-Page.
+        headers: { 'X-Next-Page': '2' },
+      }),
+    )
+    fetchSpy.mockResolvedValueOnce(new Response(JSON.stringify([project('ada/notes', 'public')]), { status: 200 }))
+
+    const repos = await collect(gitlab({ token: 't', apiUrl: 'https://gitlab.example.com/' }).listRepositories())
+    expect(repos).toEqual([
+      {
+        fullName: 'acme/web/site',
+        name: 'site',
+        owner: 'acme/web',
+        defaultBranch: 'main',
+        private: true,
+        description: null,
+        webUrl: 'https://gitlab.example.com/acme/web/site',
+        updatedAt: '2026-10-01T00:00:00Z',
+      },
+      expect.objectContaining({ fullName: 'ada/notes', private: false }),
+    ])
+    expect((fetchSpy.mock.calls[0][0] as string)).toContain('https://gitlab.example.com/api/v4/projects?membership=true')
+    expect(new URL((fetchSpy.mock.calls[1][0] as string)).searchParams.get('page')).toBe('2')
+  })
+
+  it('opens projects by full path and skips the path lookup for GraphQL', async () => {
+    const fetchSpy = vi.spyOn(globalThis, 'fetch').mockResolvedValueOnce(
+      new Response(JSON.stringify({ name: 'main', commit: { id: 'abc' } }), { status: 200 }),
+    )
+    const gl = gitlab({ token: 't' })
+    expect(gl.name).toBe('gitlab')
+    await gl.repository('acme/web/site').getBranch('main')
+    expect((fetchSpy.mock.calls[0][0] as string)).toBe(
+      'https://gitlab.com/api/v4/projects/acme%2Fweb%2Fsite/repository/branches/main',
+    )
+    expect(() => gl.repository('site')).toThrow(TypeError)
   })
 })

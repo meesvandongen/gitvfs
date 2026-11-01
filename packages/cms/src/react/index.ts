@@ -1,6 +1,8 @@
 export { CmsApp } from './CmsApp.js'
 export type { CmsAppProps, CmsView } from './CmsApp.js'
 export { DocumentEditor } from './DocumentEditor.js'
+export { RepositoryPicker } from './RepositoryPicker.js'
+export type { RepositoryPickerProps } from './RepositoryPicker.js'
 export type { DocumentEditorProps, SavedDocument } from './DocumentEditor.js'
 export {
   ContentForm,

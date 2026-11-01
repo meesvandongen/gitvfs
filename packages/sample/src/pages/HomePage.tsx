@@ -83,7 +83,7 @@ export function HomePage() {
       const nextProfile = await fetchUserProfile(activeProvider, normalizedToken, activeProviderConfig.apiUrl)
       setProfile(nextProfile)
       setStatusMessage(`Saved your ${providerName} token in local storage for this browser.`)
-      navigate({ to: '/repositories' })
+      void navigate({ to: '/repositories' })
     } catch (error) {
       setProfile(null)
       setErrorMessage(

@@ -46,7 +46,7 @@ Store the secret with `wrangler secret put GITHUB_CLIENT_SECRET`, not in code.
 ## Browser
 
 ```ts
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createGitHubAuth } from 'gitvfs-github-auth'
 
@@ -62,8 +62,8 @@ if (!auth.isSignedIn()) {
   await auth.login() // redirects to GitHub
 }
 
-const fs = new GitFS({
-  provider: github({ owner: 'acme', repo: 'site', token: auth.token }),
+const fs = new GitVFS({
+  repository: github({ token: auth.token }).repository('acme/site'),
   branch: 'main',
 })
 ```

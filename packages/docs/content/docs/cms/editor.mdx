@@ -45,6 +45,37 @@ Replace the rendered preview per collection:
 <CmsApp cms={cms} previews={{ posts: ({ values }) => <PostCard post={values} /> }} />
 ```
 
+## Choosing a repository
+
+When users sign in, let them pick the repository to edit instead of fixing it in code.
+`RepositoryPicker` lists what the provider returns, with a search box, and hands back the choice:
+
+```tsx
+import { RepositoryPicker } from 'gitvfs-cms/react'
+
+function Admin({ gh }: { gh: GitProvider }) {
+  const [cms, setCms] = useState<GitCms>()
+  if (!cms) {
+    return (
+      <RepositoryPicker
+        provider={gh}
+        onSelect={(repo) =>
+          setCms(createCms({
+            fs: new GitVFS({ repository: gh.repository(repo.fullName), branch: repo.defaultBranch ?? 'main' }),
+            collections: [posts],
+          }))
+        }
+      />
+    )
+  }
+  return <CmsApp cms={cms} />
+}
+```
+
+Pass `filter` to offer only some repositories, for example those under your organization, and
+`onCancel` to show a Cancel button when users switch from a repository they already have open.
+The [CMS demo](https://demo.cms.gitvfs.mvd.im) does this with **Switch repository**.
+
 ## Building your own UI
 
 `CmsApp` is assembled from exported parts, so you can embed only what you need:

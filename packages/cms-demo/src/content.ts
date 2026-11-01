@@ -310,3 +310,49 @@ Welcome! This body is markdown too.
 `,
   'data/theme.yml': 'mode: system\nfontSize: 16\nradius: 8\n',
 }
+
+/** A second repository with the same content model, to show switching with the repository picker. */
+export const labsSeedFiles: Record<string, string> = {
+  'README.md': '# Acme Labs\n\nExperiments from the Acme team.\n',
+  'content/posts/hello-from-labs.md': `---
+title: Hello from Acme Labs
+date: 2026-10-20
+category: news
+tags:
+  - labs
+featured: true
+author:
+  name: Grace Hopper
+---
+
+This post lives in a different repository, **acme/labs**. You opened it with the repository
+picker: the CMS lists what the signed-in account can reach and edits whichever one you choose.
+`,
+  'data/authors/grace-hopper.json': `${JSON.stringify(
+    { name: 'Grace Hopper', role: 'editor', bio: 'Runs the lab.', color: '#b45309', socials: [] },
+    null,
+    2,
+  )}\n`,
+  'data/site.json': `${JSON.stringify(
+    {
+      title: 'Acme Labs',
+      tagline: 'Experiments, kept in Git.',
+      url: 'https://labs.example.com',
+      accent: '#b45309',
+      maintenance: false,
+      nav: [{ label: 'Blog', href: '/blog' }],
+    },
+    null,
+    2,
+  )}\n`,
+  'content/index.md': `---
+title: Acme Labs
+cta:
+  label: Read the blog
+  href: /blog
+---
+
+What we are trying next.
+`,
+  'data/theme.yml': 'mode: dark\nfontSize: 15\nradius: 4\n',
+}

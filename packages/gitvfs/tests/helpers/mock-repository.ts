@@ -1,5 +1,5 @@
 import type {
-  GitProvider,
+  GitRepository,
   TreeEntry,
   FileContent,
   BranchInfo,
@@ -24,7 +24,7 @@ interface MockBranch {
   files: MockFile[]
 }
 
-export class MockProvider implements GitProvider {
+export class MockRepository implements GitRepository {
   branches: Map<string, MockBranch> = new Map()
   commitCount = 0
   lastCommitShaCallCount = 0

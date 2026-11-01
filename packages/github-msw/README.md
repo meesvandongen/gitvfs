@@ -8,6 +8,7 @@ It powers the [gitvfs-cms demo](../cms-demo), where visitors can create, edit an
 
 | Endpoint | Used by gitvfs for |
 | --- | --- |
+| `GET /user/repos` | `listRepositories()`: every mocked repository (describe each with `details`) |
 | `GET /repos/:owner/:repo/git/ref/heads/:branch` | branch heads, cache invalidation |
 | `POST /repos/:owner/:repo/git/refs`, `DELETE …/git/refs/heads/:branch` | creating and deleting branches |
 | `GET /repos/:owner/:repo/git/commits/:sha`, `…/git/trees/:sha?recursive=1` | recursive listings |
@@ -30,11 +31,16 @@ const { repository, save, reset } = await persistentRepository({
   seed: () => MockRepository.create({ files: { 'content/hello.md': '# Hello\n' } }),
 })
 
-await setupWorker(...createGitHubHandlers({ repository, owner: 'acme', repo: 'site', onChange: save })).start()
+await setupWorker(
+  ...createGitHubHandlers({ repositories: [{ owner: 'acme', repo: 'site', repository }], onChange: save }),
+).start()
 
 // Anything using gitvfs now talks to the mock:
-const fs = new GitFS({ provider: github({ owner: 'acme', repo: 'site', token: 'demo' }), branch: 'main' })
+const gh = github({ token: 'demo' })
+const fs = new GitVFS({ repository: gh.repository('acme/site'), branch: 'main' })
 ```
+
+List more entries in `repositories` to serve several; `details` sets the description, visibility and default branch that `/user/repos` reports. `onChange` receives the repository that changed.
 
 `persistentRepository` saves the repository to `localStorage` after every change and restores it on the next visit. `reset()` goes back to the seed.
 

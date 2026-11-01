@@ -15,7 +15,7 @@ import {
   fetchUserProfile,
 } from '../lib/user-profile'
 
-const PROJECT_GITHUB_URL = 'https://github.com/meesvandongen/git-fs'
+const PROJECT_GITHUB_URL = 'https://github.com/meesvandongen/gitvfs'
 
 export function AppFrame() {
   const session = useSyncExternalStore(

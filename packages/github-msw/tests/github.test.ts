@@ -1,5 +1,5 @@
 import { setupServer } from 'msw/node'
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createGitHubHandlers, MockRepository, persistentRepository, type StorageLike } from '../src'
 
@@ -21,15 +21,13 @@ async function setup(files: Record<string, string> = {}) {
   const changes: string[] = []
   server.use(
     ...createGitHubHandlers({
-      repository,
-      owner: 'acme',
-      repo: 'site',
+      repositories: [{ owner: 'acme', repo: 'site', repository, details: { description: 'The Acme website', private: true } }],
       onChange: () => void changes.push(repository.branchHead('main')!),
     }),
   )
-  const provider = github({ owner: 'acme', repo: 'site', token: 'demo-token' })
-  const fs = new GitFS({ provider, branch: 'main', cache: 'none' })
-  return { repository, provider, fs, changes }
+  const remote = github({ token: 'demo-token' }).repository('acme/site')
+  const fs = new GitVFS({ repository: remote, branch: 'main', cache: 'none' })
+  return { repository, remote, fs, changes }
 }
 
 describe('gitvfs against the GitHub mock', () => {
@@ -79,7 +77,7 @@ describe('gitvfs against the GitHub mock', () => {
     expect(changes).toEqual([result.sha])
 
     // A fresh reader sees the new head.
-    const reader = new GitFS({ provider: github({ owner: 'acme', repo: 'site', token: 't' }), branch: 'main', cache: 'none' })
+    const reader = new GitVFS({ repository: github({ token: 't' }).repository('acme/site'), branch: 'main', cache: 'none' })
     expect(await reader.readFile('content/posts/new.md', { encoding: 'utf-8' })).toBe('---\ntitle: New\n---\n')
   })
 
@@ -131,8 +129,8 @@ describe('gitvfs against the GitHub mock', () => {
   })
 
   it('creates branches and commits to a separate write branch', async () => {
-    const { repository, provider } = await setup()
-    const fs = new GitFS({ provider, branch: 'main', writeBranch: 'drafts', cache: 'none' })
+    const { repository, remote } = await setup()
+    const fs = new GitVFS({ repository: remote, branch: 'main', writeBranch: 'drafts', cache: 'none' })
     fs.writeFile('content/posts/draft.md', 'draft\n')
     await fs.commit('Draft')
     expect(repository.branchNames().sort()).toEqual(['drafts', 'main'])
@@ -155,10 +153,67 @@ describe('gitvfs against the GitHub mock', () => {
     expect((await fetch('https://api.github.com/graphql', { method: 'POST', body: '{}' })).status).toBe(401)
   })
 
+  it('lists the repository for github({ token }).listRepositories()', async () => {
+    const { repository } = await setup()
+    const repos = []
+    for await (const repo of github({ token: 't' }).listRepositories()) repos.push(repo)
+    expect(repos).toEqual([
+      {
+        fullName: 'acme/site',
+        name: 'site',
+        owner: 'acme',
+        defaultBranch: 'main',
+        private: true,
+        description: 'The Acme website',
+        webUrl: 'https://github.com/acme/site',
+        updatedAt: repository.getCommit(repository.branchHead('main')!)!.date,
+      },
+    ])
+  })
+
   it('computes git blob ids', async () => {
     const { repository } = await setup({ 'hello.txt': 'hello\n' })
     // `printf 'hello\n' | git hash-object --stdin`
     expect(repository.readFile('main', 'hello.txt')!.sha).toBe('ce013625030ba8dba906f756967f9e9ca394464a')
+  })
+})
+
+describe('several repositories', () => {
+  it('lists them all and routes reads and commits to the right one', async () => {
+    const site = await MockRepository.create({ files: { 'README.md': '# Site\n' } })
+    const blog = await MockRepository.create({ files: { 'README.md': '# Blog\n' } })
+    const changed: MockRepository[] = []
+    server.use(
+      ...createGitHubHandlers({
+        repositories: [
+          { owner: 'acme', repo: 'site', repository: site },
+          { owner: 'acme', repo: 'blog', repository: blog, details: { description: 'Company blog' } },
+        ],
+        onChange: (repository) => void changed.push(repository),
+      }),
+    )
+    // The blog gets the newest commit, so it is listed first.
+    await blog.commit({ branch: 'main', message: 'Post', additions: [{ path: 'post.md', content: new TextEncoder().encode('hi') }] })
+
+    const gh = github({ token: 't' })
+    const names = []
+    for await (const repo of gh.listRepositories()) names.push([repo.fullName, repo.description])
+    expect(names).toEqual([
+      ['acme/blog', 'Company blog'],
+      ['acme/site', null],
+    ])
+
+    const fs = new GitVFS({ repository: gh.repository('acme/blog'), branch: 'main', cache: 'none' })
+    expect(await fs.readFile('README.md', { encoding: 'utf-8' })).toBe('# Blog\n')
+    fs.writeFile('second.md', 'two')
+    await fs.commit('Second post')
+    expect(blog.readFile('main', 'second.md')).toBeDefined()
+    expect(site.readFile('main', 'second.md')).toBeUndefined()
+    expect(changed).toEqual([blog])
+  })
+
+  it('requires at least one repository', () => {
+    expect(() => createGitHubHandlers({ repositories: [] })).toThrow(TypeError)
   })
 })
 

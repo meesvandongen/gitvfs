@@ -1,7 +1,7 @@
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { z } from 'zod'
 import { ContentValidationError, createCms, defineCollection, defineSingleton, markdown } from '../src'
-import { MemoryProvider } from './helpers/memory-provider'
+import { MemoryRepository } from './helpers/memory-repository'
 
 const posts = defineCollection({
   name: 'posts',
@@ -22,10 +22,10 @@ const settings = defineSingleton({
 })
 
 function setup(files: Record<string, string> = {}) {
-  const provider = new MemoryProvider(files)
-  const fs = new GitFS({ provider, branch: 'main', cache: 'none' })
+  const remote = new MemoryRepository(files)
+  const fs = new GitVFS({ repository: remote, branch: 'main', cache: 'none' })
   const cms = createCms({ fs, collections: [posts], singletons: [settings] })
-  return { provider, cms }
+  return { remote, cms }
 }
 
 describe('GitCms collections', () => {
@@ -63,16 +63,16 @@ describe('GitCms collections', () => {
   })
 
   it('creates an entry as one commit', async () => {
-    const { cms, provider } = setup({ 'README.md': 'hi' })
+    const { cms, remote } = setup({ 'README.md': 'hi' })
     const result = await cms.saveEntry('posts', {
       slug: 'hello',
       data: { title: 'Hello', date: '2024-05-01', body: '# Hi' },
     })
     expect(result.path).toBe('content/posts/hello.md')
-    expect(provider.text('content/posts/hello.md')).toBe(
+    expect(remote.text('content/posts/hello.md')).toBe(
       '---\ntitle: Hello\ndate: 2024-05-01\ndraft: false\n---\n\n# Hi\n',
     )
-    expect(provider.commits.at(-1)?.message).toBe('Create content/posts/hello.md')
+    expect(remote.commits.at(-1)?.message).toBe('Create content/posts/hello.md')
   })
 
   it('refuses to overwrite an existing entry when creating', async () => {
@@ -83,37 +83,37 @@ describe('GitCms collections', () => {
   })
 
   it('keeps frontmatter keys the schema does not know about', async () => {
-    const { cms, provider } = setup({
+    const { cms, remote } = setup({
       'content/posts/a.md': '---\ntitle: Alpha\nlayout: wide\n---\nOld body\n',
     })
     await cms.saveEntry('posts', { slug: 'a', previousSlug: 'a', data: { title: 'Alpha 2', body: 'New body' } })
-    expect(provider.text('content/posts/a.md')).toBe(
+    expect(remote.text('content/posts/a.md')).toBe(
       '---\ntitle: Alpha 2\nlayout: wide\ndraft: false\n---\n\nNew body\n',
     )
-    expect(provider.commits.at(-1)?.message).toBe('Update content/posts/a.md')
+    expect(remote.commits.at(-1)?.message).toBe('Update content/posts/a.md')
   })
 
   it('renames when the slug changes', async () => {
-    const { cms, provider } = setup({ 'content/posts/a.md': '---\ntitle: Alpha\n---\nBody\n' })
+    const { cms, remote } = setup({ 'content/posts/a.md': '---\ntitle: Alpha\n---\nBody\n' })
     await cms.saveEntry('posts', { slug: 'alpha', previousSlug: 'a', data: { title: 'Alpha', body: 'Body' } })
-    expect(provider.text('content/posts/a.md')).toBeUndefined()
-    expect(provider.text('content/posts/alpha.md')).toContain('title: Alpha')
-    expect(provider.commits.at(-1)?.message).toBe('Rename content/posts/a.md to content/posts/alpha.md')
+    expect(remote.text('content/posts/a.md')).toBeUndefined()
+    expect(remote.text('content/posts/alpha.md')).toContain('title: Alpha')
+    expect(remote.commits.at(-1)?.message).toBe('Rename content/posts/a.md to content/posts/alpha.md')
   })
 
   it('deletes an entry', async () => {
-    const { cms, provider } = setup({ 'content/posts/a.md': 'x', 'content/posts/b.md': 'y' })
+    const { cms, remote } = setup({ 'content/posts/a.md': 'x', 'content/posts/b.md': 'y' })
     await cms.deleteEntry('posts', 'a')
-    expect(provider.text('content/posts/a.md')).toBeUndefined()
+    expect(remote.text('content/posts/a.md')).toBeUndefined()
     expect((await cms.listEntries('posts')).map((e) => e.slug)).toEqual(['b'])
   })
 
   it('validates before writing anything', async () => {
-    const { cms, provider } = setup({ 'README.md': 'hi' })
+    const { cms, remote } = setup({ 'README.md': 'hi' })
     await expect(cms.saveEntry('posts', { slug: 'x', data: { title: '' } })).rejects.toBeInstanceOf(
       ContentValidationError,
     )
-    expect(provider.commits).toHaveLength(0)
+    expect(remote.commits).toHaveLength(0)
     expect(cms.fs.status()).toEqual([])
   })
 
@@ -125,8 +125,8 @@ describe('GitCms collections', () => {
   })
 
   it('discards staged changes when a commit fails', async () => {
-    const { cms, provider } = setup({ 'README.md': 'hi' })
-    provider.commit = async () => {
+    const { cms, remote } = setup({ 'README.md': 'hi' })
+    remote.commit = async () => {
       throw new Error('boom')
     }
     await expect(
@@ -136,12 +136,12 @@ describe('GitCms collections', () => {
   })
 
   it('runs concurrent saves one after another', async () => {
-    const { cms, provider } = setup({ 'README.md': 'hi' })
+    const { cms, remote } = setup({ 'README.md': 'hi' })
     await Promise.all([
       cms.saveEntry('posts', { slug: 'one', data: { title: 'One', body: '' } }),
       cms.saveEntry('posts', { slug: 'two', data: { title: 'Two', body: '' } }),
     ])
-    expect(provider.commits.map((c) => c.changes.map((change) => change.path))).toEqual([
+    expect(remote.commits.map((c) => c.changes.map((change) => change.path))).toEqual([
       ['content/posts/one.md'],
       ['content/posts/two.md'],
     ])
@@ -160,14 +160,14 @@ describe('GitCms singletons', () => {
   })
 
   it('creates and updates a singleton', async () => {
-    const { cms, provider } = setup({ 'README.md': 'hi' })
+    const { cms, remote } = setup({ 'README.md': 'hi' })
     await cms.saveSingleton('settings', { title: 'My site' })
-    expect(provider.text('data/site.json')).toBe('{\n  "title": "My site"\n}\n')
-    expect(provider.commits.at(-1)?.message).toBe('Create data/site.json')
+    expect(remote.text('data/site.json')).toBe('{\n  "title": "My site"\n}\n')
+    expect(remote.commits.at(-1)?.message).toBe('Create data/site.json')
 
     await cms.saveSingleton('settings', { title: 'Renamed', description: 'Hi' })
-    expect(JSON.parse(provider.text('data/site.json')!)).toEqual({ title: 'Renamed', description: 'Hi' })
-    expect(provider.commits.at(-1)?.message).toBe('Update data/site.json')
+    expect(JSON.parse(remote.text('data/site.json')!)).toEqual({ title: 'Renamed', description: 'Hi' })
+    expect(remote.commits.at(-1)?.message).toBe('Update data/site.json')
   })
 })
 
@@ -185,7 +185,7 @@ describe('content type definitions', () => {
   })
 
   it('rejects duplicate names', () => {
-    const fs = new GitFS({ provider: new MemoryProvider(), branch: 'main' })
+    const fs = new GitVFS({ repository: new MemoryRepository(), branch: 'main' })
     expect(() => createCms({ fs, collections: [posts], singletons: [{ ...settings, name: 'posts' }] })).toThrow(
       /Duplicate/,
     )

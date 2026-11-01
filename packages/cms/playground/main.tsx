@@ -1,14 +1,14 @@
 import { StrictMode } from 'react'
 import { createRoot } from 'react-dom/client'
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { z } from 'zod'
 import { createCms, defineCollection, defineSingleton, field, markdown, textarea } from '../src'
 import { CmsApp } from '../src/react'
-import { MemoryProvider } from '../tests/helpers/memory-provider'
+import { MemoryRepository } from '../tests/helpers/memory-repository'
 import '../src/styles.css'
 
 // Everything lives in memory: reload the page to start over.
-const provider = new MemoryProvider({
+const repository = new MemoryRepository({
   'content/posts/hello-world.md': `---
 title: Hello world
 date: 2024-05-01
@@ -71,7 +71,7 @@ const site = defineSingleton({
 })
 
 const cms = createCms({
-  fs: new GitFS({ provider, branch: 'main', cache: 'none' }),
+  fs: new GitVFS({ repository, branch: 'main', cache: 'none' }),
   collections: [posts, pages],
   singletons: [site],
 })

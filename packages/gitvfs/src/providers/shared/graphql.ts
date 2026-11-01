@@ -1,4 +1,4 @@
-import { AuthError, NetworkError, RateLimitError, GitFSError } from '../../types/errors.js'
+import { AuthError, NetworkError, RateLimitError, GitVFSError } from '../../types/errors.js'
 import type { TokenProvider } from './http.js'
 
 export interface GraphQLOptions {
@@ -37,14 +37,14 @@ export function createFetchGraphQL(options: GraphQLOptions) {
 
     if (!response.ok) {
       const text = await response.text().catch(() => '')
-      throw new GitFSError(`GraphQL HTTP ${response.status}: ${text}`, 'HTTP_ERROR')
+      throw new GitVFSError(`GraphQL HTTP ${response.status}: ${text}`, 'HTTP_ERROR')
     }
 
     const json = (await response.json()) as { data?: T; errors?: Array<{ message: string }> }
 
     if (json.errors?.length) {
       const msg = json.errors.map((e) => e.message).join('; ')
-      throw new GitFSError(`GraphQL error: ${msg}`, 'GRAPHQL_ERROR')
+      throw new GitVFSError(`GraphQL error: ${msg}`, 'GRAPHQL_ERROR')
     }
 
     return json.data as T

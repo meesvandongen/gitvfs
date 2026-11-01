@@ -22,7 +22,7 @@ fs.discard() // drop everything that is staged
 ## Committing
 
 `commit(message)` turns every staged change into one commit and clears the buffer. It passes the
-expected head commit to the provider, so a commit fails with a `ConflictError` instead of
+expected head commit to the host, so a commit fails with a `ConflictError` instead of
 overwriting work someone pushed in the meantime.
 
 ```ts
@@ -32,7 +32,7 @@ const { sha } = await fs.commit('Publish hello post')
 ## Branches
 
 ```ts
-const fs = new GitFS({ provider, branch: 'main', writeBranch: 'content-edits' })
+const fs = new GitVFS({ repository, branch: 'main', writeBranch: 'content-edits' })
 ```
 
 With a `writeBranch`, reads come from `branch` and commits go to `writeBranch`, which is created
@@ -42,8 +42,8 @@ pull request. Use `createBranch(name)` and `checkout(branch)` to manage branches
 ## Auto-commit
 
 ```ts
-const fs = new GitFS({
-  provider,
+const fs = new GitVFS({
+  repository,
   branch: 'main',
   autoCommit: true,
   autoCommitDelay: 2000,

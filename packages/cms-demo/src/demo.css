@@ -41,6 +41,22 @@ body {
   min-height: 0;
 }
 
+.demo-app .gcms-app--picker {
+  overflow: auto;
+}
+
+.demo-repository {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0.25rem;
+  margin-bottom: 0.75rem;
+}
+
+.demo-repository strong {
+  font: 0.8rem var(--gcms-mono);
+}
+
 .demo-history ol {
   display: flex;
   flex-direction: column;

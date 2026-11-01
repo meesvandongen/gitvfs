@@ -1,5 +1,5 @@
 import { useEffect, useMemo, useState, type FormEvent } from 'react'
-import { AuthError, GitFS, NotFoundError, type TokenProvider } from 'gitvfs'
+import { AuthError, GitVFS, NotFoundError, type TokenProvider } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createCms } from 'gitvfs-cms'
 import { CmsApp } from 'gitvfs-cms/react'
@@ -43,15 +43,19 @@ function errorText(error: unknown): string {
   return error instanceof Error ? error.message : String(error)
 }
 
+function docsRepository(token: TokenProvider) {
+  return github({ token }).repository(`${gitConfig.user}/${gitConfig.repo}`)
+}
+
 /** Check the token can see the repository, and create the branch from the default one if needed. */
 async function ensureBranch({ token, branch }: Session): Promise<void> {
-  const provider = github({ owner: gitConfig.user, repo: gitConfig.repo, token })
+  const repository = docsRepository(token)
   try {
-    await provider.getBranch(branch)
+    await repository.getBranch(branch)
   } catch (error) {
     if (!(error instanceof NotFoundError) || branch === gitConfig.branch) throw error
-    const base = await provider.getBranch(gitConfig.branch)
-    await provider.createBranch(branch, base.sha)
+    const base = await repository.getBranch(gitConfig.branch)
+    await repository.createBranch(branch, base.sha)
   }
 }
 
@@ -154,8 +158,8 @@ function Editor(props: { session: Session; auth: GitHubAuth | null; onSignOut: (
   const cms = useMemo(
     () =>
       createCms({
-        fs: new GitFS({
-          provider: github({ owner: gitConfig.user, repo: gitConfig.repo, token: session.token }),
+        fs: new GitVFS({
+          repository: docsRepository(session.token),
           branch: session.branch,
         }),
         collections,

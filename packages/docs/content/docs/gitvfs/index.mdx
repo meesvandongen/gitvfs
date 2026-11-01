@@ -15,17 +15,11 @@ pnpm add gitvfs
 ## Quick start
 
 ```ts
-import { GitFS } from 'gitvfs'
+import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 
-const fs = new GitFS({
-  provider: github({
-    owner: 'acme',
-    repo: 'docs',
-    token: () => localStorage.getItem('github_token') ?? '',
-  }),
-  branch: 'main',
-})
+const gh = github({ token: () => localStorage.getItem('github_token') ?? '' })
+const fs = new GitVFS({ repository: gh.repository('acme/docs'), branch: 'main' })
 
 const readme = await fs.readFile('README.md', { encoding: 'utf-8' })
 fs.writeFile('notes/todo.txt', 'hello from gitvfs\n')
@@ -38,6 +32,7 @@ creates a single commit with every staged change.
 ## Features
 
 - GitHub and GitLab providers, including GitHub Enterprise and self-managed GitLab
+- Repository listing that works the same for both hosts ([Providers and repositories](/docs/gitvfs/providers))
 - Filesystem-like reads: `readFile`, `readdir`, `exists`, `stat`
 - Local staging for writes, deletes and renames, overlaid on reads
 - Separate read and write branches, and optional auto-commit

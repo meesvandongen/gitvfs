@@ -1,5 +1,8 @@
 import type {
   GitProvider,
+  GitRepository,
+  ListRepositoriesOptions,
+  RepositoryInfo,
   TreeEntry,
   FileContent,
   BranchInfo,
@@ -7,28 +10,84 @@ import type {
   CommitResult,
   ReadDirOptions,
 } from '../types/provider.js'
-import { NotFoundError } from '../types/errors.js'
-import { createFetchREST, type TokenProvider } from './shared/http.js'
+import { createFetchREST, createPaginate, type TokenProvider } from './shared/http.js'
+import { matchesSearch, splitFullName } from './shared/repositories.js'
 import { createFetchGraphQL } from './shared/graphql.js'
 import { encodeText, toBase64, fromBase64 } from '../utils/encoding.js'
 import { normalize } from '../utils/path.js'
 import { getGitHash } from '../utils/hash.js'
 
-export interface GitLabOptions {
+export interface GitLabProviderOptions {
+  /** A token, or a function returning one; called before every request. */
   token: TokenProvider
-  projectId: string | number
+  /** Self-managed GitLab: the instance URL. Default: `https://gitlab.com` */
   apiUrl?: string
 }
 
+interface GitLabRepositoryOptions extends GitLabProviderOptions {
+  /** The full path, `group/subgroup/project`. */
+  fullPath: string
+}
+
+function instanceUrl(options: GitLabProviderOptions): string {
+  return (options.apiUrl ?? 'https://gitlab.com').replace(/\/$/, '')
+}
+
+interface GitLabProjectResponse {
+  path_with_namespace: string
+  path: string
+  namespace: { full_path: string }
+  default_branch: string | null
+  visibility: 'private' | 'internal' | 'public'
+  description: string | null
+  web_url: string
+  last_activity_at: string | null
+}
+
 class GitLabProvider implements GitProvider {
+  readonly name = 'gitlab'
+  private paginate: ReturnType<typeof createPaginate>
+
+  constructor(private options: GitLabProviderOptions) {
+    this.paginate = createPaginate({ token: options.token, baseUrl: `${instanceUrl(options)}/api/v4` })
+  }
+
+  async *listRepositories(options: ListRepositoriesOptions = {}): AsyncGenerator<RepositoryInfo> {
+    const path = '/projects?membership=true&per_page=100&order_by=last_activity_at&sort=desc'
+    for await (const page of this.paginate<GitLabProjectResponse>(path, { signal: options.signal })) {
+      for (const raw of page) {
+        const repo: RepositoryInfo = {
+          fullName: raw.path_with_namespace,
+          name: raw.path,
+          owner: raw.namespace?.full_path ?? splitFullName(raw.path_with_namespace).owner,
+          defaultBranch: raw.default_branch,
+          private: raw.visibility !== 'public',
+          description: raw.description,
+          webUrl: raw.web_url,
+          updatedAt: raw.last_activity_at,
+        }
+        if (matchesSearch(repo, options.search)) yield repo
+      }
+    }
+  }
+
+  repository(fullName: string): GitRepository {
+    if (!fullName.includes('/') || fullName.startsWith('/') || fullName.endsWith('/')) {
+      throw new TypeError(`Expected a GitLab project as "group/project", got "${fullName}"`)
+    }
+    return new GitLabRepository({ ...this.options, fullPath: fullName })
+  }
+}
+
+class GitLabRepository implements GitRepository {
+  /** GitLab's REST API takes the URL-encoded full path wherever it takes a project id. */
   private projectId: string
   private fetchREST: ReturnType<typeof createFetchREST>
   private fetchGraphQL: ReturnType<typeof createFetchGraphQL>
-  private fullPath: string | undefined
 
-  constructor(options: GitLabOptions) {
-    this.projectId = String(options.projectId)
-    const baseUrl = options.apiUrl ?? 'https://gitlab.com'
+  constructor(options: GitLabRepositoryOptions) {
+    this.projectId = options.fullPath
+    const baseUrl = instanceUrl(options)
     this.fetchREST = createFetchREST({
       token: options.token,
       baseUrl: `${baseUrl}/api/v4`,
@@ -37,15 +96,6 @@ class GitLabProvider implements GitProvider {
       token: options.token,
       url: `${baseUrl}/api/graphql`,
     })
-  }
-
-  private async getFullPath(): Promise<string> {
-    if (this.fullPath) return this.fullPath
-    const project = (await this.fetchREST(`/projects/${encodeURIComponent(this.projectId)}`)) as {
-      path_with_namespace: string
-    }
-    this.fullPath = project.path_with_namespace
-    return this.fullPath
   }
 
   async readdir(ref: string, path: string, options?: ReadDirOptions): Promise<TreeEntry[]> {
@@ -82,7 +132,7 @@ class GitLabProvider implements GitProvider {
   }
 
   async getFiles(ref: string, paths: string[]): Promise<Map<string, FileContent>> {
-    const fullPath = await this.getFullPath()
+    const fullPath = this.projectId
     const result = new Map<string, FileContent>()
     const chunkSize = 100
 
@@ -245,7 +295,10 @@ class GitLabProvider implements GitProvider {
   }
 }
 
-/** Factory function for creating a GitLab provider. */
-export function gitlab(options: GitLabOptions): GitProvider {
+/**
+ * GitLab as seen by one account. List projects with `listRepositories()`, and get one with
+ * `repository('group/project')` to pass to `GitVFS`.
+ */
+export function gitlab(options: GitLabProviderOptions): GitProvider {
   return new GitLabProvider(options)
 }

@@ -1,5 +1,5 @@
 export { createGitHubHandlers } from './handlers.js'
-export type { GitHubHandlerOptions } from './handlers.js'
+export type { GitHubHandlerOptions, MockedRepository, RepositoryDetails } from './handlers.js'
 export { MockRepository, StaleHeadError, blobSha } from './repository.js'
 export type { CommitInput, CommitRecord, DirectoryEntry, FileEntry, RepositoryState } from './repository.js'
 export { persistentRepository } from './storage.js'

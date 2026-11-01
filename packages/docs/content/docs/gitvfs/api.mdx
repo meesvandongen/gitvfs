@@ -1,13 +1,13 @@
 ---
 title: API reference
-description: Every method of GitFS and the errors it throws.
+description: Every method of GitVFS and the errors it throws.
 ---
 
-## `new GitFS(options)`
+## `new GitVFS(options)`
 
 | Option | Type | Default |
 | --- | --- | --- |
-| `provider` | `GitProvider` | required |
+| `repository` | `GitRepository` | required |
 | `branch` | `string` | required |
 | `writeBranch` | `string` | `branch` |
 | `cache` | `'memory' \| 'none' \| CacheAdapter` | `'memory'` |
@@ -36,7 +36,7 @@ description: Every method of GitFS and the errors it throws.
 
 ## Errors
 
-All errors extend `GitFSError` and carry a `code`:
+All errors extend `GitVFSError` and carry a `code`:
 
 | Class | `code` | When |
 | --- | --- | --- |

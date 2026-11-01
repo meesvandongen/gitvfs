@@ -1,20 +1,20 @@
 import { describe, it, expect, beforeEach, vi } from 'vite-plus/test'
-import { GitFS } from '../../src/gitvfs'
-import { MockProvider } from '../helpers/mock-provider'
+import { GitVFS } from '../../src/gitvfs'
+import { MockRepository } from '../helpers/mock-repository'
 import { NotFoundError } from '../../src/types/errors'
 
-describe('GitFS', () => {
-  let provider: MockProvider
-  let fs: GitFS
+describe('GitVFS', () => {
+  let repository: MockRepository
+  let fs: GitVFS
 
   beforeEach(async () => {
-    provider = new MockProvider()
-    await provider.addFile('main', 'readme.md', '# Hello')
-    await provider.addFile('main', 'posts/hello.md', '# Hello World')
-    await provider.addFile('main', 'posts/draft.md', 'Draft content')
+    repository = new MockRepository()
+    await repository.addFile('main', 'readme.md', '# Hello')
+    await repository.addFile('main', 'posts/hello.md', '# Hello World')
+    await repository.addFile('main', 'posts/draft.md', 'Draft content')
 
-    fs = new GitFS({
-      provider,
+    fs = new GitVFS({
+      repository,
       branch: 'main',
       cache: 'memory',
     })
@@ -77,7 +77,7 @@ describe('GitFS', () => {
     })
 
     it('supports recursive listings', async () => {
-      await provider.addFile('main', 'posts/archive/2024.md', 'Archived')
+      await repository.addFile('main', 'posts/archive/2024.md', 'Archived')
       const entries = await fs.readdir('posts', { recursive: true })
       const names = entries.map((e) => e.name)
       expect(names).toContain('hello.md')
@@ -91,7 +91,7 @@ describe('GitFS', () => {
       await fs.readdir('posts')
       await fs.readdir('')
 
-      expect(provider.lastCommitShaCallCount).toBe(1)
+      expect(repository.lastCommitShaCallCount).toBe(1)
     })
   })
 
@@ -170,15 +170,15 @@ describe('GitFS', () => {
       expect(status[0]).toEqual({ path: 'posts/draft.md', action: 'delete' })
 
       await fs.commit('Remove draft')
-      // Verify the file was deleted in the mock provider
-      const branch = provider.branches.get('main')!
+      // Verify the file was deleted in the mock repository
+      const branch = repository.branches.get('main')!
       expect(branch.files.find((f) => f.path === 'posts/draft.md')).toBeUndefined()
     })
   })
 
   describe('rename', () => {
     const text = (path: string) => {
-      const file = provider.branches.get('main')!.files.find((f) => f.path === path)
+      const file = repository.branches.get('main')!.files.find((f) => f.path === path)
       return file ? new TextDecoder().decode(file.content) : undefined
     }
 
@@ -191,7 +191,7 @@ describe('GitFS', () => {
     })
 
     it('sends one move with the content and no separate deletion', async () => {
-      const commit = vi.spyOn(provider, 'commit')
+      const commit = vi.spyOn(repository, 'commit')
       fs.rename('posts/hello.md', 'posts/renamed.md')
       await fs.commit('Rename')
 
@@ -219,7 +219,7 @@ describe('GitFS', () => {
     })
 
     it('renames a file created in the same batch without deleting anything', async () => {
-      const commit = vi.spyOn(provider, 'commit')
+      const commit = vi.spyOn(repository, 'commit')
       fs.writeFile('posts/new.md', 'New')
       fs.rename('posts/new.md', 'posts/newer.md')
       await fs.commit('Create')
@@ -264,12 +264,12 @@ describe('GitFS', () => {
   describe('branching', () => {
     it('creates a new branch', async () => {
       await fs.createBranch('feature/test')
-      expect(provider.branches.has('feature/test')).toBe(true)
+      expect(repository.branches.has('feature/test')).toBe(true)
     })
 
     it('switches branch with checkout', async () => {
       await fs.createBranch('feature/test')
-      await provider.addFile('feature/test', 'feature.md', 'Feature content')
+      await repository.addFile('feature/test', 'feature.md', 'Feature content')
 
       fs.checkout('feature/test')
       const content = await fs.readFile('feature.md', { encoding: 'utf-8' })
@@ -279,8 +279,8 @@ describe('GitFS', () => {
 
   describe('writeBranch (editorial workflow)', () => {
     it('auto-creates writeBranch on first commit', async () => {
-      const editFs = new GitFS({
-        provider,
+      const editFs = new GitVFS({
+        repository,
         branch: 'main',
         writeBranch: 'drafts/update',
         cache: 'memory',
@@ -294,7 +294,7 @@ describe('GitFS', () => {
       editFs.writeFile('new.md', 'Draft')
       await editFs.commit('Draft commit')
 
-      expect(provider.branches.has('drafts/update')).toBe(true)
+      expect(repository.branches.has('drafts/update')).toBe(true)
     })
   })
 

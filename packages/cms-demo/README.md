@@ -12,6 +12,8 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Events | YAML | an optional nested object, a list of objects with numbers, a custom preview |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 
+The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.
+
 The content model is in `src/content.ts` and the seed files are at its end. Change the storage key in `src/main.tsx` when the seed changes, so returning visitors start over.
 
 ## Develop

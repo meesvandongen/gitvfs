@@ -4,7 +4,6 @@ import { AsyncBoundary } from '../components/AsyncBoundary'
 import {
   getDirectoryQueryOptions,
   getRepositoriesQueryOptions,
-  type RepoCard,
 } from '../lib/git-data'
 
 export function RepositoriesPage() {
@@ -66,9 +65,9 @@ function RepositoriesContent(props: {
         <div className="repo-list">
           {repositories.map((repo) => (
             <Link
-              key={repo.kind === 'github' ? `${repo.owner}/${repo.repo}` : `${repo.projectId}`}
+              key={repo.repository}
               to="/editor"
-              search={repo}
+              search={{ kind: repo.kind, repository: repo.repository, branch: repo.branch, apiUrl: repo.apiUrl }}
               className="repo-card"
               onMouseEnter={() => {
                 queryClient.prefetchQuery(
@@ -79,7 +78,7 @@ function RepositoriesContent(props: {
               }}
             >
               <div className="repo-card-header">
-                <span className="repo-card-name">{repo.label}</span>
+                <span className="repo-card-name">{repo.repository}</span>
                 <span className={`repo-visibility repo-visibility-${repo.visibility}`}>{repo.visibility}</span>
               </div>
               {repo.description ? <p className="repo-card-copy">{repo.description}</p> : null}
