@@ -1,5 +1,5 @@
 import type {
-  GitProvider,
+  GitRepository,
   TreeEntry,
   FileContent,
   CommitResult,
@@ -50,7 +50,7 @@ function createCacheAdapter(
 }
 
 export class GitFS {
-  private provider: GitProvider
+  private repository: GitRepository
   private readBranch: string
   private writeBranch: string
   private buffer = new ChangeBuffer()
@@ -66,7 +66,9 @@ export class GitFS {
   private autoCommitTimer: ReturnType<typeof setTimeout> | null = null
 
   constructor(options: GitFSOptions) {
-    this.provider = options.provider
+    const repository = options.repository ?? options.provider
+    if (!repository) throw new TypeError('GitFS needs a repository, e.g. github({ token }).repository("owner/name")')
+    this.repository = repository
     this.readBranch = options.branch
     this.writeBranch = options.writeBranch ?? options.branch
     this.headValidationIntervalMs = options.headValidationIntervalMs ?? 30_000
@@ -88,7 +90,7 @@ export class GitFS {
       return this.headSha
     }
 
-    const currentHead = await this.provider.getLastCommitSha(this.readBranch)
+    const currentHead = await this.repository.getLastCommitSha(this.readBranch)
     const previousHead = this.headSha
     const cachedHead = previousHead ?? await this.cache.getHeadSha(this.readBranch)
 
@@ -146,7 +148,7 @@ export class GitFS {
       return cachedEntries
     }
 
-    const entries = await this.provider.readdir(this.readBranch, normalized, options)
+    const entries = await this.repository.readdir(this.readBranch, normalized, options)
     this.rememberEntries(entries)
     this.rememberSyntheticDirectories(normalized)
     await this.cache.setDirEntries(this.readBranch, normalized, entries, recursive)
@@ -222,8 +224,8 @@ export class GitFS {
       return cached.content
     }
 
-    // Fetch from provider
-    const file = await this.provider.getFile(this.readBranch, normalized)
+    // Fetch from the repository
+    const file = await this.repository.getFile(this.readBranch, normalized)
     this.rememberFile(file)
     this.rememberSyntheticDirectories(normalized)
     await this.cache.setFileContent(this.readBranch, normalized, file)
@@ -239,7 +241,7 @@ export class GitFS {
     const prefix = normalized ? `${normalized}/` : ''
     const entries = new Map<string, DirEntry>()
 
-    // Add entries from provider directory listing
+    // Add entries from the repository's directory listing
     for (const entry of treeEntries) {
       if (!entry.path.startsWith(prefix)) continue
       const rest = entry.path.slice(prefix.length)
@@ -344,7 +346,7 @@ export class GitFS {
 
     if (blobPaths.length === 0) return
 
-    const files = await this.provider.getFiles(this.readBranch, blobPaths)
+    const files = await this.repository.getFiles(this.readBranch, blobPaths)
     for (const [path, file] of files) {
       this.rememberFile(file)
       await this.cache.setFileContent(this.readBranch, path, file)
@@ -410,15 +412,15 @@ export class GitFS {
     // Ensure we have the head SHA for the write branch
     let headSha: string
     try {
-      headSha = await this.provider.getLastCommitSha(this.writeBranch)
+      headSha = await this.repository.getLastCommitSha(this.writeBranch)
     } catch {
       // Write branch doesn't exist yet — create it from read branch
-      const readHead = await this.provider.getLastCommitSha(this.readBranch)
-      await this.provider.createBranch(this.writeBranch, readHead)
+      const readHead = await this.repository.getLastCommitSha(this.readBranch)
+      await this.repository.createBranch(this.writeBranch, readHead)
       headSha = readHead
     }
 
-    const result = await this.provider.commit({
+    const result = await this.repository.commit({
       branch: this.writeBranch,
       message,
       changes: changes.map((c) => ({
@@ -457,8 +459,8 @@ export class GitFS {
   }
 
   /**
-   * The pending changes as providers need them. Moves carry the file's content, since not every
-   * provider can move a file without it (GitHub's API cannot), and imply the deletion that
+   * The pending changes as repositories need them. Moves carry the file's content, since not every
+   * host can move a file without it (GitHub's API cannot), and imply the deletion that
    * `rename` stages for overlay reads. A move from a path that never existed remotely, such as a
    * file created in this batch, is a plain create.
    */
@@ -489,8 +491,8 @@ export class GitFS {
 
   /** Create a new branch from the current read branch. */
   async createBranch(name: string): Promise<void> {
-    const headSha = await this.provider.getLastCommitSha(this.readBranch)
-    await this.provider.createBranch(name, headSha)
+    const headSha = await this.repository.getLastCommitSha(this.readBranch)
+    await this.repository.createBranch(name, headSha)
   }
 
   /** Switch the read branch (and optionally the write branch). */

@@ -1,8 +1,11 @@
 export { GitFS } from './gitvfs.js'
 export type { DirEntry, StatResult } from './gitvfs.js'
-export type { GitFSOptions, CacheConfig } from './types/options.js'
+export type { GitFSOptions, GitFSBaseOptions, CacheConfig } from './types/options.js'
 export type {
   GitProvider,
+  GitRepository,
+  RepositoryInfo,
+  ListRepositoriesOptions,
   TreeEntry,
   ReadDirOptions,
   FileContent,

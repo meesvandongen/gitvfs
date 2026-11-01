@@ -1,5 +1,8 @@
 import type {
   GitProvider,
+  GitRepository,
+  ListRepositoriesOptions,
+  RepositoryInfo,
   TreeEntry,
   FileContent,
   BranchInfo,
@@ -8,19 +11,77 @@ import type {
   ReadDirOptions,
 } from '../types/provider.js'
 import { NotFoundError } from '../types/errors.js'
-import { createFetchREST, type TokenProvider } from './shared/http.js'
+import { createFetchREST, createPaginate, type TokenProvider } from './shared/http.js'
+import { matchesSearch, splitFullName } from './shared/repositories.js'
 import { createFetchGraphQL } from './shared/graphql.js'
 import { encodeText, toBase64, fromBase64 } from '../utils/encoding.js'
 import { normalize } from '../utils/path.js'
 import { getGitHash } from '../utils/hash.js'
 
-export interface GitLabOptions {
+export interface GitLabProviderOptions {
+  /** A token, or a function returning one; called before every request. */
   token: TokenProvider
-  projectId: string | number
+  /** Self-managed GitLab: the instance URL. Default: `https://gitlab.com` */
   apiUrl?: string
 }
 
+/** @deprecated Use `gitlab({ token }).repository('group/project')`. */
+export interface GitLabOptions extends GitLabProviderOptions {
+  /** A numeric id or the full path (`group/subgroup/project`). */
+  projectId: string | number
+}
+
+function instanceUrl(options: GitLabProviderOptions): string {
+  return (options.apiUrl ?? 'https://gitlab.com').replace(/\/$/, '')
+}
+
+interface GitLabProjectResponse {
+  path_with_namespace: string
+  path: string
+  namespace: { full_path: string }
+  default_branch: string | null
+  visibility: 'private' | 'internal' | 'public'
+  description: string | null
+  web_url: string
+  last_activity_at: string | null
+}
+
 class GitLabProvider implements GitProvider {
+  readonly name = 'gitlab'
+  private paginate: ReturnType<typeof createPaginate>
+
+  constructor(private options: GitLabProviderOptions) {
+    this.paginate = createPaginate({ token: options.token, baseUrl: `${instanceUrl(options)}/api/v4` })
+  }
+
+  async *listRepositories(options: ListRepositoriesOptions = {}): AsyncGenerator<RepositoryInfo> {
+    const path = '/projects?membership=true&per_page=100&order_by=last_activity_at&sort=desc'
+    for await (const page of this.paginate<GitLabProjectResponse>(path, { signal: options.signal })) {
+      for (const raw of page) {
+        const repo: RepositoryInfo = {
+          fullName: raw.path_with_namespace,
+          name: raw.path,
+          owner: raw.namespace?.full_path ?? splitFullName(raw.path_with_namespace).owner,
+          defaultBranch: raw.default_branch,
+          private: raw.visibility !== 'public',
+          description: raw.description,
+          webUrl: raw.web_url,
+          updatedAt: raw.last_activity_at,
+        }
+        if (matchesSearch(repo, options.search)) yield repo
+      }
+    }
+  }
+
+  repository(fullName: string): GitRepository {
+    if (!fullName.includes('/') || fullName.startsWith('/') || fullName.endsWith('/')) {
+      throw new TypeError(`Expected a GitLab project as "group/project", got "${fullName}"`)
+    }
+    return new GitLabRepository({ ...this.options, projectId: fullName })
+  }
+}
+
+class GitLabRepository implements GitRepository {
   private projectId: string
   private fetchREST: ReturnType<typeof createFetchREST>
   private fetchGraphQL: ReturnType<typeof createFetchGraphQL>
@@ -28,7 +89,9 @@ class GitLabProvider implements GitProvider {
 
   constructor(options: GitLabOptions) {
     this.projectId = String(options.projectId)
-    const baseUrl = options.apiUrl ?? 'https://gitlab.com'
+    // A full path is already what GraphQL needs; a numeric id is looked up once.
+    if (this.projectId.includes('/')) this.fullPath = this.projectId
+    const baseUrl = instanceUrl(options)
     this.fetchREST = createFetchREST({
       token: options.token,
       baseUrl: `${baseUrl}/api/v4`,
@@ -245,7 +308,14 @@ class GitLabProvider implements GitProvider {
   }
 }
 
-/** Factory function for creating a GitLab provider. */
-export function gitlab(options: GitLabOptions): GitProvider {
+/** @deprecated Use `gitlab({ token }).repository('group/project')`. */
+export function gitlab(options: GitLabOptions): GitRepository
+/**
+ * GitLab as seen by one account. List projects with `listRepositories()`, and get one with
+ * `repository('group/project')` to pass to `GitFS`.
+ */
+export function gitlab(options: GitLabProviderOptions): GitProvider
+export function gitlab(options: GitLabProviderOptions | GitLabOptions): GitProvider | GitRepository {
+  if ('projectId' in options) return new GitLabRepository(options as GitLabOptions)
   return new GitLabProvider(options)
 }

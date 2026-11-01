@@ -1,5 +1,8 @@
 import type {
   GitProvider,
+  GitRepository,
+  ListRepositoriesOptions,
+  RepositoryInfo,
   TreeEntry,
   FileContent,
   BranchInfo,
@@ -8,19 +11,84 @@ import type {
   ReadDirOptions,
 } from '../types/provider.js'
 import { NotFoundError } from '../types/errors.js'
-import { createFetchREST, type TokenProvider } from './shared/http.js'
+import { createFetchREST, createPaginate, type TokenProvider } from './shared/http.js'
+import { matchesSearch } from './shared/repositories.js'
 import { createFetchGraphQL } from './shared/graphql.js'
 import { fromBase64, toBase64, encodeText } from '../utils/encoding.js'
 import { normalize } from '../utils/path.js'
 
-export interface GitHubOptions {
+export interface GitHubProviderOptions {
+  /** A token, or a function returning one; called before every request. */
   token: TokenProvider
-  owner: string
-  repo: string
+  /** GitHub Enterprise Server: `https://HOST/api/v3`. Default: `https://api.github.com` */
   apiUrl?: string
 }
 
+/** @deprecated Use `github({ token }).repository('owner/repo')`. */
+export interface GitHubOptions extends GitHubProviderOptions {
+  owner: string
+  repo: string
+}
+
+/** GraphQL lives at `/api/graphql` on GitHub Enterprise Server, next to the REST `/api/v3`. */
+function graphqlUrl(apiUrl: string): string {
+  return apiUrl.endsWith('/api/v3') ? `${apiUrl.slice(0, -'/v3'.length)}/graphql` : `${apiUrl}/graphql`
+}
+
+function apiUrlOf(options: GitHubProviderOptions): string {
+  return (options.apiUrl ?? 'https://api.github.com').replace(/\/$/, '')
+}
+
+interface GitHubRepoResponse {
+  full_name: string
+  name: string
+  owner: { login: string }
+  default_branch: string | null
+  private: boolean
+  description: string | null
+  html_url: string
+  pushed_at: string | null
+  updated_at: string | null
+}
+
 class GitHubProvider implements GitProvider {
+  readonly name = 'github'
+  private paginate: ReturnType<typeof createPaginate>
+
+  constructor(private options: GitHubProviderOptions) {
+    this.paginate = createPaginate({ token: options.token, baseUrl: apiUrlOf(options) })
+  }
+
+  async *listRepositories(options: ListRepositoriesOptions = {}): AsyncGenerator<RepositoryInfo> {
+    // With a GitHub App user token this lists only repositories the app is installed on.
+    const path = '/user/repos?per_page=100&sort=pushed&affiliation=owner,collaborator,organization_member'
+    for await (const page of this.paginate<GitHubRepoResponse>(path, { signal: options.signal })) {
+      for (const raw of page) {
+        const repo: RepositoryInfo = {
+          fullName: raw.full_name,
+          name: raw.name,
+          owner: raw.owner.login,
+          defaultBranch: raw.default_branch,
+          private: raw.private,
+          description: raw.description,
+          webUrl: raw.html_url,
+          updatedAt: raw.pushed_at ?? raw.updated_at,
+        }
+        if (matchesSearch(repo, options.search)) yield repo
+      }
+    }
+  }
+
+  repository(fullName: string): GitRepository {
+    const parts = fullName.split('/')
+    if (parts.length !== 2 || !parts[0] || !parts[1]) {
+      throw new TypeError(`Expected a GitHub repository as "owner/name", got "${fullName}"`)
+    }
+    return new GitHubRepository({ ...this.options, owner: parts[0], repo: parts[1] })
+  }
+}
+
+class GitHubRepository implements GitRepository {
   private owner: string
   private repo: string
   private fetchREST: ReturnType<typeof createFetchREST>
@@ -29,12 +97,9 @@ class GitHubProvider implements GitProvider {
   constructor(options: GitHubOptions) {
     this.owner = options.owner
     this.repo = options.repo
-    const baseUrl = options.apiUrl ?? 'https://api.github.com'
+    const baseUrl = apiUrlOf(options)
     this.fetchREST = createFetchREST({ token: options.token, baseUrl })
-    this.fetchGraphQL = createFetchGraphQL({
-      token: options.token,
-      url: `${baseUrl.replace('api.github.com', 'api.github.com')}/graphql`,
-    })
+    this.fetchGraphQL = createFetchGraphQL({ token: options.token, url: graphqlUrl(baseUrl) })
   }
 
   private encodePath(path: string): string {
@@ -261,7 +326,14 @@ class GitHubProvider implements GitProvider {
   }
 }
 
-/** Factory function for creating a GitHub provider. */
-export function github(options: GitHubOptions): GitProvider {
+/** @deprecated Use `github({ token }).repository('owner/repo')`. */
+export function github(options: GitHubOptions): GitRepository
+/**
+ * GitHub as seen by one account. List repositories with `listRepositories()`, and get one with
+ * `repository('owner/name')` to pass to `GitFS`.
+ */
+export function github(options: GitHubProviderOptions): GitProvider
+export function github(options: GitHubProviderOptions | GitHubOptions): GitProvider | GitRepository {
+  if ('owner' in options || 'repo' in options) return new GitHubRepository(options as GitHubOptions)
   return new GitHubProvider(options)
 }
