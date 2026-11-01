@@ -33,7 +33,7 @@ export function App({ repository, subscribe, reset }: AppProps) {
   const cms = useMemo(
     () =>
       createCms({
-        fs: new GitFS({ provider: github({ owner: 'acme', repo: 'site', token: 'demo' }), branch: 'main' }),
+        fs: new GitFS({ repository: github({ token: 'demo' }).repository('acme/site'), branch: 'main' }),
         collections,
         singletons,
       }),

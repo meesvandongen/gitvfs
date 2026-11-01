@@ -24,12 +24,13 @@ async function setup(files: Record<string, string> = {}) {
       repository,
       owner: 'acme',
       repo: 'site',
+      details: { description: 'The Acme website', private: true },
       onChange: () => void changes.push(repository.branchHead('main')!),
     }),
   )
-  const provider = github({ owner: 'acme', repo: 'site', token: 'demo-token' })
-  const fs = new GitFS({ provider, branch: 'main', cache: 'none' })
-  return { repository, provider, fs, changes }
+  const remote = github({ token: 'demo-token' }).repository('acme/site')
+  const fs = new GitFS({ repository: remote, branch: 'main', cache: 'none' })
+  return { repository, remote, fs, changes }
 }
 
 describe('gitvfs against the GitHub mock', () => {
@@ -79,7 +80,7 @@ describe('gitvfs against the GitHub mock', () => {
     expect(changes).toEqual([result.sha])
 
     // A fresh reader sees the new head.
-    const reader = new GitFS({ provider: github({ owner: 'acme', repo: 'site', token: 't' }), branch: 'main', cache: 'none' })
+    const reader = new GitFS({ repository: github({ token: 't' }).repository('acme/site'), branch: 'main', cache: 'none' })
     expect(await reader.readFile('content/posts/new.md', { encoding: 'utf-8' })).toBe('---\ntitle: New\n---\n')
   })
 
@@ -131,8 +132,8 @@ describe('gitvfs against the GitHub mock', () => {
   })
 
   it('creates branches and commits to a separate write branch', async () => {
-    const { repository, provider } = await setup()
-    const fs = new GitFS({ provider, branch: 'main', writeBranch: 'drafts', cache: 'none' })
+    const { repository, remote } = await setup()
+    const fs = new GitFS({ repository: remote, branch: 'main', writeBranch: 'drafts', cache: 'none' })
     fs.writeFile('content/posts/draft.md', 'draft\n')
     await fs.commit('Draft')
     expect(repository.branchNames().sort()).toEqual(['drafts', 'main'])
@@ -153,6 +154,24 @@ describe('gitvfs against the GitHub mock', () => {
     await setup()
     expect((await fetch('https://api.github.com/repos/acme/site/contents?ref=main')).status).toBe(401)
     expect((await fetch('https://api.github.com/graphql', { method: 'POST', body: '{}' })).status).toBe(401)
+  })
+
+  it('lists the repository for github({ token }).listRepositories()', async () => {
+    const { repository } = await setup()
+    const repos = []
+    for await (const repo of github({ token: 't' }).listRepositories()) repos.push(repo)
+    expect(repos).toEqual([
+      {
+        fullName: 'acme/site',
+        name: 'site',
+        owner: 'acme',
+        defaultBranch: 'main',
+        private: true,
+        description: 'The Acme website',
+        webUrl: 'https://github.com/acme/site',
+        updatedAt: repository.getCommit(repository.branchHead('main')!)!.date,
+      },
+    ])
   })
 
   it('computes git blob ids', async () => {

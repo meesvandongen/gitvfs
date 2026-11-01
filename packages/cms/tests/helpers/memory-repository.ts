@@ -4,7 +4,7 @@ import type {
   CommitOptions,
   CommitResult,
   FileContent,
-  GitProvider,
+  GitRepository,
   ReadDirOptions,
   TreeEntry,
 } from 'gitvfs'
@@ -24,8 +24,8 @@ interface Branch {
   files: Map<string, { sha: string; content: Uint8Array }>
 }
 
-/** A GitProvider backed by memory, for tests and the playground. */
-export class MemoryProvider implements GitProvider {
+/** A GitRepository backed by memory, for tests and the playground. */
+export class MemoryRepository implements GitRepository {
   readonly branches = new Map<string, Branch>()
   readonly commits: CommitOptions[] = []
 

@@ -7,21 +7,12 @@ import { EditorPage } from './pages/EditorPage'
 import { HomePage } from './pages/HomePage'
 import { RepositoriesPage } from './pages/RepositoriesPage'
 
-const editorSearchSchema = z.union([
-  z.object({
-    kind: z.literal('github'),
-    owner: z.string().min(1),
-    repo: z.string().min(1),
-    branch: z.string().min(1),
-  }),
-  z.object({
-    kind: z.literal('gitlab'),
-    projectId: z.string().min(1),
-    name: z.string().min(1),
-    branch: z.string().min(1),
-    apiUrl: z.string().optional(),
-  }),
-])
+const editorSearchSchema = z.object({
+  kind: z.enum(['github', 'gitlab']),
+  repository: z.string().min(1),
+  branch: z.string().min(1),
+  apiUrl: z.string().optional(),
+})
 
 function requireProviderAndToken() {
   const providerConfig = getActiveProviderConfig()

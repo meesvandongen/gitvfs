@@ -41,7 +41,7 @@ const site = defineSingleton({
 })
 
 const cms = createCms({
-  fs: new GitFS({ provider: github({ owner: 'acme', repo: 'site', token }), branch: 'main' }),
+  fs: new GitFS({ repository: github({ token }).repository('acme/site'), branch: 'main' }),
   collections: [posts],
   singletons: [site],
 })

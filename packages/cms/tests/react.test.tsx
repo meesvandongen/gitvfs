@@ -1,10 +1,10 @@
 import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
-import { GitFS } from 'gitvfs'
+import { GitFS, type GitProvider, type RepositoryInfo } from 'gitvfs'
 import { z } from 'zod'
 import { createCms, defineCollection, defineSingleton, markdown } from '../src'
-import { CmsApp, applyMarkdownFormat, buildPreviewDocument, toDateInputValue } from '../src/react'
-import { MemoryProvider } from './helpers/memory-provider'
+import { CmsApp, RepositoryPicker, applyMarkdownFormat, buildPreviewDocument, toDateInputValue } from '../src/react'
+import { MemoryRepository } from './helpers/memory-repository'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
 
@@ -61,22 +61,22 @@ function typeInto(element: HTMLInputElement | HTMLTextAreaElement, value: string
 }
 
 function setup() {
-  const provider = new MemoryProvider({
+  const remote = new MemoryRepository({
     'posts/hello.md': '---\ntitle: Hello\n---\n\nSome **bold** text\n',
     'site.yml': 'title: Demo\n',
   })
   const cms = createCms({
-    fs: new GitFS({ provider, branch: 'main', cache: 'none' }),
+    fs: new GitFS({ repository: remote, branch: 'main', cache: 'none' }),
     collections: [posts],
     singletons: [settings],
   })
   act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
-  return provider
+  return remote
 }
 
 describe('CmsApp', () => {
   it('lists entries and edits one with a live preview', async () => {
-    const provider = setup()
+    const remote = setup()
 
     const entry = await waitFor(() => byText('Hellohello'))
     await act(async () => entry.click())
@@ -95,12 +95,12 @@ describe('CmsApp', () => {
     expect(byText('Unsaved', 'span')).toBeTruthy()
 
     await act(async () => byText('Save')!.click())
-    await waitFor(() => provider.commits.length === 1)
-    expect(provider.text('posts/hello.md')).toBe('---\ntitle: Hello again\ndraft: false\n---\n\nSome **bold** text\n')
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('posts/hello.md')).toBe('---\ntitle: Hello again\ndraft: false\n---\n\nSome **bold** text\n')
   })
 
   it('creates an entry with a slug derived from the title', async () => {
-    const provider = setup()
+    const remote = setup()
 
     await act(async () => (await waitFor(() => byText('New'))).click())
     const title = await waitFor(() => container.querySelector<HTMLInputElement>('input[name="title"]'))
@@ -110,23 +110,23 @@ describe('CmsApp', () => {
     expect(slug.value).toBe('brand-new-post')
 
     await act(async () => byText('Create')!.click())
-    await waitFor(() => provider.text('posts/brand-new-post.md'))
-    expect(provider.commits.at(-1)?.message).toBe('Create posts/brand-new-post.md')
+    await waitFor(() => remote.text('posts/brand-new-post.md'))
+    expect(remote.commits.at(-1)?.message).toBe('Create posts/brand-new-post.md')
     await waitFor(() => byText('Brand New Postbrand-new-post'))
   })
 
   it('shows validation errors instead of committing', async () => {
-    const provider = setup()
+    const remote = setup()
 
     await act(async () => (await waitFor(() => byText('New'))).click())
     await waitFor(() => container.querySelector('input[name="title"]'))
     await act(async () => byText('Create')!.click())
     await waitFor(() => container.querySelector('.gcms-field .gcms-error'))
-    expect(provider.commits).toHaveLength(0)
+    expect(remote.commits).toHaveLength(0)
   })
 
   it('edits a singleton and shows its source', async () => {
-    const provider = setup()
+    const remote = setup()
 
     await act(async () => (await waitFor(() => byText('Site settings'))).click())
     const title = await waitFor(() => container.querySelector<HTMLInputElement>('input[name="title"]'))
@@ -136,7 +136,7 @@ describe('CmsApp', () => {
 
     await act(async () => typeInto(title, 'Renamed'))
     await act(async () => byText('Save')!.click())
-    await waitFor(() => provider.text('site.yml') === 'title: Renamed\n')
+    await waitFor(() => remote.text('site.yml') === 'title: Renamed\n')
   })
 })
 
@@ -163,5 +163,80 @@ describe('editor helpers', () => {
     expect(html).toContain("default-src 'none'")
     expect(html).toContain('href="/site.css&quot;&gt;&lt;script&gt;"')
     expect(html).not.toContain('<script>')
+  })
+})
+
+describe('RepositoryPicker', () => {
+  const info = (fullName: string, description: string | null = null): RepositoryInfo => ({
+    fullName,
+    name: fullName.split('/')[1],
+    owner: fullName.split('/')[0],
+    defaultBranch: 'main',
+    private: fullName.startsWith('acme/'),
+    description,
+    webUrl: `https://github.com/${fullName}`,
+    updatedAt: null,
+  })
+
+  function fakeProvider(list: () => AsyncIterable<RepositoryInfo>): GitProvider & { calls: number } {
+    const provider = {
+      name: 'fake',
+      calls: 0,
+      listRepositories() {
+        provider.calls++
+        return list()
+      },
+      repository: () => {
+        throw new Error('not used')
+      },
+    }
+    return provider
+  }
+
+  it('lists, searches and picks repositories', async () => {
+    const provider = fakeProvider(async function* () {
+      yield info('acme/site', 'The marketing site')
+      yield info('acme/api')
+      yield info('ada/notes')
+    })
+    const picked: string[] = []
+    act(() =>
+      root.render(
+        <RepositoryPicker
+          provider={provider}
+          // An inline filter must not restart loading on every render.
+          filter={(repo) => repo.fullName !== 'acme/api'}
+          onSelect={(repo) => picked.push(repo.fullName)}
+        />,
+      ),
+    )
+
+    await waitFor(() => byText('ada/notes'))
+    expect([...container.querySelectorAll('.gcms-picker-item')].map((el) => el.textContent)).toEqual([
+      'acme/siteprivateThe marketing site',
+      'ada/notes',
+    ])
+
+    typeInto(container.querySelector<HTMLInputElement>('input[type="search"]')!, 'MARKETING')
+    await waitFor(() => !byText('ada/notes') || undefined)
+    act(() => container.querySelector<HTMLButtonElement>('.gcms-picker-item')!.click())
+    expect(picked).toEqual(['acme/site'])
+    expect(provider.calls).toBe(1)
+  })
+
+  it('shows errors and retries', async () => {
+    let fail = true
+    const provider = fakeProvider(async function* () {
+      if (fail) throw new Error('Authentication failed: 401')
+      yield info('acme/site')
+    })
+    act(() => root.render(<RepositoryPicker provider={provider} onSelect={() => {}} />))
+    const alert = await waitFor(() => container.querySelector('[role="alert"]'))
+    expect(alert.textContent).toContain('Authentication failed: 401')
+
+    fail = false
+    act(() => byText('Try again')!.click())
+    await waitFor(() => byText('acme/siteprivate'))
+    expect(container.querySelector('[role="alert"]')).toBeNull()
   })
 })

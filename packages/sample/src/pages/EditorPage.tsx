@@ -21,9 +21,7 @@ export function EditorPage() {
 }
 
 function getRepoResetKey(session: RepoSession): string {
-  return session.kind === 'github'
-    ? `github:${session.owner}/${session.repo}:${session.branch}`
-    : `gitlab:${session.projectId}:${session.branch}`
+  return `${session.kind}:${session.repository}:${session.branch}`
 }
 
 function EditorPageContent(props: { session: RepoSession }) {
@@ -35,9 +33,7 @@ function EditorPageContent(props: { session: RepoSession }) {
   const [statusMessage, setStatusMessage] = useState<string | null>(null)
   const [isNavigating, startNavigation] = useTransition()
 
-  const repoLabel = session.kind === 'github'
-    ? `${session.owner}/${session.repo}`
-    : session.name
+  const repoLabel = session.repository
 
   const parentPath = useMemo(() => {
     if (directoryPath === '') {

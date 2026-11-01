@@ -8,6 +8,7 @@ It powers the [gitvfs-cms demo](../cms-demo), where visitors can create, edit an
 
 | Endpoint | Used by gitvfs for |
 | --- | --- |
+| `GET /user/repos` | `listRepositories()`: lists the mocked repository (describe it with `details`) |
 | `GET /repos/:owner/:repo/git/ref/heads/:branch` | branch heads, cache invalidation |
 | `POST /repos/:owner/:repo/git/refs`, `DELETE …/git/refs/heads/:branch` | creating and deleting branches |
 | `GET /repos/:owner/:repo/git/commits/:sha`, `…/git/trees/:sha?recursive=1` | recursive listings |
@@ -33,7 +34,8 @@ const { repository, save, reset } = await persistentRepository({
 await setupWorker(...createGitHubHandlers({ repository, owner: 'acme', repo: 'site', onChange: save })).start()
 
 // Anything using gitvfs now talks to the mock:
-const fs = new GitFS({ provider: github({ owner: 'acme', repo: 'site', token: 'demo' }), branch: 'main' })
+const gh = github({ token: 'demo' })
+const fs = new GitFS({ repository: gh.repository('acme/site'), branch: 'main' })
 ```
 
 `persistentRepository` saves the repository to `localStorage` after every change and restores it on the next visit. `reset()` goes back to the seed.
