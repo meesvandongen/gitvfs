@@ -1,0 +1,28 @@
+/* The "site" stylesheet the Documentation collection loads into its preview (previewStylesheets). */
+body {
+  margin: 0 auto;
+  max-width: 44rem;
+  padding: 2rem;
+  font: 17px/1.7 Georgia, 'Times New Roman', serif;
+  color: #1f2430;
+  background: #fffdf7;
+}
+
+h1,
+h2,
+h3 {
+  font-family: system-ui, sans-serif;
+  color: #7c3aed;
+}
+
+code,
+pre {
+  font-family: ui-monospace, Menlo, monospace;
+  background: #f3effc;
+  border-radius: 4px;
+}
+
+pre {
+  padding: 1rem;
+  overflow: auto;
+}

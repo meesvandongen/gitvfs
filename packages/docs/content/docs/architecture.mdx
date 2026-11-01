@@ -46,6 +46,13 @@ Its only dependency is [kukkii](https://github.com/meesvandongen/kukkii), for th
 cookie. It does not depend on gitvfs either; `auth.token` simply matches the
 `TokenProvider` signature. Apps that are not CMSes, such as the gitvfs demo, can use it alone.
 
+## gitvfs-github-msw
+
+A [Mock Service Worker](https://mswjs.io) mock of the GitHub API endpoints that the gitvfs GitHub
+provider calls, backed by a small Git model (commits, trees, blobs, branches) that can be saved to
+browser storage. The CMS demo runs on it, and its tests run the real provider against it, so the
+mock and the provider stay in step.
+
 ## Why subpaths instead of more packages
 
 Each subpath already behaves like a package: its own entry point, and dependencies that are only

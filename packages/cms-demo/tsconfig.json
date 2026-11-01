@@ -1,0 +1,22 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "useDefineForClassFields": true,
+    "jsx": "react-jsx",
+    "module": "ESNext",
+    "lib": ["ES2022", "DOM", "DOM.Iterable"],
+    "moduleResolution": "bundler",
+    "strict": true,
+    "skipLibCheck": true,
+    "noEmit": true,
+    "types": ["vite/client"],
+    "paths": {
+      "gitvfs": ["../gitvfs/src/index.ts"],
+      "gitvfs/providers/github": ["../gitvfs/src/providers/github.ts"],
+      "gitvfs-cms": ["../cms/src/index.ts"],
+      "gitvfs-cms/react": ["../cms/src/react/index.ts"],
+      "gitvfs-github-msw": ["../github-msw/src/index.ts"]
+    }
+  },
+  "include": ["src"]
+}
