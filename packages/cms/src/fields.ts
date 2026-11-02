@@ -14,6 +14,8 @@ export type CmsFieldType =
   | 'geocircle'
   | 'geoline'
   | 'geopolygon'
+  | 'table'
+  | 'tree'
   | 'daterange'
   | 'openinghours'
   | 'recurrence'

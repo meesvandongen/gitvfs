@@ -19,6 +19,8 @@ with helpers that attach editor metadata through `.check()`:
 | `z.enum([...])` | select |
 | `z.array(...)` | repeatable list |
 | `z.object({...})` | group of fields |
+| `z.array(z.object({...})).check(table())` | spreadsheet-like table, see [Table fields](#table-fields) |
+| `tree({ fields })` | nested list edited as an outline, see [Tree fields](#tree-fields) |
 
 `field({ label, description, order, inputProps, fieldType })` sets the other options:
 
@@ -98,6 +100,121 @@ const place = (config = {}) => geoPoint({ tiles, ...config })
 For your site, `toGeoJSON(value)` converts a value to a GeoJSON geometry (a circle becomes its center,
 or a ring of points with `{ polygon: true }`), and `distance`, `pathLength` and `polygonArea` measure
 in meters.
+
+## Table fields
+
+`table()` edits a list of objects as a spreadsheet-like grid instead of a stack of groups. It is a
+check on an ordinary `z.array(z.object({...}))`, so the stored value is the same list of objects the
+default list editor writes, and adding or removing `table()` never changes a file.
+
+```ts
+import { field, table } from 'gitvfs-cms'
+
+plans: z
+  .array(
+    z.object({
+      name: z.string().min(1).check(field({ label: 'Plan' })),
+      tier: z.enum(['starter', 'team', 'enterprise']),
+      monthly: z.number().min(0).check(field({ label: 'Per month' })),
+      highlighted: z.boolean().default(false),
+      availableFrom: z.coerce.date().optional(),
+      features: z.array(z.string()).default([]),
+    }),
+  )
+  .min(1)
+  .check(table({ label: 'Plans' })),
+```
+
+```yaml
+plans:
+  - name: Team
+    tier: team
+    monthly: 12
+    highlighted: true
+    features:
+      - Preview deployments
+```
+
+- One column per key, in schema order (or `field({ order })`), headed by its `field()` label.
+  Strings, numbers, booleans, dates and enums are edited in the cell. Other columns (objects,
+  lists, `markdown()`, custom field types) are shown read-only and their values are kept; give them
+  a `.default()` or make them optional so new rows validate.
+- **Keyboard:** arrow keys move between cells (left and right from the edge of the text; selects
+  and date inputs keep their own arrow keys), Enter moves down and adds a row from the last one,
+  Shift+Enter moves up, Tab moves on as usual, Alt+↑ and Alt+↓ move the row.
+- **Paste** cells copied from a spreadsheet (tab-separated) or CSV text: the block lands at the
+  focused cell, overwriting cells and adding rows past the end. When its first line names the
+  columns (by key or label) it is used as a header and columns are matched by name. Numbers,
+  booleans (`yes`, `x`, `1`, …), enum labels and dates are converted; text that does not fit is
+  kept so validation points at it.
+- **Copy as CSV** copies the rows with a header of column keys; **Copy for spreadsheets** copies
+  tab-separated text, which spreadsheets split into cells.
+- Errors appear in the cell they belong to (`plans.2.monthly`). Wide tables scroll sideways.
+
+The CSV helpers are exported for your own imports and exports: `parseDelimited(text, delimiter?)`
+(RFC 4180 quotes, detects tab, semicolon or comma), `serializeDelimited(rows, delimiter?)`,
+`rowsToCsv(rows, columns)` and `pasteCells(...)`.
+
+## Tree fields
+
+`tree()` returns a schema for nested lists such as navigation menus and page hierarchies, edited as
+an outline. Each node has your fields and, when it has any, a `children` list of nodes. Leaves have
+no `children` key: empty child lists are dropped when saving, so files stay short and adding a
+level does not touch the siblings.
+
+```ts
+import { field, tree } from 'gitvfs-cms'
+
+const navigation = defineSingleton({
+  name: 'navigation',
+  path: 'data/navigation.yml',
+  schema: z.object({
+    main: tree({
+      label: 'Main menu',
+      maxDepth: 3,
+      fields: {
+        label: z.string().min(1),
+        href: z.string().min(1).optional().check(field({ label: 'Link' })),
+        external: z.boolean().optional(),
+      },
+    }).default([]),
+  }),
+})
+```
+
+```yaml
+main:
+  - label: Home
+    href: /
+  - label: Docs
+    href: /docs
+    children:
+      - label: Getting started
+        href: /docs/getting-started
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `fields` | | The zod shape of every node. |
+| `childrenKey` | `'children'` | Key of the child list, such as `'pages'`. |
+| `maxDepth` | unlimited | Most levels; deeper nodes fail validation and the editor will not create them. |
+| `labelField` | `label`, `title` or `name` | Field shown as the item's title in the outline. |
+| `label`, `description`, … | | As for `field()`. |
+
+The editor follows the [ARIA tree pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/):
+arrow keys move between items and expand or collapse them, Home and End jump, Enter (or the
+**Edit** button) opens an item's fields inline, Enter or Escape closes them, Alt+↑ and Alt+↓ move an
+item among its siblings, Alt+→ indents it under the item above and Alt+← moves it out of its parent,
+and Delete removes it (asking first when it has nested items). The selected item has buttons for the
+same actions, plus **Add item after** and **Add child**. Rows can be dragged: the top or bottom
+edge of a row places the item before or after it, the middle nests it inside. Items with errors are
+marked and listed below the tree, with a link that opens them.
+
+The children are a `z.lazy()` schema, because AutoForm walks object shapes eagerly and would
+recurse forever into a zod 4 getter. The values type as `TreeNode<...>`, and `z.toJSONSchema`
+produces a recursive `$ref`. For your site, `flattenTree(nodes)` lists nodes with their depth, and
+`moveNode`, `indentNode`, `outdentNode`, `insertNode`, `removeNode` and `remapPath` are the pure
+helpers the editor uses.
 
 ## Scheduling fields
 
