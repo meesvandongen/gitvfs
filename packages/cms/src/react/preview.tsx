@@ -1,7 +1,9 @@
 import { useMemo, useState, type ReactNode } from 'react'
 import { Marked } from 'marked'
+import { diffLines } from '../changes.js'
 import type { ContentType } from '../config.js'
 import { serializeDocument } from '../document.js'
+import { pruneBlankOptionals } from './autoform.js'
 
 const marked = new Marked({ gfm: true })
 
@@ -74,7 +76,8 @@ function withoutNulls(value: unknown): unknown {
 }
 
 export function toSource(contentType: ContentType, values: Record<string, unknown>): string {
-  values = withoutNulls(values) as Record<string, unknown>
+  // Show what a save writes: cleared values and optional groups left blank are dropped there too.
+  values = pruneBlankOptionals(contentType.schema as never, withoutNulls(values)) as Record<string, unknown>
   // Form values arrive in no particular order; show fields in schema order.
   const ordered: Record<string, unknown> = {}
   for (const key of Object.keys(contentType.schema.shape)) if (key in values) ordered[key] = values[key]
@@ -110,16 +113,94 @@ export function MarkdownPreview({ contentType, values }: PreviewProps) {
   )
 }
 
+export interface PreviewComparison {
+  /** The document on the base branch; `null` when it is new in this change. */
+  values: Record<string, unknown> | null
+  /** The base branch's name, e.g. `main`. */
+  label: string
+}
+
 export interface DocumentPreviewProps extends PreviewProps {
   /** Replaces the rendered tab, e.g. with your site's own components. */
   render?: (props: PreviewProps) => ReactNode
+  /** Adds a Changes tab comparing `values` with this version. */
+  compare?: PreviewComparison
 }
 
-/** Tabs with the rendered page (markdown only, or `render`) and the file source. */
-export function DocumentPreview({ contentType, values, render }: DocumentPreviewProps) {
+/** The serialized source of both versions, line by line. */
+export function SourceDiff({ before, after }: { before: string; after: string }) {
+  const lines = useMemo(() => diffLines(before, after), [before, after])
+  const marks = { same: ' ', added: '+', removed: '−' } as const
+  return (
+    <pre className="gcms-source gcms-diff" aria-label="Changes to the file">
+      {lines.map((line, index) => (
+        <span key={index} className={`gcms-diff-line gcms-diff-line--${line.kind}`}>
+          <span className="gcms-diff-mark" aria-hidden="true">{marks[line.kind]}</span>
+          {line.kind === 'same' ? null : <span className="gcms-visually-hidden">{line.kind === 'added' ? 'Added: ' : 'Removed: '}</span>}
+          {line.text || ' '}
+          {'\n'}
+        </span>
+      ))}
+    </pre>
+  )
+}
+
+/**
+ * Before and after: both versions rendered with the same preview (side by side when there is room),
+ * so any field type compares the way readers will see it. Falls back to the source when nothing
+ * renders.
+ */
+export function PreviewComparisonView({
+  contentType,
+  values,
+  render,
+  compare,
+}: PreviewProps & { render?: DocumentPreviewProps['render']; compare: PreviewComparison }) {
   const hasRendered = Boolean(render) || contentType.format === 'markdown'
-  const [tab, setTab] = useState<'rendered' | 'source'>(hasRendered ? 'rendered' : 'source')
-  const active = hasRendered ? tab : 'source'
+  const [mode, setMode] = useState<'rendered' | 'source'>(hasRendered ? 'rendered' : 'source')
+  const active = hasRendered ? mode : 'source'
+  const show = (props: PreviewProps) => (render ? render(props) : <MarkdownPreview {...props} />)
+
+  return (
+    <div className="gcms-compare">
+      <div className="gcms-compare-toolbar">
+        {hasRendered ? (
+          <div className="gcms-segmented" role="group" aria-label="Compare">
+            <button type="button" aria-pressed={active === 'rendered'} onClick={() => setMode('rendered')}>
+              Before &amp; after
+            </button>
+            <button type="button" aria-pressed={active === 'source'} onClick={() => setMode('source')}>
+              Source changes
+            </button>
+          </div>
+        ) : null}
+        {compare.values === null ? <span className="gcms-muted">New in this change</span> : null}
+      </div>
+      {active === 'source' ? (
+        <SourceDiff before={compare.values ? toSource(contentType, compare.values) : ''} after={toSource(contentType, values)} />
+      ) : (
+        <div className="gcms-compare-sides">
+          <section className="gcms-compare-side" aria-label={`On ${compare.label}`}>
+            <p className="gcms-compare-label">On {compare.label}</p>
+            <div className="gcms-compare-body">
+              {compare.values ? show({ contentType, values: compare.values }) : <p className="gcms-empty">Not on {compare.label} yet.</p>}
+            </div>
+          </section>
+          <section className="gcms-compare-side" aria-label="In this change">
+            <p className="gcms-compare-label">In this change</p>
+            <div className="gcms-compare-body">{show({ contentType, values })}</div>
+          </section>
+        </div>
+      )}
+    </div>
+  )
+}
+
+/** Tabs with the rendered page (markdown only, or `render`), the file source, and with `compare` the changes. */
+export function DocumentPreview({ contentType, values, render, compare }: DocumentPreviewProps) {
+  const hasRendered = Boolean(render) || contentType.format === 'markdown'
+  const [tab, setTab] = useState<'rendered' | 'source' | 'changes'>(hasRendered ? 'rendered' : 'source')
+  const active = tab === 'changes' ? (compare ? 'changes' : hasRendered ? 'rendered' : 'source') : hasRendered ? tab : 'source'
 
   return (
     <div className="gcms-preview">
@@ -144,9 +225,22 @@ export function DocumentPreview({ contentType, values, render }: DocumentPreview
         >
           Source
         </button>
+        {compare ? (
+          <button
+            type="button"
+            role="tab"
+            aria-selected={active === 'changes'}
+            className="gcms-tab"
+            onClick={() => setTab('changes')}
+          >
+            Changes
+          </button>
+        ) : null}
       </div>
       <div className="gcms-preview-body" role="tabpanel">
-        {active === 'source' ? (
+        {active === 'changes' && compare ? (
+          <PreviewComparisonView contentType={contentType} values={values} render={render} compare={compare} />
+        ) : active === 'source' ? (
           <pre className="gcms-source">{toSource(contentType, values)}</pre>
         ) : render ? (
           render({ contentType, values })

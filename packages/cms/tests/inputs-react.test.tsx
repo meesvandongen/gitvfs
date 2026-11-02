@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { GitVFS } from 'gitvfs'
 import { z } from 'zod'
 import { createCms, datetime, defineCollection, duration, field, geoPoint, money, phone, slider, time } from '../src'
-import { CmsApp } from '../src/react'
+import { BaseValuesContext, CmsApp, ContentForm } from '../src/react'
 import { MemoryRepository } from './helpers/memory-repository'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
@@ -184,5 +184,21 @@ describe('basic input fields', () => {
     await waitFor(() => byText('Use at most 2 decimals', 'p'))
     await waitFor(() => byText('Enter a valid phone number', 'p'))
     expect(remote.commits).toHaveLength(0)
+  })
+
+  it('marks changed read-only fields without offering to revert them', async () => {
+    const values = { title: 'New', id: 'show-002', importedFrom: 'new.csv' }
+    act(() =>
+      root.render(
+        <BaseValuesContext.Provider value={{ values: { title: 'Old', id: 'show-001', importedFrom: 'old.csv' }, label: 'main' }}>
+          <ContentForm contentType={shows} defaultValues={values} onSubmit={() => {}} />
+        </BaseValuesContext.Provider>,
+      ),
+    )
+    const idField = await waitFor(() => container.querySelector('input[name="id"]')?.closest('.gcms-field'))
+    expect(idField.querySelector('.gcms-change')?.textContent).toBe('Changed')
+    expect(container.querySelector('button[aria-label="Revert id to main"]')).toBeNull()
+    expect(container.querySelector('button[aria-label="Revert title to main"]')).toBeTruthy()
+    expect(container.querySelector('[name="importedFrom"]')).toBeNull()
   })
 })
