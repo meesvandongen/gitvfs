@@ -16,6 +16,8 @@ import type { ContentType } from '../config.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPolygonField } from './map.js'
 import { CodeField } from './code.js'
 import { MermaidField } from './mermaid.js'
+import { TableField } from './table.js'
+import { TreeField } from './tree.js'
 import { FieldChange } from './field-changes.js'
 
 /**
@@ -375,6 +377,8 @@ export const formComponents: AutoFormFieldComponents = {
   geopolygon: GeoPolygonField,
   code: CodeField,
   mermaid: MermaidField,
+  table: TableField,
+  tree: TreeField,
   fallback: StringField,
 }
 

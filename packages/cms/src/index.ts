@@ -82,5 +82,37 @@ export {
 export type { CodeBlock, CodeCustomData, CodeError, CodeFieldConfig, CodeOptions, MermaidOptions, TextEdit } from './code.js'
 export { CODE_LANGUAGES, normalizeLanguage, tokenize } from './highlight.js'
 export type { CodeLanguage, Token, TokenType } from './highlight.js'
+export {
+  cellType,
+  detectDelimiter,
+  formatCell,
+  matchHeader,
+  parseCell,
+  parseDelimited,
+  pasteCells,
+  rowsToCsv,
+  serializeDelimited,
+  table,
+} from './table.js'
+export type { TableCellType, TableColumn } from './table.js'
+export {
+  countDescendants,
+  flattenTree,
+  getNode,
+  indentNode,
+  insertNode,
+  isWithin,
+  moveDown,
+  moveNode,
+  moveUp,
+  nodeHeight,
+  outdentNode,
+  pathKey,
+  remapPath,
+  removeNode,
+  tree,
+  updateNode,
+} from './tree.js'
+export type { FlatTreeNode, TreeChange, TreeConfig, TreeCustomData, TreeNode, TreeOptions, TreePath } from './tree.js'
 export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
 export type { DiffLine } from './changes.js'
