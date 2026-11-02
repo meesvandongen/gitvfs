@@ -2,7 +2,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { GitVFS } from 'gitvfs'
 import { z } from 'zod'
-import { createCms, datetime, defineCollection, duration, field, geoPoint, money, phone, slider, time } from '../src'
+import { createCms, datetime, defineCollection, duration, field, geoPoint, money, phone, slider, time, tree } from '../src'
 import { BaseValuesContext, CmsApp, ContentForm } from '../src/react'
 import { MemoryRepository } from './helpers/memory-repository'
 
@@ -200,5 +200,22 @@ describe('basic input fields', () => {
     expect(container.querySelector('button[aria-label="Revert id to main"]')).toBeNull()
     expect(container.querySelector('button[aria-label="Revert title to main"]')).toBeTruthy()
     expect(container.querySelector('[name="importedFrom"]')).toBeNull()
+  })
+
+  it('keeps a read-only tree from being reordered or deleted', async () => {
+    const menu = defineCollection({
+      name: 'menus',
+      folder: 'menus',
+      schema: z.object({ items: tree({ label: 'Items', readOnly: true, fields: { label: z.string() } }) }),
+    })
+    const values = { items: [{ label: 'One' }, { label: 'Two' }] }
+    act(() => root.render(<ContentForm contentType={menu} defaultValues={values} onSubmit={() => {}} />))
+    const labels = () => [...container.querySelectorAll('.gcms-tree-label')].map((el) => el.textContent)
+    const first = await waitFor(() => container.querySelector<HTMLElement>('[role="treeitem"]'))
+    expect(first.querySelector('.gcms-tree-row')?.getAttribute('draggable')).toBe('false')
+    for (const init of [{ key: 'ArrowDown', altKey: true }, { key: 'Delete' }]) {
+      await act(async () => first.dispatchEvent(new KeyboardEvent('keydown', { bubbles: true, ...init })))
+    }
+    expect(labels()).toEqual(['One', 'Two'])
   })
 })

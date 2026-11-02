@@ -20,6 +20,8 @@ import { withFieldState } from './field-utils.js'
 import { MoneyField } from './money.js'
 import { PhoneField } from './phone.js'
 import { SliderField } from './slider.js'
+import { TableField } from './table.js'
+import { TreeField } from './tree.js'
 import { FieldChange } from './field-changes.js'
 
 /**
@@ -383,6 +385,8 @@ export const formComponents: AutoFormFieldComponents = {
   money: MoneyField,
   duration: DurationField,
   phone: PhoneField,
+  table: TableField,
+  tree: TreeField,
   fallback: StringField,
 }
 
