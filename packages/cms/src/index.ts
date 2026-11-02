@@ -1,6 +1,11 @@
 export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
+  ChangeComparison,
+  ChangeSummary,
+  ChangesOptions,
   CmsOptions,
+  CmsState,
+  ContentChange,
   LoadedDocument,
   SaveEntryOptions,
   SaveResult,
@@ -101,3 +106,5 @@ export type {
   NodeKinds,
   NodeShape,
 } from './graph.js'
+export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
+export type { DiffLine } from './changes.js'

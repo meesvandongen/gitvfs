@@ -39,6 +39,7 @@ import {
   type NodeBox,
   type Point,
 } from '../graph.js'
+import { BaseValuesContext } from './field-changes.js'
 import { errorMessages, useErrorTree } from './field-utils.js'
 
 // Not imported from ./autoform.js, which imports this module for its field components.
@@ -814,11 +815,15 @@ function ItemFields({
 
   return (
     <FormProvider {...form}>
-      <div className="gcms-graph-fields">
-        {fields.map((child) => (
-          <AutoFormField key={child.key} parsedField={child} path={[scope, child.key]} />
-        ))}
-      </div>
+      {/* Change markers compare form paths with the base branch; these paths are the inner form's,
+          so the markers would be wrong here. The graph field as a whole is marked instead. */}
+      <BaseValuesContext.Provider value={null}>
+        <div className="gcms-graph-fields">
+          {fields.map((child) => (
+            <AutoFormField key={child.key} parsedField={child} path={[scope, child.key]} />
+          ))}
+        </div>
+      </BaseValuesContext.Provider>
     </FormProvider>
   )
 }

@@ -1,10 +1,13 @@
 export class GitVFSError extends Error {
   code: string
+  /** The HTTP status, for errors from a host's API. */
+  status?: number
 
-  constructor(message: string, code: string) {
+  constructor(message: string, code: string, status?: number) {
     super(message)
     this.name = 'GitVFSError'
     this.code = code
+    this.status = status
   }
 }
 
