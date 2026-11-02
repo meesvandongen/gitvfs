@@ -13,6 +13,8 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon, a route line and labelled branch markers (`geoPoints`); address search on every map field through `mapDefaults={{ geocoder: nominatimGeocoder() }}` |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 
+Editing happens in **changes** (`changes: true`): **New change** in the sidebar starts a branch, saves become commits there, and **Review & publish** lists what changed, opens a pull request and merges it. Inside a change, fields that differ from `main` are marked (with **Revert**), and the preview's **Changes** tab shows both versions rendered (**Before & after**) or as a source diff. The mock serves the branch, compare and pull request endpoints this needs.
+
 The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.
 
 The content model is in `src/content.ts` and the seed files are at its end. Change the storage key in `src/main.tsx` when the seed changes, so returning visitors start over.

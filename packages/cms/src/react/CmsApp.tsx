@@ -1,7 +1,8 @@
-import { useState, type ReactNode } from 'react'
-import type { GitCms } from '../cms.js'
+import { useState, useSyncExternalStore, type ReactNode } from 'react'
+import type { ContentChange, GitCms } from '../cms.js'
 import type { Collection, EntrySummary } from '../config.js'
-import { CmsProvider, useCms } from './context.js'
+import { ChangeStatusBadge, ChangeSwitcher, ChangesView } from './ChangesView.js'
+import { ChangeReviewContext, CmsProvider, useChangeReview, useCms, useCmsState } from './context.js'
 import { DocumentEditor, type DocumentEditorProps } from './DocumentEditor.js'
 import type { MapOptions } from '../geo.js'
 import { MapDefaultsProvider } from './map.js'
@@ -10,6 +11,8 @@ import { errorMessage, useAsync, type AsyncState } from './use-async.js'
 export type CmsView =
   | { type: 'collection'; name: string; slug?: string | null }
   | { type: 'singleton'; name: string }
+  /** Review and publish the current change (with `changes` enabled). */
+  | { type: 'changes' }
 
 export interface CmsAppProps {
   cms: GitCms
@@ -38,36 +41,70 @@ function firstView(cms: GitCms): CmsView | undefined {
 
 /** A complete editing UI: content types, entry lists, and the editor with live preview. */
 export function CmsApp(props: CmsAppProps) {
-  const [ownView, setOwnView] = useState<CmsView | undefined>(() => firstView(props.cms))
-  const view = props.view ?? ownView
+  const { cms } = props
+  const [ownView, setOwnView] = useState<CmsView | undefined>(() => firstView(cms))
+  const state = useSyncExternalStore(cms.subscribe, cms.getState, cms.getState)
+  const requested = props.view ?? ownView
+  // The review only exists inside a change, e.g. not after publishing it.
+  const view = requested?.type === 'changes' && !state.inChange ? firstView(cms) : requested
   const navigate = (next: CmsView) => {
     setOwnView(next)
     props.onViewChange?.(next)
   }
+  // Shared by the sidebar counts, entry badges and the review.
+  const review = useAsync(
+    () => (state.inChange && cms.changes ? cms.compareChange().catch(() => null) : Promise.resolve(null)),
+    [cms, state.branch, state.version],
+  )
+  const open = (change: ContentChange) => {
+    if (change.contentType?.kind === 'singleton') navigate({ type: 'singleton', name: change.contentType.name })
+    else if (change.contentType && change.slug) navigate({ type: 'collection', name: change.contentType.name, slug: change.slug })
+  }
 
   return (
-    <CmsProvider cms={props.cms}>
-      <MapDefaultsProvider value={props.mapDefaults ?? NO_MAP_DEFAULTS}>
-        <div className="gcms-app">
-          <Sidebar title={props.title} footer={props.sidebarFooter} view={view} onNavigate={navigate} />
-          {view === undefined ? (
-            <main className="gcms-main gcms-empty">Configure a collection or singleton to start editing.</main>
-          ) : view.type === 'collection' ? (
-            <CollectionView {...props} view={view} onNavigate={navigate} />
-          ) : (
-            <main className="gcms-main">
-              <DocumentEditor
-                contentType={props.cms.getSingleton(view.name)}
-                renderPreview={props.previews?.[view.name]}
-                uiComponents={props.uiComponents}
-                formComponents={props.formComponents}
-              />
-            </main>
-          )}
-        </div>
-      </MapDefaultsProvider>
+    <CmsProvider cms={cms}>
+      <ChangeReviewContext.Provider value={review}>
+        <MapDefaultsProvider value={props.mapDefaults ?? NO_MAP_DEFAULTS}>
+          <div className="gcms-app">
+            <Sidebar title={props.title} footer={props.sidebarFooter} view={view} onNavigate={navigate} />
+            {view === undefined ? (
+              <main className="gcms-main gcms-empty">Configure a collection or singleton to start editing.</main>
+            ) : view.type === 'changes' ? (
+              <main className="gcms-main">
+                <ChangesView onOpen={open} />
+              </main>
+            ) : view.type === 'collection' ? (
+              <CollectionView {...props} view={view} onNavigate={navigate} />
+            ) : (
+              <main className="gcms-main">
+                <DocumentEditor
+                  contentType={props.cms.getSingleton(view.name)}
+                  renderPreview={props.previews?.[view.name]}
+                  uiComponents={props.uiComponents}
+                  formComponents={props.formComponents}
+                />
+              </main>
+            )}
+          </div>
+        </MapDefaultsProvider>
+      </ChangeReviewContext.Provider>
     </CmsProvider>
   )
+}
+
+/** Changed entries per collection name, and changed singleton names, in the current change. */
+function useChangedContent() {
+  const changes = useChangeReview()?.data?.changes ?? []
+  const byType = new Map<string, ContentChange[]>()
+  for (const change of changes) {
+    if (!change.contentType) continue
+    byType.set(change.contentType.name, [...(byType.get(change.contentType.name) ?? []), change])
+  }
+  return { total: changes.length, byType }
+}
+
+function CountBadge({ count }: { count: number | undefined }) {
+  return count ? <span className="gcms-nav-count" aria-label={`${count} changed`}>{count}</span> : null
 }
 
 function Sidebar(props: {
@@ -77,12 +114,30 @@ function Sidebar(props: {
   onNavigate: (view: CmsView) => void
 }) {
   const cms = useCms()
+  const state = useCmsState()
+  const changed = useChangedContent()
   const isActive = (type: CmsView['type'], name: string) =>
-    props.view?.type === type && props.view.name === name
+    props.view?.type === type && 'name' in props.view && props.view.name === name
 
   return (
     <nav className="gcms-sidebar" aria-label="Content">
       <div className="gcms-brand">{props.title ?? 'Content'}</div>
+      {cms.changes ? (
+        <div className="gcms-nav-group">
+          <ChangeSwitcher />
+          {state.inChange ? (
+            <button
+              type="button"
+              className="gcms-nav-item gcms-nav-item--review"
+              aria-current={props.view?.type === 'changes' ? 'page' : undefined}
+              onClick={() => props.onNavigate({ type: 'changes' })}
+            >
+              Review &amp; publish
+              <CountBadge count={changed.total} />
+            </button>
+          ) : null}
+        </div>
+      ) : null}
       {cms.collections.length > 0 && (
         <div className="gcms-nav-group">
           <p className="gcms-nav-heading">Collections</p>
@@ -95,6 +150,7 @@ function Sidebar(props: {
               onClick={() => props.onNavigate({ type: 'collection', name: collection.name })}
             >
               {collection.label}
+              <CountBadge count={changed.byType.get(collection.name)?.length} />
             </button>
           ))}
         </div>
@@ -111,6 +167,7 @@ function Sidebar(props: {
               onClick={() => props.onNavigate({ type: 'singleton', name: singleton.name })}
             >
               {singleton.label}
+              <CountBadge count={changed.byType.get(singleton.name)?.length} />
             </button>
           ))}
         </div>
@@ -127,8 +184,9 @@ function CollectionView(
   },
 ) {
   const { cms, view } = props
+  const { branch } = useCmsState()
   const collection = cms.getCollection(view.name)
-  const entries = useAsync(() => cms.listEntries(collection.name), [cms, collection])
+  const entries = useAsync(() => cms.listEntries(collection.name), [cms, collection, branch])
   const open = (slug: string | null | undefined) =>
     props.onNavigate({ type: 'collection', name: collection.name, slug })
 
@@ -178,6 +236,8 @@ function EntryList(props: {
   onOpen: (slug: string | null) => void
 }) {
   const { collection, entries } = props
+  const cms = useCms()
+  const changes = useChangedContent().byType.get(collection.name) ?? []
   const [filter, setFilter] = useState('')
   const needle = filter.trim().toLowerCase()
   const visible = (entries.data ?? []).filter(
@@ -188,7 +248,13 @@ function EntryList(props: {
     <section className="gcms-list" aria-label={`${collection.label} entries`}>
       <div className="gcms-list-header">
         <h2>{collection.label}</h2>
-        <button type="button" className="gcms-button gcms-button--primary gcms-button--small" onClick={() => props.onOpen(null)}>
+        <button
+          type="button"
+          className="gcms-button gcms-button--primary gcms-button--small"
+          disabled={!cms.canEdit()}
+          title={cms.canEdit() ? undefined : 'Start a change to add entries'}
+          onClick={() => props.onOpen(null)}
+        >
           New
         </button>
       </div>
@@ -208,19 +274,29 @@ function EntryList(props: {
       ) : null}
       {entries.data && visible.length === 0 ? <p className="gcms-muted">No entries.</p> : null}
       <ul className="gcms-entries">
-        {visible.map((entry) => (
-          <li key={entry.slug}>
-            <button
-              type="button"
-              className="gcms-entry"
-              aria-current={entry.slug === props.activeSlug ? 'page' : undefined}
-              onClick={() => props.onOpen(entry.slug)}
-            >
-              <span className="gcms-entry-label">{entry.label}</span>
-              <span className="gcms-entry-path">{entry.slug}</span>
-            </button>
-          </li>
-        ))}
+        {visible.map((entry) => {
+          const change = changes.find((candidate) => candidate.slug === entry.slug)
+          return (
+            <li key={entry.slug}>
+              <button
+                type="button"
+                className="gcms-entry"
+                aria-current={entry.slug === props.activeSlug ? 'page' : undefined}
+                onClick={() => props.onOpen(entry.slug)}
+              >
+                {change ? (
+                  <span className="gcms-entry-label gcms-entry-label--changed">
+                    <span className="gcms-entry-text">{entry.label}</span>
+                    <ChangeStatusBadge status={change.status} />
+                  </span>
+                ) : (
+                  <span className="gcms-entry-label">{entry.label}</span>
+                )}
+                <span className="gcms-entry-path">{entry.slug}</span>
+              </button>
+            </li>
+          )
+        })}
       </ul>
     </section>
   )

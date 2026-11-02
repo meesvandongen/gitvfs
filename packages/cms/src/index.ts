@@ -1,6 +1,11 @@
 export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
+  ChangeComparison,
+  ChangeSummary,
+  ChangesOptions,
   CmsOptions,
+  CmsState,
+  ContentChange,
   LoadedDocument,
   SaveEntryOptions,
   SaveResult,
@@ -65,3 +70,5 @@ export type {
 export { NOMINATIM_ENDPOINT, nominatimGeocoder } from './geocode.js'
 export type { GeoBounds, GeocodeOptions, GeocodeResult, Geocoder, NominatimOptions } from './geocode.js'
 export { isValidSlug, slugify } from './slug.js'
+export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
+export type { DiffLine } from './changes.js'

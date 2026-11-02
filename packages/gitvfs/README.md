@@ -52,7 +52,7 @@ for await (const repo of gh.listRepositories()) console.log(repo.fullName)
 - Read: `readFile`, `readdir`, `exists`, `stat`, `prefetch`
 - Edit: `writeFile`, `rm`, `rename`
 - Change management: `status`, `discard`, `commit`
-- Branches: `createBranch`, `checkout`
+- Branches: `createBranch`, `checkout`, `updateFromBase`
 
 ## Provider imports
 
