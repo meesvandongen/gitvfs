@@ -14,6 +14,8 @@ import { ZodProvider } from '@autoform/zod'
 import { z } from 'zod'
 import type { ContentType } from '../config.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPointsField, GeoPolygonField } from './map.js'
+import { TableField } from './table.js'
+import { TreeField } from './tree.js'
 import { FieldChange } from './field-changes.js'
 
 /**
@@ -372,6 +374,8 @@ export const formComponents: AutoFormFieldComponents = {
   geoline: GeoLineField,
   geopolygon: GeoPolygonField,
   geopoints: GeoPointsField,
+  table: TableField,
+  tree: TreeField,
   fallback: StringField,
 }
 

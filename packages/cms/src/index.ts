@@ -70,5 +70,37 @@ export type {
 export { NOMINATIM_ENDPOINT, nominatimGeocoder } from './geocode.js'
 export type { GeoBounds, GeocodeOptions, GeocodeResult, Geocoder, NominatimOptions } from './geocode.js'
 export { isValidSlug, slugify } from './slug.js'
+export {
+  cellType,
+  detectDelimiter,
+  formatCell,
+  matchHeader,
+  parseCell,
+  parseDelimited,
+  pasteCells,
+  rowsToCsv,
+  serializeDelimited,
+  table,
+} from './table.js'
+export type { TableCellType, TableColumn } from './table.js'
+export {
+  countDescendants,
+  flattenTree,
+  getNode,
+  indentNode,
+  insertNode,
+  isWithin,
+  moveDown,
+  moveNode,
+  moveUp,
+  nodeHeight,
+  outdentNode,
+  pathKey,
+  remapPath,
+  removeNode,
+  tree,
+  updateNode,
+} from './tree.js'
+export type { FlatTreeNode, TreeChange, TreeConfig, TreeCustomData, TreeNode, TreeOptions, TreePath } from './tree.js'
 export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
 export type { DiffLine } from './changes.js'

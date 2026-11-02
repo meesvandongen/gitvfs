@@ -27,6 +27,8 @@ export {
   fitView,
 } from './map.js'
 export type { MapOverlayHelpers, MapView, SlippyMapProps } from './map.js'
+export { TableField } from './table.js'
+export { TreeField } from './tree.js'
 export { ChangeReviewContext, CmsProvider, useChangeReview, useCms, useCmsState } from './context.js'
 export { ChangeStatusBadge, ChangeSwitcher, ChangesView } from './ChangesView.js'
 export type { ChangesViewProps } from './ChangesView.js'

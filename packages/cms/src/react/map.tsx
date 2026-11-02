@@ -13,7 +13,6 @@ import {
   type ReactNode,
   type SetStateAction,
 } from 'react'
-import { useFormState } from 'react-hook-form'
 import type { AutoFormFieldProps } from '@autoform/react'
 import { useFieldRHF } from '@autoform/react/react-hook-form'
 import {
@@ -40,6 +39,7 @@ import {
   type MapTiles,
 } from '../geo.js'
 import type { GeocodeResult, Geocoder } from '../geocode.js'
+import { NestedErrors } from './field-utils.js'
 
 // Not imported from ./autoform.js, which imports this module for its field components.
 const useField = (name: string) => useFieldRHF({ name }).field
@@ -384,35 +384,6 @@ function useMapOptions(props: AutoFormFieldProps): FieldMapOptions {
   const merged: Record<string, unknown> = { ...defaults }
   for (const [key, value] of Object.entries(own)) if (value !== undefined) merged[key] = value
   return merged as FieldMapOptions
-}
-
-/** Error messages of the parts of a field (`location.lat`, `area.2.lng`), which AutoForm does not show. */
-function useNestedErrors(name: string): string[] {
-  const { errors } = useFormState({ name })
-  let node: unknown = errors
-  for (const key of name.split('.')) node = (node as Record<string, unknown> | undefined)?.[key]
-  const messages: string[] = []
-  const collect = (value: unknown, depth: number) => {
-    if (!value || typeof value !== 'object' || depth > 4) return
-    for (const [key, child] of Object.entries(value)) {
-      if (key === 'ref' || key === 'root') continue
-      const message = (child as { message?: unknown } | undefined)?.message
-      if (typeof message === 'string' && key !== 'message') messages.push(message)
-      else collect(child, depth + 1)
-    }
-  }
-  collect(node, 0)
-  return [...new Set(messages)]
-}
-
-function NestedErrors({ name }: { name: string }) {
-  const messages = useNestedErrors(name)
-  if (messages.length === 0) return null
-  return (
-    <p className="gcms-error" role="alert">
-      {messages.join('. ')}
-    </p>
-  )
 }
 
 /** A text input for one number that lets people type freely (`-`, `52.`) and reports finite values. */
