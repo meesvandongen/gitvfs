@@ -14,6 +14,9 @@ import { ZodProvider } from '@autoform/zod'
 import { z } from 'zod'
 import type { ContentType } from '../config.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPolygonField } from './map.js'
+import { DateRangeField } from './date-range.js'
+import { OpeningHoursField } from './opening-hours.js'
+import { RecurrenceField } from './recurrence.js'
 
 /**
  * The form binding (`value`, `onChange`, `onBlur`, `name`, `ref`) for a field, for custom field
@@ -361,6 +364,9 @@ export const formComponents: AutoFormFieldComponents = {
   geocircle: GeoCircleField,
   geoline: GeoLineField,
   geopolygon: GeoPolygonField,
+  daterange: DateRangeField,
+  openinghours: OpeningHoursField,
+  recurrence: RecurrenceField,
   fallback: StringField,
 }
 

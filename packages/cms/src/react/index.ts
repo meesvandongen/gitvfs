@@ -35,3 +35,6 @@ export type {
 } from './preview.js'
 export { useAsync } from './use-async.js'
 export type { AsyncState } from './use-async.js'
+export { DateRangeField } from './date-range.js'
+export { OpeningHoursField } from './opening-hours.js'
+export { RecurrenceField } from './recurrence.js'

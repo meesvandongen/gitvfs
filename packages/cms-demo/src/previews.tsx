@@ -1,3 +1,4 @@
+import { describeRecurrence, formatDateRange, isDateRange, type Recurrence } from 'gitvfs-cms'
 import type { PreviewProps } from 'gitvfs-cms/react'
 
 const text = (value: unknown, fallback = ''): string => (typeof value === 'string' && value ? value : fallback)
@@ -33,6 +34,7 @@ export function AuthorPreview({ values }: PreviewProps) {
 export function EventPreview({ values }: PreviewProps) {
   const tickets = Array.isArray(values.tickets) ? (values.tickets as Array<{ name?: string; price?: number }>) : []
   const location = values.location as { venue?: string; city?: string } | undefined
+  const repeats = values.repeats as Recurrence | null | undefined
   const starts = values.starts instanceof Date || typeof values.starts === 'string' ? new Date(values.starts) : null
   return (
     <div className="demo-preview">
@@ -40,6 +42,8 @@ export function EventPreview({ values }: PreviewProps) {
         <p className="demo-role">{starts && !Number.isNaN(starts.getTime()) ? starts.toDateString() : 'No date yet'}</p>
         <h2>{text(values.title, 'Untitled event')}</h2>
         <p>{values.online ? 'Online' : [location?.venue, location?.city].filter(Boolean).join(', ') || 'Location to be announced'}</p>
+        {isDateRange(values.dates) ? <p>{formatDateRange(values.dates, 'en-GB')}</p> : null}
+        {repeats ? <p>{describeRecurrence(repeats, { locale: 'en-GB' })}</p> : null}
         {tickets.length > 0 ? (
           <table>
             <tbody>

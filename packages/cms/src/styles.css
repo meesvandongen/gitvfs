@@ -750,3 +750,291 @@
     grid-column: auto;
   }
 }
+
+/* Scheduling fields (dateRange, openingHours, recurrence) */
+.gcms-daterange,
+.gcms-hours,
+.gcms-recurrence {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  outline: none;
+}
+
+.gcms-daterange .gcms-input,
+.gcms-hours .gcms-input,
+.gcms-recurrence .gcms-input {
+  /* Native date and time pickers follow the theme, as the rest of the editor does. */
+  color-scheme: light dark;
+}
+
+.gcms-sched-label {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  color: var(--gcms-muted);
+  font-size: 0.75rem;
+}
+
+.gcms-sched-label .gcms-input {
+  font-size: 0.875rem;
+}
+
+.gcms-sched-help {
+  margin: 0;
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+}
+
+.gcms-sched-inline {
+  width: auto;
+  padding: 0.25rem 0.4rem;
+}
+
+.gcms-daterange-inputs,
+.gcms-recurrence-line {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.gcms-daterange-inputs .gcms-sched-label {
+  flex: 1 1 11rem;
+}
+
+.gcms-hours {
+  container-type: inline-size;
+}
+
+.gcms-hours-week {
+  display: flex;
+  flex-direction: column;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+}
+
+.gcms-hours-row {
+  display: grid;
+  grid-template-columns: 6.5rem 5.5rem minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 0.25rem 0.5rem;
+  padding: 0.4rem 0.6rem;
+}
+
+.gcms-hours-week .gcms-hours-row + .gcms-hours-row {
+  border-top: 1px solid var(--gcms-border);
+}
+
+.gcms-hours-day {
+  font-weight: 600;
+}
+
+.gcms-hours-closed {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+}
+
+.gcms-hours-closed input,
+.gcms-recurrence-option input[type='radio'] {
+  accent-color: var(--gcms-accent);
+}
+
+.gcms-hours-intervals {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+}
+
+.gcms-hours-interval {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gcms-hours-time {
+  width: 7.5rem;
+  padding: 0.25rem 0.4rem;
+}
+
+.gcms-hours-note {
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gcms-accent) 14%, transparent);
+  color: var(--gcms-accent);
+  font-size: 0.72rem;
+  font-weight: 600;
+}
+
+.gcms-hours-actions {
+  display: flex;
+  grid-column: -2;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.25rem;
+}
+
+/* Narrow: the day, Closed and the buttons on one line, the hours below. */
+@container (max-width: 760px) {
+  .gcms-hours-row {
+    grid-template-columns: 6rem auto minmax(0, 1fr);
+  }
+
+  .gcms-hours-intervals {
+    grid-row: 2;
+    grid-column: 1 / -1;
+  }
+
+  .gcms-hours-actions {
+    grid-row: 1;
+    grid-column: 3;
+  }
+
+  .gcms-hours-exception .gcms-hours-row {
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+
+  .gcms-hours-exception .gcms-hours-actions {
+    grid-column: 2;
+  }
+}
+
+.gcms-hours-special {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0.6rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+}
+
+.gcms-hours-special legend {
+  padding: 0 0.25rem;
+  font-weight: 600;
+}
+
+.gcms-hours-special > .gcms-button {
+  align-self: flex-start;
+}
+
+.gcms-hours-exception {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px dashed var(--gcms-border);
+}
+
+.gcms-hours-exception .gcms-hours-row {
+  grid-template-columns: 5.5rem minmax(0, 1fr) auto;
+  padding: 0;
+}
+
+.gcms-hours-exception-dates {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: 0.5rem;
+}
+
+.gcms-recurrence-inline {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--gcms-text);
+  font-size: 0.875rem;
+}
+
+.gcms-recurrence-number {
+  width: 4.5rem;
+}
+
+.gcms-recurrence-days {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.3rem;
+}
+
+.gcms-recurrence-day {
+  min-width: 2.4rem;
+  padding: 0.3rem 0.5rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 999px;
+  background: var(--gcms-bg);
+  color: inherit;
+  font: 600 0.8rem var(--gcms-font);
+  cursor: pointer;
+}
+
+.gcms-recurrence-day[aria-pressed='true'] {
+  border-color: var(--gcms-accent);
+  background: var(--gcms-accent);
+  color: var(--gcms-accent-text);
+}
+
+.gcms-recurrence-day:focus-visible,
+.gcms-recurrence-advanced summary:focus-visible {
+  outline: 2px solid var(--gcms-accent);
+  outline-offset: 1px;
+}
+
+.gcms-recurrence-options {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.gcms-recurrence-heading {
+  font-size: 0.8rem;
+  font-weight: 600;
+}
+
+.gcms-recurrence-option {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.4rem;
+  font-size: 0.875rem;
+}
+
+.gcms-recurrence-option .gcms-recurrence-number {
+  padding: 0.25rem 0.4rem;
+}
+
+.gcms-recurrence-summary {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  padding: 0.6rem 0.75rem;
+  border-radius: 6px;
+  background: var(--gcms-surface);
+}
+
+.gcms-recurrence-dates {
+  margin: 0;
+  padding-left: 1.4rem;
+  font-size: 0.85rem;
+  font-variant-numeric: tabular-nums;
+}
+
+.gcms-recurrence-rule {
+  font-family: var(--gcms-mono);
+  font-size: 0.82rem;
+}
+
+.gcms-recurrence-advanced summary {
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.gcms-recurrence-advanced[open] {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}

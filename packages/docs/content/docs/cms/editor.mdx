@@ -99,6 +99,154 @@ For your site, `toGeoJSON(value)` converts a value to a GeoJSON geometry (a circ
 or a ring of points with `{ polygon: true }`), and `distance`, `pathLength` and `polygonArea` measure
 in meters.
 
+## Scheduling fields
+
+Three helpers store dates and times as readable text. Times are local wall-clock times ("19:30 at
+the venue"): no time zone or offset is stored, so a value reads the same everywhere and daylight
+saving time never shifts it. Convert to an instant on your site with `wallClockToDate(value,
+'Europe/Amsterdam')`.
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `dateRange()` | `{ start, end }`, `YYYY-MM-DD` (or `YYYY-MM-DDTHH:mm` with `time: true`) | start and end inputs, the range in words |
+| `openingHours()` | a week of `{ opens, closes }` intervals per day, plus `exceptions` | a row per day, special dates |
+| `recurrence()` | `{ start, rule }`, `rule` an RFC 5545 RRULE | frequency, interval, weekdays, monthly pattern, end, next dates |
+
+```ts
+import { dateRange, openingHours, recurrence } from 'gitvfs-cms'
+
+const events = defineCollection({
+  name: 'events',
+  folder: 'data/events',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string(),
+    dates: dateRange({ label: 'Dates', maxLength: 14 }).optional(),
+    repeats: recurrence({ label: 'Repeats', time: true }).optional(),
+    hours: openingHours({ label: 'Opening hours' }).optional(),
+  }),
+})
+```
+
+### Date range
+
+```yaml
+dates:
+  start: 2026-11-20
+  end: 2026-11-22
+```
+
+Both ends are inclusive and `end` may not be before `start` (the error is reported on `end`). The
+editor shows the range as `20–22 Nov 2026 · 3 days`, and moving the start moves the end with it, so
+the length stays the same.
+
+| Option | Default | |
+| --- | --- | --- |
+| `time` | `false` | Store local date-times (`2026-11-20T19:30`) instead of dates. |
+| `unit` | `'days'` | Count `days` (20–22 Nov is 3) or `nights` (2), for the limits and the summary. |
+| `minLength`, `maxLength` | none | Shortest and longest range, in `unit`. |
+| `locale` | the browser's | Locale of the summary. |
+
+`formatDateRange`, `describeRangeLength` and `rangeLength` give the same summary on your site.
+
+### Opening hours
+
+```yaml
+hours:
+  mon: []                    # closed
+  tue:
+    - opens: 09:00
+      closes: 12:30
+    - opens: 13:30           # after a lunch break
+      closes: 17:30
+  fri:
+    - opens: 18:00
+      closes: 02:00          # past midnight: closes on Saturday
+  # wed, thu, sat, sun ...
+  exceptions:
+    - date: 2026-12-25
+      until: 2026-12-26      # optional, for a range of days
+      label: Christmas
+      hours: []              # closed
+    - date: 2026-12-31
+      hours:
+        - opens: 10:00
+          closes: 16:00
+```
+
+The format follows [schema.org's `OpeningHoursSpecification`](https://schema.org/OpeningHoursSpecification)
+and Google Business Profile hours, keyed by day so a week reads top to bottom:
+
+- Times are 24-hour `HH:mm`. An interval belongs to the day it opens; a closing time at or before
+  the opening time is on the next day (`18:00`–`02:00`), `24:00` is the end of the day, and
+  `00:00`–`00:00` is open around the clock. A missing or empty day is closed.
+- `exceptions` replace the weekly hours on a date, or from `date` through `until`.
+- Validation rejects malformed times, overlapping intervals (also a night running into the next
+  day's hours) and overlapping special dates. With `overnight: false`, hours past midnight are an
+  error.
+
+The editor has one row per day with **Closed**, **Add hours** (for a second interval) and **Copy to
+all days**, and a list of special dates.
+
+| Option | Default | |
+| --- | --- | --- |
+| `overnight` | `true` | Allow closing times past midnight. |
+| `exceptions` | `true` | Show the special dates editor. |
+| `defaultInterval` | `{ opens: '09:00', closes: '17:00' }` | Hours a day gets when it is opened. |
+
+On your site:
+
+- `isOpenAt(hours, new Date(), { timeZone: 'Europe/Amsterdam' })` says whether the place is open.
+  Hours are read as local times in that zone, so a bar open until 04:00 closes at 04:00 also on the
+  night the clocks change. Without `timeZone`, the runtime's zone is used.
+- `hoursOn(hours, '2026-12-24')` gives the hours of a date, special dates included.
+- `toOpeningHoursSpecification(hours, { from: today })` returns schema.org
+  `OpeningHoursSpecification` objects for JSON-LD, in the form Google's local business guidelines
+  describe (`23:59` for the end of the day, `00:00`–`00:00` with `validFrom` / `validThrough` for a
+  closed special date).
+- `toOsmOpeningHours(hours)` writes the OpenStreetMap
+  [`opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours) syntax:
+  `Tu 09:00-12:30,13:30-17:30; Fr 18:00-02:00; 2026 Dec 25-26 off`.
+
+### Recurrence
+
+```yaml
+repeats:
+  start: 2026-12-04T16:00
+  rule: FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;UNTIL=20270625T235959
+```
+
+`start` is the first occurrence (the iCalendar `DTSTART`) as a local date or date-time, and `rule`
+is an [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545#section-3.3.10) RRULE, the text calendar
+apps use, so rules can be copied in and out. `toICalendar(value, { timeZone })` writes the
+`DTSTART` and `RRULE` lines for an `.ics` file.
+
+The editor sets the frequency (daily, weekly, monthly, yearly), the interval, the weekdays of a
+weekly rule, a monthly day ("day 20", "last day") or weekday ("the 2nd Tuesday", "the last
+Friday"), and the end (never, on a date, after a number of times). It shows the series in words,
+such as _Every 2 weeks on Friday, until 25 Jun 2027_, and the next dates. The rule is also editable
+as text.
+
+The rules are read, written and expanded by a small built-in implementation that supports
+`FREQ=DAILY|WEEKLY|MONTHLY|YEARLY`, `INTERVAL`, `COUNT`, `UNTIL`, `BYDAY` (with ordinals such as
+`2TU` and `-1FR` in monthly and yearly rules), `BYMONTHDAY` (negative values count from the end of
+the month), `BYMONTH`, `BYSETPOS` and `WKST`. Other parts (`BYHOUR`, `BYWEEKNO`, `BYYEARDAY`,
+`X-…`) are kept unchanged when a rule is edited, and the order of hand-written parts is preserved.
+Months without the chosen day are skipped, as RFC 5545 says (use `BYMONTHDAY=-1` for the last day
+of every month).
+
+| Option | Default | |
+| --- | --- | --- |
+| `time` | `false` | The start has a time of day. |
+| `preview` | `5` | How many upcoming dates the editor lists. |
+| `locale` | the browser's | Locale of dates in the summary and the list. |
+
+On your site, `expandRecurrence(value, { from, to, limit })` lists occurrences as local dates or
+date-times (a start that does not match the rule is skipped, as in rrule.js and python-dateutil),
+`describeRecurrence(value)` says the series in words, and `parseRule` / `formatRule` read and write
+rules. `expandRecurrence` throws for rules with parts it does not support rather than return wrong
+dates.
+
 ## Preview
 
 The editor shows two tabs next to the form:
