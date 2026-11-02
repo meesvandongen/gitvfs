@@ -35,9 +35,23 @@ const { sha } = await fs.commit('Publish hello post')
 const fs = new GitVFS({ repository, branch: 'main', writeBranch: 'content-edits' })
 ```
 
-With a `writeBranch`, reads come from `branch` and commits go to `writeBranch`, which is created
-from `branch` on the first commit. This is a good fit for review workflows where edits land in a
-pull request. Use `createBranch(name)` and `checkout(branch)` to manage branches directly.
+With a `writeBranch`, commits go to `writeBranch`, which is created from `branch` on the first
+commit. Reads come from `writeBranch` once it exists, so edits build on earlier commits there, and
+from `branch` until then. This is a good fit for review workflows where edits land in a pull
+request.
+
+The write branch does not see later changes to `branch` by itself. Merge them in with
+`updateFromBase()`:
+
+```ts
+const merge = await fs.updateFromBase() // null when there was nothing to merge
+```
+
+It creates a merge commit on the host and throws a `ConflictError` when both branches changed the
+same file; resolve that on the host, for example in the pull request. The GitHub provider supports
+it; the GitLab provider does not yet, because GitLab only merges through merge requests.
+
+Use `createBranch(name)` and `checkout(branch)` to manage branches directly.
 
 ## Auto-commit
 

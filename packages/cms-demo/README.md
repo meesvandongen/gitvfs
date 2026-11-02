@@ -14,6 +14,8 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Blog posts, Homepage | markdown | references: each post's author (one post points at an author that does not exist), up to three related posts in order, and a homepage highlight that can be a post or a doc (`{ collection, slug }`); deleting a referenced author lists the posts that use it |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 
+Editing happens in **changes** (`changes: true`): **New change** in the sidebar starts a branch, saves become commits there, and **Review & publish** lists what changed, opens a pull request and merges it. Inside a change, fields that differ from `main` are marked (with **Revert**), and the preview's **Changes** tab shows both versions rendered (**Before & after**) or as a source diff. The mock serves the branch, compare and pull request endpoints this needs.
+
 The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.
 
 The content model is in `src/content.ts` and the seed files are at its end. Change the storage key in `src/main.tsx` when the seed changes, so returning visitors start over.

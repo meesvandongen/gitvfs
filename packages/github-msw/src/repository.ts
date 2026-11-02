@@ -40,6 +40,8 @@ export async function blobSha(content: Uint8Array): Promise<string> {
 export interface CommitRecord {
   tree: string
   parent: string | null
+  /** A merge commit's second parent: the commit that was merged in. */
+  mergeParent?: string
   message: string
   date: string
 }
@@ -53,6 +55,29 @@ export interface RepositoryState {
   trees: Record<string, Record<string, string>>
   /** Blob id → base64 content. */
   blobs: Record<string, string>
+  /** Pull requests, oldest first. Absent in states saved before they existed. */
+  pulls?: PullRecord[]
+}
+
+export interface PullRecord {
+  number: number
+  title: string
+  body: string
+  head: string
+  base: string
+  draft: boolean
+  state: 'open' | 'closed'
+  author: string
+  createdAt: string
+  updatedAt: string
+  /** Set when merged. */
+  mergedAt?: string
+  mergeCommit?: string
+}
+
+export interface FileChange {
+  path: string
+  status: 'added' | 'modified' | 'removed'
 }
 
 export interface FileEntry {
@@ -82,6 +107,13 @@ export class StaleHeadError extends Error {
   constructor(branch: string, expected: string, actual: string) {
     super(`Expected branch ${branch} to point to "${expected}" but it did not (it points to "${actual}")`)
     this.name = 'StaleHeadError'
+  }
+}
+
+export class MergeConflictError extends Error {
+  constructor(paths: string[]) {
+    super(`Merge conflict in ${paths.join(', ')}`)
+    this.name = 'MergeConflictError'
   }
 }
 
@@ -222,6 +254,164 @@ export class MockRepository {
     return { oid, date }
   }
 
+  /**
+   * Merge `head` (a branch or commit) into the branch `base`, like GitHub's `POST /merges`: a merge
+   * commit with both as parents, or `null` when `base` already contains `head`. Files are merged
+   * whole: a file both sides changed differently is a `MergeConflictError`, and nothing changes.
+   */
+  async merge(input: { base: string; head: string; message?: string }): Promise<{ oid: string; date: string } | null> {
+    const plan = this.planMerge(input.base, input.head)
+    if (!plan) return null
+    if (plan.conflicts.length > 0) throw new MergeConflictError(plan.conflicts)
+
+    const date = new Date().toISOString()
+    const oid = await this.storeCommit({
+      tree: await this.storeTree(plan.tree),
+      parent: plan.ours,
+      mergeParent: plan.theirs,
+      message: input.message ?? `Merge ${input.head} into ${input.base}`,
+      date,
+    })
+    this.state.branches[input.base] = oid
+    return { oid, date }
+  }
+
+  /** Whether `head` merges into `base` without conflicts (true when there is nothing to merge). */
+  canMerge(base: string, head: string): boolean {
+    return (this.planMerge(base, head)?.conflicts.length ?? 0) === 0
+  }
+
+  /**
+   * How `head` compares to `base`, like GitHub's three-dot compare: commits on either side since
+   * they split, and the files `head` changed since then.
+   */
+  compare(base: string, head: string): { ahead: number; behind: number; files: FileChange[] } | undefined {
+    const baseSha = this.resolve(base)
+    const headSha = this.resolve(head)
+    if (!baseSha || !headSha) return undefined
+    const baseAncestors = this.ancestors(baseSha)
+    const headAncestors = this.ancestors(headSha)
+    const mergeBase = this.mergeBase(baseSha, headSha)
+    const before = mergeBase ? this.files(mergeBase)! : {}
+    const after = this.files(headSha)!
+    const files: FileChange[] = []
+    for (const path of [...new Set([...Object.keys(before), ...Object.keys(after)])].sort()) {
+      if (before[path] === after[path]) continue
+      files.push({ path, status: !before[path] ? 'added' : !after[path] ? 'removed' : 'modified' })
+    }
+    return {
+      ahead: [...headAncestors].filter((sha) => !baseAncestors.has(sha)).length,
+      behind: [...baseAncestors].filter((sha) => !headAncestors.has(sha)).length,
+      files,
+    }
+  }
+
+  private mergeBase(a: string, b: string): string | undefined {
+    const ofA = this.ancestors(a)
+    return [...this.ancestors(b)].find((sha) => ofA.has(sha))
+  }
+
+  /** The merged tree and conflicting paths, or `null` when `base` already contains `head`. */
+  private planMerge(base: string, head: string) {
+    const ours = this.state.branches[base]
+    const theirs = this.resolve(head)
+    if (!ours) throw new Error(`Branch not found: ${base}`)
+    if (!theirs) throw new Error(`Ref not found: ${head}`)
+    if (this.ancestors(ours).has(theirs)) return null
+
+    const mergeBase = this.mergeBase(ours, theirs)
+    const ancestorFiles = mergeBase ? this.files(mergeBase)! : {}
+    const ourFiles = this.files(ours)!
+    const theirFiles = this.files(theirs)!
+    const tree: Record<string, string> = {}
+    const conflicts: string[] = []
+    for (const path of new Set([...Object.keys(ourFiles), ...Object.keys(theirFiles)])) {
+      const [original, mine, other] = [ancestorFiles[path], ourFiles[path], theirFiles[path]]
+      let merged: string | undefined
+      if (mine === other || other === original) merged = mine
+      else if (mine === original) merged = other
+      else {
+        conflicts.push(path)
+        continue
+      }
+      if (merged) tree[path] = merged
+    }
+    return { ours, theirs, tree, conflicts: conflicts.sort() }
+  }
+
+  /** Pull requests, oldest first. */
+  pulls(): PullRecord[] {
+    return structuredClone(this.state.pulls ?? [])
+  }
+
+  getPull(number: number): PullRecord | undefined {
+    const pull = this.state.pulls?.find((entry) => entry.number === number)
+    return pull && structuredClone(pull)
+  }
+
+  /** Open a pull request from `head` into `base`, like GitHub: both must exist and differ, once per pair. */
+  createPull(input: { head: string; base: string; title: string; body?: string; draft?: boolean; author?: string }): PullRecord {
+    if (!this.state.branches[input.head]) throw new Error(`Branch not found: ${input.head}`)
+    if (!this.state.branches[input.base]) throw new Error(`Branch not found: ${input.base}`)
+    if (!input.title.trim()) throw new Error('A title is required')
+    if (this.ancestors(this.state.branches[input.base]).has(this.state.branches[input.head])) {
+      throw new Error(`No commits between ${input.base} and ${input.head}`)
+    }
+    const pulls = (this.state.pulls ??= [])
+    if (pulls.some((pull) => pull.state === 'open' && pull.head === input.head && pull.base === input.base)) {
+      throw new Error(`A pull request already exists for ${input.head}`)
+    }
+    const now = new Date().toISOString()
+    const pull: PullRecord = {
+      number: pulls.reduce((max, entry) => Math.max(max, entry.number), 0) + 1,
+      title: input.title,
+      body: input.body ?? '',
+      head: input.head,
+      base: input.base,
+      draft: input.draft ?? false,
+      state: 'open',
+      author: input.author ?? 'demo',
+      createdAt: now,
+      updatedAt: now,
+    }
+    pulls.push(pull)
+    return structuredClone(pull)
+  }
+
+  updatePull(number: number, changes: Partial<Pick<PullRecord, 'title' | 'body' | 'state'>>): PullRecord {
+    const pull = this.state.pulls?.find((entry) => entry.number === number)
+    if (!pull) throw new Error(`Pull request not found: ${number}`)
+    if (pull.mergedAt && changes.state === 'open') throw new Error('A merged pull request cannot be reopened')
+    Object.assign(pull, changes, { updatedAt: new Date().toISOString() })
+    return structuredClone(pull)
+  }
+
+  /** Merge an open pull request's head into its base; conflicts throw a `MergeConflictError`. */
+  async mergePull(number: number, message?: string): Promise<PullRecord> {
+    const pull = this.state.pulls?.find((entry) => entry.number === number)
+    if (!pull) throw new Error(`Pull request not found: ${number}`)
+    if (pull.state !== 'open') throw new Error('Pull request is not open')
+    const merged = await this.merge({ base: pull.base, head: pull.head, message: message ?? `Merge pull request #${number} from ${pull.head}` })
+    const now = new Date().toISOString()
+    Object.assign(pull, { state: 'closed', mergedAt: now, updatedAt: now, mergeCommit: merged?.oid ?? this.state.branches[pull.base] })
+    return structuredClone(pull)
+  }
+
+  /** A commit and everything it descends from, nearest first. */
+  private ancestors(sha: string): Set<string> {
+    const seen = new Set<string>()
+    const queue = [sha]
+    while (queue.length > 0) {
+      const current = queue.shift()!
+      if (seen.has(current)) continue
+      seen.add(current)
+      const commit = this.state.commits[current]
+      if (commit?.parent) queue.push(commit.parent)
+      if (commit?.mergeParent) queue.push(commit.mergeParent)
+    }
+    return seen
+  }
+
   createBranch(name: string, fromSha: string): void {
     if (this.state.branches[name]) throw new Error('Reference already exists')
     if (!this.state.commits[fromSha]) throw new Error('Object does not exist')
@@ -234,7 +424,7 @@ export class MockRepository {
     return true
   }
 
-  /** Newest first. */
+  /** Newest first, following first parents. */
   log(ref: string, limit = 50): Array<CommitRecord & { sha: string }> {
     const result: Array<CommitRecord & { sha: string }> = []
     let sha = this.resolve(ref) ?? null

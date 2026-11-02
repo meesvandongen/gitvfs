@@ -287,6 +287,114 @@ describe('map fields', () => {
   })
 })
 
+describe('CmsApp changes', () => {
+  async function setupChanges(
+    changes: Parameters<typeof createCms>[0]['changes'] = true,
+    prepare?: (remote: MemoryRepository) => Promise<void>,
+  ) {
+    const remote = new MemoryRepository({
+      'posts/hello.md': '---\ntitle: Hello\n---\n\nSome **bold** text\n',
+      'posts/other.md': '---\ntitle: Other\n---\n',
+      'site.yml': 'title: Demo\n',
+    })
+    await prepare?.(remote)
+    const cms = createCms({
+      fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }),
+      collections: [posts],
+      singletons: [settings],
+      changes,
+    })
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    return { remote, cms }
+  }
+
+  const select = () => container.querySelector<HTMLSelectElement>('.gcms-change-switcher select')!
+
+  it('edits in a change, marks and reverts changed fields, compares, and publishes', async () => {
+    const { remote, cms } = await setupChanges()
+
+    // Start a change from the sidebar.
+    await act(async () => (await waitFor(() => byText('New change'))).click())
+    await act(async () => typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Name of the change"]')!, 'Spring update'))
+    await act(async () => byText('Start')!.click())
+    await waitFor(() => cms.getState().inChange)
+    expect(select().value).toBe('cms/spring-update')
+    await waitFor(() => byText('Review & publish'))
+
+    // Edit an entry: the title is marked as changed and can be reverted.
+    await act(async () => (await waitFor(() => byText('Hellohello'))).click())
+    const title = await waitFor(() => container.querySelector<HTMLInputElement>('input[name="title"]'))
+    expect(container.querySelector('.gcms-change')).toBeNull()
+    await act(async () => typeInto(title, 'Hello spring'))
+    const marker = await waitFor(() => container.querySelector<HTMLElement>('.gcms-change'))
+    expect(marker.title).toBe('On main: “Hello”')
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Revert title to main"]')!.click())
+    await waitFor(() => title.value === 'Hello' && !container.querySelector('.gcms-change'))
+
+    await act(async () => typeInto(title, 'Hello spring'))
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.text('posts/hello.md', 'cms/spring-update')?.includes('Hello spring'))
+    expect(remote.text('posts/hello.md')).toContain('title: Hello\n')
+
+    // The entry list and the nav show what changed.
+    await waitFor(() => byText('Hello springEditedhello'))
+    await waitFor(() => byText('Posts1'))
+
+    // Compare: side by side previews, and the source diff.
+    await act(async () => byText('Changes')!.click())
+    await waitFor(() => container.querySelectorAll('.gcms-compare-side iframe').length === 2)
+    const [before, after] = [...container.querySelectorAll('.gcms-compare-side iframe')].map((frame) => frame.getAttribute('srcdoc'))
+    expect(before).toContain('<h1>Hello</h1>')
+    expect(after).toContain('<h1>Hello spring</h1>')
+    await act(async () => byText('Source changes')!.click())
+    const diff = [...container.querySelectorAll('.gcms-diff-line--removed, .gcms-diff-line--added')].map((line) => line.textContent)
+    expect(diff).toEqual(['−Removed: title: Hello\n', '+Added: title: Hello spring\n'])
+
+    // Review, open a pull request, and publish it.
+    await act(async () => byText('Review & publish1')!.click())
+    await waitFor(() => byText('EditedHello springPosts · posts/hello.md'))
+    await act(async () => (await waitFor(() => byText('Open pull request'))).click())
+    await waitFor(() => remote.pulls.length === 1)
+    expect(remote.pulls[0]).toMatchObject({ title: 'Spring update', head: 'cms/spring-update', base: 'main' })
+    const publish = await waitFor(() => byText('Publish'))
+    Object.defineProperty(window, 'confirm', { value: () => true, configurable: true })
+    await act(async () => publish.click())
+    await waitFor(() => !cms.getState().inChange)
+    expect(remote.text('posts/hello.md')).toContain('title: Hello spring')
+    expect(remote.branches.has('cms/spring-update')).toBe(false)
+    await waitFor(() => select().value === '')
+    expect(byText('Review & publish')).toBeUndefined()
+  })
+
+  it('keeps main read-only when changes are required', async () => {
+    const { remote } = await setupChanges({ required: true })
+    expect((await waitFor(() => byText('New'))).hasAttribute('disabled')).toBe(true)
+    await act(async () => (await waitFor(() => byText('Site settings'))).click())
+    await waitFor(() => container.querySelector('input[name="title"]'))
+    expect(byText('Save')!.hasAttribute('disabled')).toBe(true)
+    expect(container.querySelector('.gcms-notice')?.textContent).toContain('Start a change')
+    expect(remote.commits).toHaveLength(0)
+  })
+
+  it('switches to an existing change and marks entries that are new in it', async () => {
+    const { cms } = await setupChanges(true, async (remote) => {
+      await remote.createBranch('cms/draft', remote.branches.get('main')!.sha)
+      await remote.commit({ branch: 'cms/draft', message: 'Draft', changes: [{ action: 'create', path: 'posts/draft.md', content: '---\ntitle: Draft\n---\n' }] })
+    })
+
+    await waitFor(() => [...select().options].some((option) => option.value === 'cms/draft'))
+    await act(async () => {
+      select().value = 'cms/draft'
+      select().dispatchEvent(new Event('change', { bubbles: true }))
+    })
+    await waitFor(() => cms.getState().branch === 'cms/draft')
+    await act(async () => (await waitFor(() => byText('DraftNewdraft'))).click())
+    await waitFor(() => byText('New in this change', 'span'))
+    // Fields of a new entry are not each marked as changed.
+    expect(container.querySelector('.gcms-change')).toBeNull()
+  })
+})
+
 describe('editor helpers', () => {
   it('wraps the selection or a placeholder', () => {
     expect(applyMarkdownFormat('make this bold', 5, 9, { kind: 'wrap', before: '**', after: '**', placeholder: 'x' }))
@@ -325,6 +433,17 @@ describe('editor helpers', () => {
 
   it('leaves cleared (null) values out of the source', () => {
     expect(toSource(settings, { title: 'Demo', cleared: null, nested: { a: null, b: 1 } } as never)).toBe('title: Demo\nnested:\n  b: 1\n')
+  })
+
+  it('leaves optional groups left blank out of the source, as saving does', () => {
+    const events = defineCollection({
+      name: 'events',
+      folder: 'events',
+      format: 'yaml',
+      schema: z.object({ title: z.string(), location: z.object({ venue: z.string(), city: z.string() }).optional() }),
+    })
+    expect(toSource(events, { title: 'Hours', location: { venue: undefined, city: '' } })).toBe('title: Hours\n')
+    expect(toSource(events, { title: 'Hours', location: { venue: 'Hall', city: undefined } })).toBe('title: Hours\nlocation:\n  venue: Hall\n')
   })
 
   it('locks down the preview document', () => {
@@ -454,17 +573,20 @@ describe('reference fields', () => {
 
   let confirmations: string[] = []
   let answer = false
-  const originalConfirm = window.confirm
+  // Defined rather than assigned: earlier tests may leave `confirm` read-only.
+  const originalConfirm = Object.getOwnPropertyDescriptor(window, 'confirm')
   beforeEach(() => {
     confirmations = []
     answer = false
-    window.confirm = (message) => {
+    const confirm = (message?: string) => {
       confirmations.push(String(message))
       return answer
     }
+    Object.defineProperty(window, 'confirm', { value: confirm, configurable: true, writable: true })
   })
   afterEach(() => {
-    window.confirm = originalConfirm
+    if (originalConfirm) Object.defineProperty(window, 'confirm', originalConfirm)
+    else delete (window as { confirm?: unknown }).confirm
   })
 
   function setupArticles() {
@@ -640,5 +762,43 @@ describe('reference fields', () => {
     await waitFor(() => author.value === 'Ada Lovelace')
     expect(byText('Open')).toBeUndefined()
     expect(byText('Clear')).toBeTruthy()
+  })
+
+  it('edits references in a change: marks, reverts, saves on the branch and warns from it', async () => {
+    const remote = new MemoryRepository(files)
+    const cms = createCms({
+      fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }),
+      collections: [articles, authors],
+      changes: true,
+    })
+    await act(async () => {
+      await cms.startChange('New authors')
+    })
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    const author = await open('One')
+    await waitFor(() => author.value === 'Ada Lovelace')
+    expect(container.querySelector('.gcms-change')).toBeNull()
+
+    await act(async () => byText('Clear')!.click())
+    const marker = await waitFor(() => container.querySelector<HTMLElement>('.gcms-change'))
+    expect(marker.title).toBe('On main: “ada”')
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Revert author to main"]')!.click())
+    await waitFor(() => author.value === 'Ada Lovelace' && !container.querySelector('.gcms-change'))
+
+    await act(async () => author.focus())
+    await act(async () => typeInto(author, 'grace'))
+    await act(async () => key(author, 'Enter'))
+    await waitFor(() => container.querySelector('.gcms-change'))
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.text('articles/one.yml', 'cms/new-authors') === 'title: One\nauthor: grace\nrelated: []\n')
+    expect(remote.text('articles/one.yml')).toBe('title: One\nauthor: ada\n')
+
+    // References are looked up on the change's branch: Grace is now used by One and Two there.
+    await act(async () => byText('Authors')!.click())
+    await act(async () => (await waitFor(() => byText('Grace Hoppergrace'))).click())
+    await waitFor(() => container.querySelector('input[name="name"]'))
+    await act(async () => byText('Delete')!.click())
+    await waitFor(() => confirmations.length === 1)
+    expect(confirmations[0]).toContain('Referenced by 2 entries: “One” and “Two”.')
   })
 })

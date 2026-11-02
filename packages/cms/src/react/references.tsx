@@ -336,9 +336,10 @@ export function ReferenceField(props: AutoFormFieldProps) {
             Open
           </button>
         ) : null}
-        {/* '' rather than undefined, which react-hook-form would turn back into the default value. */}
+        {/* null, not undefined: react-hook-form shows the default value again for undefined. AutoForm
+            treats null as empty, so an optional field is saved as absent and a required one is flagged. */}
         {ref ? (
-          <button type="button" className="gcms-button gcms-button--ghost gcms-button--small" onClick={() => field.onChange('')}>
+          <button type="button" className="gcms-button gcms-button--ghost gcms-button--small" onClick={() => field.onChange(null)}>
             Clear
           </button>
         ) : null}
