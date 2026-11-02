@@ -9,7 +9,6 @@ import {
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
 } from 'react'
-import { useFormState } from 'react-hook-form'
 import type { AutoFormFieldProps } from '@autoform/react'
 import {
   OSM_TILES,
@@ -32,10 +31,7 @@ import {
   type GeoPoint,
   type MapTiles,
 } from '../geo.js'
-
-// Not imported from ./autoform.js, which imports this module for its field components.
-const useField = (name: string) => useFieldRHF({ name }).field
-import { useFieldRHF } from '@autoform/react/react-hook-form'
+import { NestedErrors, useField, useReadOnly } from './field-utils.js'
 
 export interface MapView {
   center: GeoPoint
@@ -79,6 +75,8 @@ const MIN_ZOOM = 1
 /** Used until the element is measured, and where layout is not available (tests, SSR). */
 const FALLBACK_WIDTH = 600
 const DRAG_THRESHOLD = 4
+const noop = () => {}
+const READ_ONLY_HANDLERS = { onPointerDown: noop, onPointerMove: noop, onPointerUp: noop, onClick: noop }
 
 function tileUrl(tiles: MapTiles, z: number, x: number, y: number): string {
   const subdomains = tiles.subdomains ?? []
@@ -98,6 +96,8 @@ export function SlippyMap({ view, onViewChange, onMapClick, tiles = OSM_TILES, h
   const element = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(FALLBACK_WIDTH)
   const [hint, setHint] = useState(false)
+  // A read-only field still pans and zooms, but clicks and drags change nothing.
+  const readOnly = useReadOnly()
   const size = useMemo(() => ({ width, height }), [width, height])
 
   useLayoutEffect(() => {
@@ -208,10 +208,10 @@ export function SlippyMap({ view, onViewChange, onMapClick, tiles = OSM_TILES, h
     if (!state || state.id !== event.pointerId) return
     pan.current = null
     event.currentTarget.releasePointerCapture?.(event.pointerId)
-    if (!state.moved && onMapClick) onMapClick(toPoint(localPixel(event)))
+    if (!state.moved && onMapClick && !readOnly) onMapClick(toPoint(localPixel(event)))
   }
 
-  const draggable: MapOverlayHelpers['draggable'] = (onDrag) => ({
+  const draggable: MapOverlayHelpers['draggable'] = (onDrag) => readOnly ? READ_ONLY_HANDLERS : ({
     onPointerDown: (event) => {
       if (event.button !== 0) return
       event.stopPropagation()
@@ -353,35 +353,6 @@ export function fitView(
 
 function mapOptions(props: AutoFormFieldProps): GeoCustomData['map'] {
   return (props.parsedField.fieldConfig?.customData as GeoCustomData | undefined)?.map ?? {}
-}
-
-/** Error messages of the parts of a field (`location.lat`, `area.2.lng`), which AutoForm does not show. */
-function useNestedErrors(name: string): string[] {
-  const { errors } = useFormState({ name })
-  let node: unknown = errors
-  for (const key of name.split('.')) node = (node as Record<string, unknown> | undefined)?.[key]
-  const messages: string[] = []
-  const collect = (value: unknown, depth: number) => {
-    if (!value || typeof value !== 'object' || depth > 4) return
-    for (const [key, child] of Object.entries(value)) {
-      if (key === 'ref' || key === 'root') continue
-      const message = (child as { message?: unknown } | undefined)?.message
-      if (typeof message === 'string' && key !== 'message') messages.push(message)
-      else collect(child, depth + 1)
-    }
-  }
-  collect(node, 0)
-  return [...new Set(messages)]
-}
-
-function NestedErrors({ name }: { name: string }) {
-  const messages = useNestedErrors(name)
-  if (messages.length === 0) return null
-  return (
-    <p className="gcms-error" role="alert">
-      {messages.join('. ')}
-    </p>
-  )
 }
 
 /** A text input for one number that lets people type freely (`-`, `52.`) and reports finite values. */

@@ -8,6 +8,22 @@ export interface ParsedDocument {
   body: string
 }
 
+/**
+ * YAML 1.1 loaders (PyYAML, Ruby, js-yaml 3 behind gray-matter) read an unquoted `19:30` as the
+ * base-60 number 1170. Declaring that YAML 1.1 rule as `compat` makes `yaml` quote such strings,
+ * so times stay strings everywhere; nothing else changes.
+ */
+const STRINGIFY_OPTIONS = {
+  compat: [
+    {
+      tag: 'tag:yaml.org,2002:int',
+      default: true,
+      test: /^[-+]?\d[\d_]*(?::[0-5]?\d)+(?:\.[\d_]*)?$/,
+      resolve: (source: string) => source,
+    },
+  ],
+}
+
 const FRONTMATTER = /^---[ \t]*\r?\n([\s\S]*?)\r?\n?^---[ \t]*(?:\r?\n|$)/m
 
 function asRecord(value: unknown, what: string): Record<string, unknown> {
@@ -50,7 +66,7 @@ export function serializeMarkdown(data: Record<string, unknown>, body: string): 
   const frontmatter = toPlainData(data) as Record<string, unknown>
   const content = body.endsWith('\n') || body === '' ? body : `${body}\n`
   if (Object.keys(frontmatter).length === 0) return content
-  return `---\n${stringifyYaml(frontmatter)}---\n${content ? `\n${content}` : ''}`
+  return `---\n${stringifyYaml(frontmatter, STRINGIFY_OPTIONS)}---\n${content ? `\n${content}` : ''}`
 }
 
 export function parseDocument(format: ContentFormat, source: string): ParsedDocument {
@@ -71,6 +87,6 @@ export function serializeDocument(format: ContentFormat, document: ParsedDocumen
     case 'json':
       return `${JSON.stringify(toPlainData(document.data), null, 2)}\n`
     case 'yaml':
-      return stringifyYaml(toPlainData(document.data))
+      return stringifyYaml(toPlainData(document.data), STRINGIFY_OPTIONS)
   }
 }

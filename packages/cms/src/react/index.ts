@@ -34,4 +34,10 @@ export type {
   PreviewProps,
 } from './preview.js'
 export { useAsync } from './use-async.js'
+export { DateTimeField, TimeField } from './datetime.js'
+export { DurationField } from './duration.js'
+export { MoneyField } from './money.js'
+export { PhoneField } from './phone.js'
+export { SliderField } from './slider.js'
+export { NestedErrors, useNestedErrors, useReadOnly, withFieldState } from './field-utils.js'
 export type { AsyncState } from './use-async.js'
