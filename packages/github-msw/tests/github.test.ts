@@ -5,7 +5,10 @@ import { createGitHubHandlers, MockRepository, persistentRepository, type Storag
 
 const server = setupServer()
 beforeAll(() => server.listen())
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  server.resetHandlers()
+  vi.useRealTimers()
+})
 afterAll(() => server.close())
 
 async function setup(files: Record<string, string> = {}) {
@@ -180,6 +183,10 @@ describe('gitvfs against the GitHub mock', () => {
 
 describe('several repositories', () => {
   it('lists them all and routes reads and commits to the right one', async () => {
+    // Commit dates have millisecond precision; on a fast machine both repositories and the blog's
+    // commit share one, and the order below would depend on that. Set the clock explicitly.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
     const site = await MockRepository.create({ files: { 'README.md': '# Site\n' } })
     const blog = await MockRepository.create({ files: { 'README.md': '# Blog\n' } })
     const changed: MockRepository[] = []
@@ -193,6 +200,7 @@ describe('several repositories', () => {
       }),
     )
     // The blog gets the newest commit, so it is listed first.
+    vi.setSystemTime(new Date('2026-01-01T00:01:00.000Z'))
     await blog.commit({ branch: 'main', message: 'Post', additions: [{ path: 'post.md', content: new TextEncoder().encode('hi') }] })
 
     const gh = github({ token: 't' })
