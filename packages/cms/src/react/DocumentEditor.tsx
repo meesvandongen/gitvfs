@@ -103,6 +103,9 @@ function LoadedEditor(
   const [slugInput, setSlugInput] = useState(props.slug ?? '')
   const [slugTouched, setSlugTouched] = useState(props.slug !== null)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+  // What is wrong with the file as stored. A save only succeeds with values that pass the schema,
+  // so the stored file is valid from then on.
+  const [storedIssues, setStoredIssues] = useState(document.issues)
   const previewValues = useDeferredValue(values)
   // The base version as the form would hold it: with the schema's defaults filled in, so a
   // default the file leaves out does not count as a change.
@@ -149,6 +152,7 @@ function LoadedEditor(
         })
         : await cms.saveSingleton(contentType.name, data)
       setBaseline(snapshot)
+      setStoredIssues([])
       setSlugInput(derivedSlug)
       setSlugTouched(true)
       setStatus({ kind: 'saved', sha: result.commit.sha })
@@ -209,10 +213,10 @@ function LoadedEditor(
         </div>
       )}
 
-      {document.issues.length > 0 && (
+      {storedIssues.length > 0 && (
         <div className="gcms-notice" role="status">
           The stored file does not match the schema:{' '}
-          {document.issues.map((issue) => `${issue.path.join('.') || 'document'}: ${issue.message}`).join('; ')}
+          {storedIssues.map((issue) => `${issue.path.join('.') || 'document'}: ${issue.message}`).join('; ')}
         </div>
       )}
 

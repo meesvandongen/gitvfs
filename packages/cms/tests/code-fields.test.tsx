@@ -151,6 +151,21 @@ describe('code fields', () => {
     expect(remote.commits).toHaveLength(0)
   })
 
+  it('drops the schema-mismatch notice once the fixed file is saved', async () => {
+    const remote = setup({ 'snippets/demo.yml': 'title: Demo\nconfig: |\n  {\n    "a": 1,\n  }\n' })
+    const config = await open('Demodemo')
+    const notice = () => [...container.querySelectorAll('.gcms-notice')].find((el) => el.textContent?.includes('does not match the schema'))
+    expect(notice()?.textContent).toContain('config: Invalid JSON on line 3: Trailing comma')
+
+    await act(async () => typeInto(config, '{\n  "a": 1\n}\n'))
+    // Still describes the stored file until it is saved.
+    expect(notice()).toBeTruthy()
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    await waitFor(() => !notice())
+    expect(remote.text('snippets/demo.yml')).toBe('title: Demo\nconfig: |\n  {\n    "a": 1\n  }\n')
+  })
+
   it('picks a language for a code block and stores { language, code }', async () => {
     const remote = setup({ 'snippets/demo.yml': 'title: Demo\n' })
     await open('Demodemo')
