@@ -64,7 +64,17 @@ export function PreviewFrame({ title = 'Preview', ...options }: PreviewFrameProp
 }
 
 /** Split raw form values into the file the CMS would write. */
+/** Fields cleared in the form hold null; saving drops them, so the source should not show them. */
+function withoutNulls(value: unknown): unknown {
+  if (Array.isArray(value)) return value.map(withoutNulls)
+  if (value === null || typeof value !== 'object' || value instanceof Date) return value
+  const result: Record<string, unknown> = {}
+  for (const [key, entry] of Object.entries(value)) if (entry !== null) result[key] = withoutNulls(entry)
+  return result
+}
+
 export function toSource(contentType: ContentType, values: Record<string, unknown>): string {
+  values = withoutNulls(values) as Record<string, unknown>
   // Form values arrive in no particular order; show fields in schema order.
   const ordered: Record<string, unknown> = {}
   for (const key of Object.keys(contentType.schema.shape)) if (key in values) ordered[key] = values[key]

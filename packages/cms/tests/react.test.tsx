@@ -12,6 +12,7 @@ import {
   buildPreviewDocument,
   pruneBlankOptionals,
   toDateInputValue,
+  toSource,
   unsetMissingOptionals,
 } from '../src/react'
 import { MemoryRepository } from './helpers/memory-repository'
@@ -253,6 +254,31 @@ describe('map fields', () => {
     expect(saved.match(/- lat: /g)).toHaveLength(3)
   })
 
+  it('clears a stored point and a stored circle', async () => {
+    const remote = setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\ndelivery:\n  lat: 52.3731\n  lng: 4.8922\n  radius: 900\n')
+    const lat = await openShop()
+    const [clearPoint, clearCircle] = [...container.querySelectorAll<HTMLButtonElement>('button')].filter((b) => b.textContent === 'Clear')
+    await act(async () => clearCircle.click())
+    expect(container.querySelector<HTMLInputElement>('input[id="delivery-radius"]')!.value).toBe('')
+    await act(async () => clearPoint.click())
+    expect(lat.value).toBe('')
+    expect(container.querySelectorAll('.gcms-map-marker')).toHaveLength(0)
+    // The required point is flagged instead of being saved.
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => byText('Required', 'p'))
+    expect(remote.commits).toHaveLength(0)
+
+    // Placing the point again saves; the cleared optional circle is left out.
+    const viewport = container.querySelector('.gcms-map-viewport')!
+    await act(async () => {
+      pointer(viewport, 'pointerdown', 300, 160)
+      pointer(viewport, 'pointerup', 300, 160)
+    })
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('places/shop.yml')).not.toContain('delivery')
+  })
+
   it('shows what is wrong with stored coordinates', async () => {
     setupPlaces('title: Shop\nlocation:\n  lat: 123\n  lng: 4.8922\n')
     await openShop()
@@ -295,6 +321,10 @@ describe('editor helpers', () => {
       .toEqual({ title: 'x', place: undefined, seo: { title: undefined } })
     expect(pruneBlankOptionals(schema as never, { place: { city: 'A', pin: { lat: undefined } } }))
       .toEqual({ place: { city: 'A', pin: undefined } })
+  })
+
+  it('leaves cleared (null) values out of the source', () => {
+    expect(toSource(settings, { title: 'Demo', cleared: null, nested: { a: null, b: 1 } } as never)).toBe('title: Demo\nnested:\n  b: 1\n')
   })
 
   it('locks down the preview document', () => {
