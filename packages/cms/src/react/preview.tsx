@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Marked } from 'marked'
 import type { ContentType } from '../config.js'
 import { serializeDocument } from '../document.js'
+import { pruneBlankOptionals } from './autoform.js'
 
 const marked = new Marked({ gfm: true })
 
@@ -74,7 +75,8 @@ function withoutNulls(value: unknown): unknown {
 }
 
 export function toSource(contentType: ContentType, values: Record<string, unknown>): string {
-  values = withoutNulls(values) as Record<string, unknown>
+  // Show what a save writes: cleared values and optional groups left blank are dropped there too.
+  values = pruneBlankOptionals(contentType.schema as never, withoutNulls(values)) as Record<string, unknown>
   // Form values arrive in no particular order; show fields in schema order.
   const ordered: Record<string, unknown> = {}
   for (const key of Object.keys(contentType.schema.shape)) if (key in values) ordered[key] = values[key]

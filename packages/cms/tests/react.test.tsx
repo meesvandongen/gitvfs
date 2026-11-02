@@ -325,6 +325,17 @@ describe('editor helpers', () => {
     expect(toSource(settings, { title: 'Demo', cleared: null, nested: { a: null, b: 1 } } as never)).toBe('title: Demo\nnested:\n  b: 1\n')
   })
 
+  it('leaves optional groups left blank out of the source, as saving does', () => {
+    const events = defineCollection({
+      name: 'events',
+      folder: 'events',
+      format: 'yaml',
+      schema: z.object({ title: z.string(), location: z.object({ venue: z.string(), city: z.string() }).optional() }),
+    })
+    expect(toSource(events, { title: 'Hours', location: { venue: undefined, city: '' } })).toBe('title: Hours\n')
+    expect(toSource(events, { title: 'Hours', location: { venue: 'Hall', city: undefined } })).toBe('title: Hours\nlocation:\n  venue: Hall\n')
+  })
+
   it('locks down the preview document', () => {
     const html = buildPreviewDocument({ html: '<p>x</p>', stylesheets: ['/site.css"><script>'] })
     expect(html).toContain("default-src 'none'")
