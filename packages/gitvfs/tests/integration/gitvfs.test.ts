@@ -361,6 +361,27 @@ describe('GitVFS', () => {
     })
   })
 
+  describe('checkout', () => {
+    it('reports its branches', async () => {
+      const editFs = new GitVFS({ repository, branch: 'main', writeBranch: 'drafts' })
+      expect(editFs.branches()).toEqual({ base: 'main', write: 'drafts', read: 'main' })
+      expect(fs.repository).toBe(repository)
+    })
+
+    it('switches to a write branch on top of a base', async () => {
+      await repository.createBranch('drafts', repository.branches.get('main')!.sha)
+      await repository.addFile('drafts', 'drafts-only.md', 'Draft')
+
+      fs.checkout('drafts', { base: 'main' })
+      expect(await fs.readFile('drafts-only.md', { encoding: 'utf-8' })).toBe('Draft')
+      expect(fs.branches()).toEqual({ base: 'main', write: 'drafts', read: 'drafts' })
+
+      fs.checkout('main')
+      expect(await fs.exists('drafts-only.md')).toBe(false)
+      expect(fs.branches()).toEqual({ base: 'main', write: 'main', read: 'main' })
+    })
+  })
+
   describe('updateFromBase', () => {
     it('merges the base branch in and reads the result', async () => {
       const editFs = new GitVFS({ repository, branch: 'main', writeBranch: 'drafts', cache: 'memory' })

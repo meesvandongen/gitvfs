@@ -11,8 +11,14 @@ import type {
   MergeOptions,
   MergeResult,
   ReadDirOptions,
+  BranchComparison,
+  ChangedFile,
+  CreatePullRequestOptions,
+  ListPullRequestsOptions,
+  MergePullRequestOptions,
+  PullRequestInfo,
 } from '../types/provider.js'
-import { ConflictError, NotFoundError } from '../types/errors.js'
+import { ConflictError, GitVFSError, NotFoundError } from '../types/errors.js'
 import { createFetchREST, createPaginate, type TokenProvider } from './shared/http.js'
 import { matchesSearch } from './shared/repositories.js'
 import { createFetchGraphQL } from './shared/graphql.js'
@@ -50,6 +56,52 @@ interface GitHubRepoResponse {
   html_url: string
   pushed_at: string | null
   updated_at: string | null
+}
+
+interface GitHubPullResponse {
+  number: number
+  title: string
+  body: string | null
+  state: 'open' | 'closed'
+  draft?: boolean
+  merged_at: string | null
+  head: { ref: string }
+  base: { ref: string }
+  html_url: string
+  user: { login: string } | null
+  created_at: string
+  updated_at: string
+  /** Only on single pull requests, and `null` while GitHub is still computing it. */
+  mergeable?: boolean | null
+}
+
+function toPullRequest(raw: GitHubPullResponse): PullRequestInfo {
+  return {
+    number: raw.number,
+    title: raw.title,
+    body: raw.body ?? '',
+    state: raw.merged_at ? 'merged' : raw.state,
+    draft: raw.draft ?? false,
+    head: raw.head.ref,
+    base: raw.base.ref,
+    url: raw.html_url,
+    author: raw.user?.login ?? null,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    mergeable: raw.mergeable ?? null,
+  }
+}
+
+const COMPARE_STATUS: Record<string, ChangedFile['status']> = {
+  added: 'added',
+  copied: 'added',
+  removed: 'removed',
+  renamed: 'renamed',
+}
+
+/** Branch names in URL paths: keep the slashes, encode the rest. */
+function encodeRef(ref: string): string {
+  return ref.split('/').map(encodeURIComponent).join('/')
 }
 
 class GitHubProvider implements GitProvider {
@@ -95,12 +147,19 @@ class GitHubRepository implements GitRepository {
   private fetchREST: ReturnType<typeof createFetchREST>
   private fetchGraphQL: ReturnType<typeof createFetchGraphQL>
 
+  private paginate: ReturnType<typeof createPaginate>
+
   constructor(options: GitHubRepositoryOptions) {
     this.owner = options.owner
     this.repo = options.repo
     const baseUrl = apiUrlOf(options)
     this.fetchREST = createFetchREST({ token: options.token, baseUrl })
+    this.paginate = createPaginate({ token: options.token, baseUrl })
     this.fetchGraphQL = createFetchGraphQL({ token: options.token, url: graphqlUrl(baseUrl) })
+  }
+
+  private get repoPath(): string {
+    return `/repos/${this.owner}/${this.repo}`
   }
 
   private encodePath(path: string): string {
@@ -263,6 +322,84 @@ class GitHubRepository implements GitRepository {
     }
     // 204 No Content: `into` already contains `from`.
     return result && { sha: result.sha, date: result.commit.committer.date }
+  }
+
+  async listBranches(): Promise<BranchInfo[]> {
+    const branches: BranchInfo[] = []
+    for await (const page of this.paginate<{ name: string; commit: { sha: string } }>(`${this.repoPath}/branches?per_page=100`)) {
+      for (const raw of page) branches.push({ name: raw.name, sha: raw.commit.sha })
+    }
+    return branches
+  }
+
+  async compareBranches(base: string, head: string): Promise<BranchComparison> {
+    const result = (await this.fetchREST(`${this.repoPath}/compare/${encodeRef(base)}...${encodeRef(head)}`)) as {
+      ahead_by: number
+      behind_by: number
+      files?: Array<{ filename: string; status: string; previous_filename?: string }>
+    }
+    return {
+      ahead: result.ahead_by,
+      behind: result.behind_by,
+      files: (result.files ?? []).map((file) => ({
+        path: file.filename,
+        status: COMPARE_STATUS[file.status] ?? 'modified',
+        ...(file.previous_filename ? { previousPath: file.previous_filename } : {}),
+      })),
+    }
+  }
+
+  async listPullRequests(options: ListPullRequestsOptions = {}): Promise<PullRequestInfo[]> {
+    const params = new URLSearchParams({ state: options.state ?? 'open', per_page: '100' })
+    if (options.head) params.set('head', `${this.owner}:${options.head}`)
+    if (options.base) params.set('base', options.base)
+    const pulls: PullRequestInfo[] = []
+    for await (const page of this.paginate<GitHubPullResponse>(`${this.repoPath}/pulls?${params.toString()}`)) {
+      pulls.push(...page.map(toPullRequest))
+    }
+    return pulls
+  }
+
+  async getPullRequest(number: number): Promise<PullRequestInfo> {
+    return toPullRequest((await this.fetchREST(`${this.repoPath}/pulls/${number}`)) as GitHubPullResponse)
+  }
+
+  async createPullRequest(options: CreatePullRequestOptions): Promise<PullRequestInfo> {
+    const raw = (await this.fetchREST(`${this.repoPath}/pulls`, {
+      method: 'POST',
+      body: JSON.stringify({
+        head: options.head,
+        base: options.base,
+        title: options.title,
+        body: options.body,
+        draft: options.draft,
+      }),
+    })) as GitHubPullResponse
+    return toPullRequest(raw)
+  }
+
+  async mergePullRequest(number: number, options: MergePullRequestOptions = {}): Promise<MergeResult> {
+    try {
+      const result = (await this.fetchREST(`${this.repoPath}/pulls/${number}/merge`, {
+        method: 'PUT',
+        body: JSON.stringify({ merge_method: options.method ?? 'merge', commit_title: options.message }),
+      })) as { sha: string }
+      return { sha: result.sha, date: new Date().toISOString() }
+    } catch (error) {
+      // 405: not mergeable (conflicts, failing required checks); 409: the head moved.
+      if (error instanceof ConflictError || (error instanceof GitVFSError && error.status === 405)) {
+        throw new ConflictError(`Pull request #${number} cannot be merged: ${error.message}`)
+      }
+      throw error
+    }
+  }
+
+  async closePullRequest(number: number): Promise<PullRequestInfo> {
+    const raw = (await this.fetchREST(`${this.repoPath}/pulls/${number}`, {
+      method: 'PATCH',
+      body: JSON.stringify({ state: 'closed' }),
+    })) as GitHubPullResponse
+    return toPullRequest(raw)
   }
 
   async commit(options: CommitOptions): Promise<CommitResult> {

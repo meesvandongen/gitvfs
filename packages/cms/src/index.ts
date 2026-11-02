@@ -1,6 +1,11 @@
 export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
+  ChangeComparison,
+  ChangeSummary,
+  ChangesOptions,
   CmsOptions,
+  CmsState,
+  ContentChange,
   LoadedDocument,
   SaveEntryOptions,
   SaveResult,
@@ -29,3 +34,5 @@ export type { ParsedDocument } from './document.js'
 export { field, markdown, textarea } from './fields.js'
 export type { CmsFieldConfig, CmsFieldType, FieldConfigCheck } from './fields.js'
 export { isValidSlug, slugify } from './slug.js'
+export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
+export type { DiffLine } from './changes.js'

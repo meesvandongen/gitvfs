@@ -1,4 +1,4 @@
 {
   "title": "gitvfs-cms",
-  "pages": ["index", "content-types", "editor", "authentication", "deployment"]
+  "pages": ["index", "content-types", "editor", "changes", "authentication", "deployment"]
 }
