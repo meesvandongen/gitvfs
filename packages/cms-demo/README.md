@@ -12,6 +12,7 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Events | YAML | a photo gallery, a PDF agenda (`file`), a YouTube recording (`embed`), an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
+| Pricing, Navigation | YAML | a table of plans (spreadsheet-like grid with paste and CSV copy, a read-only list column) and a nested menu edited as an outline (`tree()`); event tickets use the table too |
 
 Editing happens in **changes** (`changes: true`): **New change** in the sidebar starts a branch, saves become commits there, and **Review & publish** lists what changed, opens a pull request and merges it. Inside a change, fields that differ from `main` are marked (with **Revert**), and the preview's **Changes** tab shows both versions rendered (**Before & after**) or as a source diff. The mock serves the branch, compare and pull request endpoints this needs.
 

@@ -19,6 +19,8 @@ export type CmsFieldType =
   | 'gallery'
   | 'file'
   | 'embed'
+  | 'table'
+  | 'tree'
 
 export type CmsFieldConfig = FieldConfig<null, CmsFieldType | (string & {})>
 
