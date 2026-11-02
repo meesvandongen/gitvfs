@@ -24,14 +24,28 @@ export {
   MarkdownPreview,
   PreviewFrame,
   buildPreviewDocument,
+  mermaidBlocks,
   renderMarkdown,
   toSource,
 } from './preview.js'
 export type {
   DocumentPreviewProps,
+  MarkdownPreviewProps,
   PreviewDocumentOptions,
   PreviewFrameProps,
   PreviewProps,
 } from './preview.js'
 export { useAsync } from './use-async.js'
 export type { AsyncState } from './use-async.js'
+export { CodeEditor, CodeField, createCodeField } from './code.js'
+export type { CodeEditorComponent, CodeEditorProps } from './code.js'
+export {
+  MermaidField,
+  MermaidPreview,
+  createMermaidField,
+  isDarkColor,
+  mermaidRendererOf,
+  svgDataUrl,
+  useDarkMode,
+} from './mermaid.js'
+export type { MermaidFieldComponent, MermaidFieldOptions, MermaidPreviewProps, MermaidRenderer } from './mermaid.js'

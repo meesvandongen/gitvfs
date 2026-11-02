@@ -60,3 +60,20 @@ export type {
   MapTiles,
 } from './geo.js'
 export { isValidSlug, slugify } from './slug.js'
+export {
+  applyTextEdit,
+  code,
+  codeBlock,
+  formatCodeError,
+  indentSelection,
+  insertNewline,
+  lineColumn,
+  mermaid,
+  outdentSelection,
+  validateCode,
+  validateJson,
+  validateYaml,
+} from './code.js'
+export type { CodeBlock, CodeCustomData, CodeError, CodeFieldConfig, CodeOptions, MermaidOptions, TextEdit } from './code.js'
+export { CODE_LANGUAGES, normalizeLanguage, tokenize } from './highlight.js'
+export type { CodeLanguage, Token, TokenType } from './highlight.js'

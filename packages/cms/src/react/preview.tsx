@@ -2,11 +2,33 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Marked } from 'marked'
 import type { ContentType } from '../config.js'
 import { serializeDocument } from '../document.js'
+import { svgDataUrl, useMermaidDiagrams, type MermaidRenderer } from './mermaid.js'
 
 const marked = new Marked({ gfm: true })
 
-export function renderMarkdown(source: string): string {
-  return marked.parse(source, { async: false })
+/**
+ * Render markdown to HTML. `diagrams` maps the source of ```mermaid blocks to their SVG, which
+ * replaces the code block as an image (see `svgDataUrl`).
+ */
+export function renderMarkdown(source: string, diagrams?: ReadonlyMap<string, string>): string {
+  if (!diagrams?.size) return marked.parse(source, { async: false })
+  const tokens = marked.lexer(source)
+  void marked.walkTokens(tokens, (token) => {
+    const svg = token.type === 'code' && token.lang === 'mermaid' ? diagrams.get(token.text) : undefined
+    if (svg !== undefined) {
+      Object.assign(token, { type: 'html', block: true, pre: false, text: `<img class="mermaid" alt="Diagram" src="${escapeHtml(svgDataUrl(svg))}">\n` })
+    }
+  })
+  return marked.parser(tokens)
+}
+
+/** The sources of the ```mermaid blocks in markdown. */
+export function mermaidBlocks(source: string): string[] {
+  const sources: string[] = []
+  void marked.walkTokens(marked.lexer(source), (token) => {
+    if (token.type === 'code' && token.lang === 'mermaid') sources.push(token.text)
+  })
+  return sources
 }
 
 function escapeHtml(value: string): string {
@@ -95,28 +117,35 @@ export interface PreviewProps {
   values: Record<string, unknown>
 }
 
+export interface MarkdownPreviewProps extends PreviewProps {
+  /** Renders ```mermaid blocks as diagrams; `DocumentEditor` passes the registered mermaid field's. */
+  renderMermaid?: MermaidRenderer
+}
+
 /** Default rendered preview: the title as a heading followed by the markdown body. */
-export function MarkdownPreview({ contentType, values }: PreviewProps) {
+export function MarkdownPreview({ contentType, values, renderMermaid }: MarkdownPreviewProps) {
   const title = values.title
-  const body = values[contentType.bodyField]
+  const body = typeof values[contentType.bodyField] === 'string' ? (values[contentType.bodyField] as string) : ''
+  const sources = useMemo(() => (renderMermaid ? mermaidBlocks(body) : []), [body, renderMermaid])
+  const diagrams = useMermaidDiagrams(sources, renderMermaid)
   const html = useMemo(
     () =>
       (typeof title === 'string' && title ? `<h1>${escapeHtml(title)}</h1>` : '')
-      + renderMarkdown(typeof body === 'string' ? body : ''),
-    [title, body],
+      + renderMarkdown(body, diagrams),
+    [title, body, diagrams],
   )
   return (
     <PreviewFrame html={html} stylesheets={contentType.previewStylesheets} baseUrl={contentType.previewBaseUrl} />
   )
 }
 
-export interface DocumentPreviewProps extends PreviewProps {
+export interface DocumentPreviewProps extends MarkdownPreviewProps {
   /** Replaces the rendered tab, e.g. with your site's own components. */
   render?: (props: PreviewProps) => ReactNode
 }
 
 /** Tabs with the rendered page (markdown only, or `render`) and the file source. */
-export function DocumentPreview({ contentType, values, render }: DocumentPreviewProps) {
+export function DocumentPreview({ contentType, values, render, renderMermaid }: DocumentPreviewProps) {
   const hasRendered = Boolean(render) || contentType.format === 'markdown'
   const [tab, setTab] = useState<'rendered' | 'source'>(hasRendered ? 'rendered' : 'source')
   const active = hasRendered ? tab : 'source'
@@ -151,7 +180,7 @@ export function DocumentPreview({ contentType, values, render }: DocumentPreview
         ) : render ? (
           render({ contentType, values })
         ) : (
-          <MarkdownPreview contentType={contentType} values={values} />
+          <MarkdownPreview contentType={contentType} values={values} renderMermaid={renderMermaid} />
         )}
       </div>
     </div>

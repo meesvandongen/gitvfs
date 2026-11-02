@@ -1,5 +1,18 @@
 import { z } from 'zod'
-import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPolygon, markdown, textarea } from 'gitvfs-cms'
+import {
+  code,
+  codeBlock,
+  defineCollection,
+  defineSingleton,
+  field,
+  geoCircle,
+  geoLine,
+  geoPoint,
+  geoPolygon,
+  markdown,
+  mermaid,
+  textarea,
+} from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
 // and singletons, custom fields and previews, and files the schema does not fully describe.
@@ -126,6 +139,24 @@ export const places = defineCollection({
   }),
 })
 
+export const snippets = defineCollection({
+  name: 'snippets',
+  label: 'Code snippets',
+  folder: 'data/snippets',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    snippet: codeBlock({
+      label: 'Snippet',
+      description: 'Stored as { language, code }; the language is picked below the editor',
+      languages: ['ts', 'js', 'json', 'yaml', 'css', 'html', 'shell', 'python', 'sql'],
+    }),
+    settings: code({ label: 'Settings', language: 'json', description: 'JSON, checked for syntax errors as you type', rows: 6 }).optional(),
+    styles: code({ label: 'Styles', language: 'css', rows: 4 }).optional(),
+    diagram: mermaid({ label: 'Diagram', description: 'Mermaid, with a live preview' }).optional(),
+  }),
+})
+
 export const site = defineSingleton({
   name: 'site',
   label: 'Site settings',
@@ -166,7 +197,7 @@ export const theme = defineSingleton({
   }),
 })
 
-export const collections = [posts, docs, authors, events, places]
+export const collections = [posts, docs, authors, events, places, snippets]
 export const singletons = [site, homepage, theme]
 
 /** The repository visitors start with, and go back to on reset. */
@@ -199,6 +230,18 @@ Every entry in this demo is a file in a Git repository. The editor on the left i
 - Open the **Source** tab to see the exact file that will be committed.
 
 > Nothing leaves your browser. The GitHub API is mocked with Mock Service Worker.
+
+## What a save does
+
+\`\`\`mermaid
+sequenceDiagram
+  participant Editor
+  participant gitvfs
+  participant GitHub
+  Editor->>gitvfs: write the file
+  gitvfs->>GitHub: create a commit
+  GitHub-->>Editor: new commit SHA
+\`\`\`
 `,
   'content/posts/editing-frontmatter.md': `---
 title: Keys the schema does not know survive
@@ -345,6 +388,54 @@ location:
 starts: 2026-12-04
 online: true
 tickets: []
+`,
+  'data/snippets/fetch-entries.yml': `title: Fetch entries
+snippet:
+  language: ts
+  code: |
+    import type { GitCms } from 'gitvfs-cms'
+
+    // List the blog posts, newest first.
+    export async function latestPosts(cms: GitCms, count = 5) {
+      const entries = await cms.listEntries('posts')
+      return entries.slice(0, count).map((entry) => ({
+        title: entry.label,
+        href: \`/blog/\${entry.slug}\`,
+      }))
+    }
+settings: |
+  {
+    "pageSize": 10,
+    "features": ["search", "rss"],
+    "beta": false
+  }
+styles: |
+  .post-card {
+    padding: 1rem;
+    border-radius: 8px; /* matches the theme */
+  }
+diagram: |
+  flowchart LR
+    A[Editor] -->|save| B(gitvfs)
+    B --> C{Provider}
+    C -->|REST| D[GitHub]
+    C -->|REST| E[GitLab]
+`,
+  'data/snippets/broken-json.yml': `title: Broken JSON
+snippet:
+  language: yaml
+  code: |
+    deploy:
+      branch: main
+      preview: true
+settings: |
+  {
+    "pageSize": 10,
+    "features": ["search", "rss"],
+  }
+diagram: |
+  flowchart TD
+    A[Start] --> B[
 `,
   'data/site.json': `${JSON.stringify(
     {

@@ -15,6 +15,8 @@
       "gitvfs/providers/github": ["../gitvfs/src/providers/github.ts"],
       "gitvfs-cms": ["../cms/src/index.ts"],
       "gitvfs-cms/react": ["../cms/src/react/index.ts"],
+      "gitvfs-cms/codemirror": ["../cms/src/codemirror/index.tsx"],
+      "gitvfs-cms/mermaid": ["../cms/src/mermaid/index.ts"],
       "gitvfs-github-msw": ["../github-msw/src/index.ts"]
     }
   },

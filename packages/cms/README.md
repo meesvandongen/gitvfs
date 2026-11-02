@@ -56,6 +56,8 @@ export const Admin = () => <CmsApp cms={cms} title="Acme" />
 | `gitvfs-cms` | `defineCollection`, `defineSingleton`, `createCms` / `GitCms`, document parsing, field helpers | `gitvfs`, `zod` |
 | `gitvfs-cms/react` | `CmsApp`, `DocumentEditor`, `ContentForm`, previews, AutoForm components | `react`, `react-dom`, `react-hook-form`, `@hookform/resolvers` |
 | `gitvfs-cms/oidc` | `createOidcSession`, `oidcTokenProvider`, `gitlabOidc` | `oidc-spa` |
+| `gitvfs-cms/codemirror` | `CodeMirrorField`, `CodeMirrorEditor`: CodeMirror 6 for code fields | `@codemirror/{state,view,commands,language,lang-javascript,lang-json,lang-yaml,lang-css,lang-html}`, `@lezer/highlight` |
+| `gitvfs-cms/mermaid` | `MermaidField`, `renderMermaid`: live Mermaid previews | `mermaid` |
 | `gitvfs-cms/styles.css` | Default editor theme (`gcms-*` classes, CSS custom properties) | |
 
 ## Highlights
@@ -63,7 +65,7 @@ export const Admin = () => <CmsApp cms={cms} title="Acme" />
 - **Collections** (a folder of entries) and **singletons** (one file), in markdown, JSON or YAML.
 - **Faithful saves:** keys the schema does not know are kept, and existing keys keep their order, so diffs stay small.
 - **Validation** against the schema before anything is committed. Stored files that do not match still open, with the issues listed.
-- **Editor** with text, number, checkbox, date, select, list, group, textarea and markdown fields (the markdown field has a toolbar), and map fields for a point, a point with a radius, a line and a polygon.
+- **Editor** with text, number, checkbox, date, select, list, group, textarea and markdown fields (the markdown field has a toolbar), map fields for a point, a point with a radius, a line and a polygon, and code fields with highlighting, indentation, line numbers and JSON/YAML syntax checks. Optional entries add a CodeMirror editor (`gitvfs-cms/codemirror`) and live Mermaid diagrams (`gitvfs-cms/mermaid`), in fields and in the markdown preview.
 - **Preview** in an iframe sandboxed without scripts, so repository content cannot reach the user's token. A **Source** tab shows the exact file that will be committed.
 - **OIDC sign-in** via [oidc-spa](https://www.oidc-spa.dev/), with a GitLab preset whose OAuth tokens work directly against the GitLab API.
 

@@ -14,6 +14,8 @@ export default defineConfig({
       { find: /^gitvfs\/providers\/github$/, replacement: source('../gitvfs/src/providers/github.ts') },
       { find: /^gitvfs$/, replacement: source('../gitvfs/src/index.ts') },
       { find: /^gitvfs-cms\/react$/, replacement: source('../cms/src/react/index.ts') },
+      { find: /^gitvfs-cms\/codemirror$/, replacement: source('../cms/src/codemirror/index.tsx') },
+      { find: /^gitvfs-cms\/mermaid$/, replacement: source('../cms/src/mermaid/index.ts') },
       { find: /^gitvfs-cms\/styles\.css$/, replacement: source('../cms/src/styles.css') },
       { find: /^gitvfs-cms$/, replacement: source('../cms/src/index.ts') },
       { find: /^gitvfs-github-msw$/, replacement: source('../github-msw/src/index.ts') },

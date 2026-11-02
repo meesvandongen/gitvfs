@@ -11,6 +11,7 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
 | Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
+| Code snippets | YAML | code fields: a snippet with a language picker, JSON with live syntax checks, CSS, and a Mermaid diagram with a live preview; code fields use CodeMirror (`gitvfs-cms/codemirror`), the diagram the built-in editor and `gitvfs-cms/mermaid`, which also draws the diagram in the welcome post's preview |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 
 The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.

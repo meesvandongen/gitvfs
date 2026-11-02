@@ -4,6 +4,7 @@ import type { ContentType } from '../config.js'
 import { isValidSlug, slugify } from '../slug.js'
 import { ContentForm, type ContentFormProps } from './autoform.js'
 import { useCms } from './context.js'
+import { mermaidRendererOf } from './mermaid.js'
 import { DocumentPreview, type PreviewProps } from './preview.js'
 import { errorMessage, useAsync } from './use-async.js'
 
@@ -209,7 +210,12 @@ function LoadedEditor(props: DocumentEditorProps & { slug: string | null; docume
           />
         </div>
         <div className="gcms-pane gcms-pane--preview">
-          <DocumentPreview contentType={contentType} values={previewValues} render={props.renderPreview} />
+          <DocumentPreview
+            contentType={contentType}
+            values={previewValues}
+            render={props.renderPreview}
+            renderMermaid={mermaidRendererOf(props.formComponents)}
+          />
         </div>
       </div>
     </div>
