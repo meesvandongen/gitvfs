@@ -51,6 +51,69 @@ export interface MergeResult {
   date: string
 }
 
+/** How a file differs on one branch from where it split off another. */
+export type ChangedFileStatus = 'added' | 'modified' | 'removed' | 'renamed'
+
+export interface ChangedFile {
+  path: string
+  status: ChangedFileStatus
+  /** The old path of a renamed file. */
+  previousPath?: string
+}
+
+export interface BranchComparison {
+  /** Commits on the head branch that the base branch does not have. */
+  ahead: number
+  /** Commits on the base branch that the head branch does not have. */
+  behind: number
+  /** What the head branch changed since it split off the base branch. */
+  files: ChangedFile[]
+}
+
+/** A pull request on GitHub, a merge request on GitLab. */
+export interface PullRequestInfo {
+  /** GitHub's number, GitLab's `iid`: the `#12` / `!12` people refer to. */
+  number: number
+  title: string
+  body: string
+  state: 'open' | 'closed' | 'merged'
+  draft: boolean
+  /** The branch with the changes. */
+  head: string
+  /** The branch it merges into. */
+  base: string
+  /** The pull request's page on the host. */
+  url: string
+  author: string | null
+  /** ISO 8601. */
+  createdAt: string
+  updatedAt: string
+  /** Whether it merges without conflicts; `null` when the host has not worked it out (yet). */
+  mergeable: boolean | null
+}
+
+export interface CreatePullRequestOptions {
+  head: string
+  base: string
+  title: string
+  body?: string
+  draft?: boolean
+}
+
+export interface ListPullRequestsOptions {
+  head?: string
+  base?: string
+  /** Default: `'open'`. Merged pull requests count as closed. */
+  state?: 'open' | 'closed' | 'all'
+}
+
+export interface MergePullRequestOptions {
+  /** Default: `'merge'`. */
+  method?: 'merge' | 'squash' | 'rebase'
+  /** The merge (or squash) commit's message. */
+  message?: string
+}
+
 export interface ReadDirOptions {
   recursive?: boolean
 }
@@ -76,6 +139,19 @@ export interface GitRepository {
    * `GitVFS.updateFromBase()` needs it.
    */
   mergeBranch?(options: MergeOptions): Promise<MergeResult | null>
+
+  // Optional: branch and review workflows, e.g. the CMS's changes and pull requests.
+
+  /** Every branch of the repository. */
+  listBranches?(): Promise<BranchInfo[]>
+  /** What `head` changed since it split off `base`, and how far the two have moved apart. */
+  compareBranches?(base: string, head: string): Promise<BranchComparison>
+  listPullRequests?(options?: ListPullRequestsOptions): Promise<PullRequestInfo[]>
+  getPullRequest?(number: number): Promise<PullRequestInfo>
+  createPullRequest?(options: CreatePullRequestOptions): Promise<PullRequestInfo>
+  /** Rejects with a `ConflictError` when it cannot be merged, e.g. because of conflicts. */
+  mergePullRequest?(number: number, options?: MergePullRequestOptions): Promise<MergeResult>
+  closePullRequest?(number: number): Promise<PullRequestInfo>
 }
 
 /** A repository the signed-in account can reach, as listed by `GitProvider.listRepositories()`. */

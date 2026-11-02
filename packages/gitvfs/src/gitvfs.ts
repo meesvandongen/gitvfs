@@ -29,6 +29,16 @@ export interface StatResult {
   sha: string
 }
 
+/** Which branches a `GitVFS` works with; see `GitVFS.branches()`. */
+export interface BranchState {
+  /** The `branch` option: where the write branch starts, and what `updateFromBase()` merges in. */
+  base: string
+  /** Where commits go. Equal to `base` unless there is a separate write branch. */
+  write: string
+  /** Where reads come from right now: `write` once it exists, else `base`. */
+  read: string
+}
+
 export interface ReadDirResultOptions {
   recursive?: boolean
 }
@@ -51,7 +61,8 @@ function createCacheAdapter(
 }
 
 export class GitVFS {
-  private repository: GitRepository
+  /** The repository this works on, for what `GitVFS` does not wrap (branches, pull requests). */
+  readonly repository: GitRepository
   /** The `branch` option: where the write branch starts, and what `updateFromBase()` merges in. */
   private baseBranch: string
   private writeBranch: string
@@ -518,10 +529,18 @@ export class GitVFS {
     await this.repository.createBranch(name, sha)
   }
 
-  /** Switch to `branch`: it becomes the base, read and write branch. */
-  checkout(branch: string): void {
-    this.baseBranch = branch
-    this.readBranch = branch
+  /** The base, write and read branch. */
+  branches(): BranchState {
+    return { base: this.baseBranch, write: this.writeBranch, read: this.readBranch }
+  }
+
+  /**
+   * Switch to `branch`: it becomes the base, read and write branch. With `base`, `branch` becomes
+   * the write branch on top of `base` instead, as if passed as `writeBranch`.
+   */
+  checkout(branch: string, options: { base?: string } = {}): void {
+    this.baseBranch = options.base ?? branch
+    this.readBranch = this.baseBranch
     this.writeBranch = branch
     this.knownEntries.clear()
     this.headSha = null

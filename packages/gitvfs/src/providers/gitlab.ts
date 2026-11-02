@@ -9,7 +9,15 @@ import type {
   CommitOptions,
   CommitResult,
   ReadDirOptions,
+  BranchComparison,
+  ChangedFile,
+  CreatePullRequestOptions,
+  ListPullRequestsOptions,
+  MergePullRequestOptions,
+  MergeResult,
+  PullRequestInfo,
 } from '../types/provider.js'
+import { ConflictError, GitVFSError } from '../types/errors.js'
 import { createFetchREST, createPaginate, type TokenProvider } from './shared/http.js'
 import { matchesSearch, splitFullName } from './shared/repositories.js'
 import { createFetchGraphQL } from './shared/graphql.js'
@@ -43,6 +51,46 @@ interface GitLabProjectResponse {
   web_url: string
   last_activity_at: string | null
 }
+
+interface GitLabMergeRequestResponse {
+  iid: number
+  title: string
+  description: string | null
+  state: 'opened' | 'closed' | 'merged' | 'locked'
+  draft?: boolean
+  source_branch: string
+  target_branch: string
+  web_url: string
+  author: { username: string } | null
+  created_at: string
+  updated_at: string
+  merge_commit_sha?: string | null
+  squash_commit_sha?: string | null
+  merged_at?: string | null
+  detailed_merge_status?: string
+  has_conflicts?: boolean
+}
+
+function toPullRequest(raw: GitLabMergeRequestResponse): PullRequestInfo {
+  const pending = raw.detailed_merge_status === undefined
+    || ['unchecked', 'checking', 'preparing', 'approvals_syncing'].includes(raw.detailed_merge_status)
+  return {
+    number: raw.iid,
+    title: raw.title,
+    body: raw.description ?? '',
+    state: raw.state === 'opened' || raw.state === 'locked' ? 'open' : raw.state,
+    draft: raw.draft ?? false,
+    head: raw.source_branch,
+    base: raw.target_branch,
+    url: raw.web_url,
+    author: raw.author?.username ?? null,
+    createdAt: raw.created_at,
+    updatedAt: raw.updated_at,
+    mergeable: raw.has_conflicts ? false : pending ? null : raw.detailed_merge_status === 'mergeable',
+  }
+}
+
+const MERGE_REQUEST_STATE = { open: 'opened', closed: 'closed', all: 'all' } as const
 
 class GitLabProvider implements GitProvider {
   readonly name = 'gitlab'
@@ -85,6 +133,8 @@ class GitLabRepository implements GitRepository {
   private fetchREST: ReturnType<typeof createFetchREST>
   private fetchGraphQL: ReturnType<typeof createFetchGraphQL>
 
+  private paginate: ReturnType<typeof createPaginate>
+
   constructor(options: GitLabRepositoryOptions) {
     this.projectId = options.fullPath
     const baseUrl = instanceUrl(options)
@@ -92,6 +142,7 @@ class GitLabRepository implements GitRepository {
       token: options.token,
       baseUrl: `${baseUrl}/api/v4`,
     })
+    this.paginate = createPaginate({ token: options.token, baseUrl: `${baseUrl}/api/v4` })
     this.fetchGraphQL = createFetchGraphQL({
       token: options.token,
       url: `${baseUrl}/api/graphql`,
@@ -239,6 +290,106 @@ class GitLabRepository implements GitRepository {
       `/projects/${encodeURIComponent(this.projectId)}/repository/branches/${encodeURIComponent(name)}`,
       { method: 'DELETE' },
     )
+  }
+
+  private get projectPath(): string {
+    return `/projects/${encodeURIComponent(this.projectId)}`
+  }
+
+  async listBranches(): Promise<BranchInfo[]> {
+    const branches: BranchInfo[] = []
+    const path = `${this.projectPath}/repository/branches?per_page=100`
+    for await (const page of this.paginate<{ name: string; commit: { id: string } }>(path)) {
+      for (const raw of page) branches.push({ name: raw.name, sha: raw.commit.id })
+    }
+    return branches
+  }
+
+  async compareBranches(base: string, head: string): Promise<BranchComparison> {
+    type Comparison = {
+      commits: unknown[]
+      diffs: Array<{ old_path: string; new_path: string; new_file: boolean; renamed_file: boolean; deleted_file: boolean }>
+    }
+    // `straight=false` compares from the merge base, like GitHub's three-dot compare.
+    const compare = (from: string, to: string) =>
+      this.fetchREST(
+        `${this.projectPath}/repository/compare?${new URLSearchParams({ from, to, straight: 'false' }).toString()}`,
+      ) as Promise<Comparison>
+    const [ahead, behind] = await Promise.all([compare(base, head), compare(head, base)])
+    return {
+      ahead: ahead.commits.length,
+      behind: behind.commits.length,
+      files: ahead.diffs.map((diff): ChangedFile => {
+        if (diff.new_file) return { path: diff.new_path, status: 'added' }
+        if (diff.deleted_file) return { path: diff.old_path, status: 'removed' }
+        if (diff.renamed_file) return { path: diff.new_path, status: 'renamed', previousPath: diff.old_path }
+        return { path: diff.new_path, status: 'modified' }
+      }),
+    }
+  }
+
+  async listPullRequests(options: ListPullRequestsOptions = {}): Promise<PullRequestInfo[]> {
+    const params = new URLSearchParams({ per_page: '100' })
+    if (options.head) params.set('source_branch', options.head)
+    if (options.base) params.set('target_branch', options.base)
+    // GitLab's `closed` leaves out merged ones; GitHub's (and ours) includes them.
+    const states = options.state === 'closed' ? ['closed', 'merged'] : [MERGE_REQUEST_STATE[options.state ?? 'open']]
+    const requests: PullRequestInfo[] = []
+    for (const state of states) {
+      params.set('state', state)
+      for await (const page of this.paginate<GitLabMergeRequestResponse>(`${this.projectPath}/merge_requests?${params.toString()}`)) {
+        requests.push(...page.map(toPullRequest))
+      }
+    }
+    return requests
+  }
+
+  async getPullRequest(number: number): Promise<PullRequestInfo> {
+    return toPullRequest((await this.fetchREST(`${this.projectPath}/merge_requests/${number}`)) as GitLabMergeRequestResponse)
+  }
+
+  async createPullRequest(options: CreatePullRequestOptions): Promise<PullRequestInfo> {
+    const raw = (await this.fetchREST(`${this.projectPath}/merge_requests`, {
+      method: 'POST',
+      body: JSON.stringify({
+        source_branch: options.head,
+        target_branch: options.base,
+        title: options.draft ? `Draft: ${options.title}` : options.title,
+        description: options.body,
+      }),
+    })) as GitLabMergeRequestResponse
+    return toPullRequest(raw)
+  }
+
+  async mergePullRequest(number: number, options: MergePullRequestOptions = {}): Promise<MergeResult> {
+    const body: Record<string, unknown> = { squash: options.method === 'squash' }
+    if (options.message) body[options.method === 'squash' ? 'squash_commit_message' : 'merge_commit_message'] = options.message
+    let raw: GitLabMergeRequestResponse
+    try {
+      raw = (await this.fetchREST(`${this.projectPath}/merge_requests/${number}/merge`, {
+        method: 'PUT',
+        body: JSON.stringify(body),
+      })) as GitLabMergeRequestResponse
+    } catch (error) {
+      // 405/406/422: not mergeable (conflicts, pipeline, draft); 409: the source branch moved.
+      const status = error instanceof ConflictError ? 409 : error instanceof GitVFSError ? error.status : undefined
+      if (status !== undefined && [405, 406, 409, 422].includes(status)) {
+        throw new ConflictError(`Merge request !${number} cannot be merged: ${(error as Error).message}`)
+      }
+      throw error
+    }
+    return {
+      sha: raw.merge_commit_sha ?? raw.squash_commit_sha ?? '',
+      date: raw.merged_at ?? new Date().toISOString(),
+    }
+  }
+
+  async closePullRequest(number: number): Promise<PullRequestInfo> {
+    const raw = (await this.fetchREST(`${this.projectPath}/merge_requests/${number}`, {
+      method: 'PUT',
+      body: JSON.stringify({ state_event: 'close' }),
+    })) as GitLabMergeRequestResponse
+    return toPullRequest(raw)
   }
 
   async commit(options: CommitOptions): Promise<CommitResult> {

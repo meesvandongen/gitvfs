@@ -12,6 +12,8 @@ It powers the [gitvfs-cms demo](../cms-demo), where visitors can create, edit an
 | `GET /repos/:owner/:repo/git/ref/heads/:branch` | branch heads, cache invalidation |
 | `POST /repos/:owner/:repo/git/refs`, `DELETE …/git/refs/heads/:branch` | creating and deleting branches |
 | `POST /repos/:owner/:repo/merges` | `updateFromBase()`: merge commits, `204` when up to date, `409` on conflicts |
+| `GET /repos/:owner/:repo/branches`, `…/compare/:base...:head` | listing branches, what a branch changed |
+| `GET`, `POST /repos/:owner/:repo/pulls`, `GET`, `PATCH …/pulls/:number`, `PUT …/pulls/:number/merge` | pull requests: opening, listing, `mergeable`, closing, merging (`405` on conflicts) |
 | `GET /repos/:owner/:repo/git/commits/:sha`, `…/git/trees/:sha?recursive=1` | recursive listings |
 | `GET /repos/:owner/:repo/contents/:path?ref=` | directory listings |
 | `GET /repos/:owner/:repo/git/blobs/:sha` | binary files |
@@ -52,6 +54,7 @@ In tests, use `setupServer` from `msw/node` with a plain `MockRepository`. `repo
 `MockRepository` holds the following, all serializable as JSON:
 - branches;
 - commits (with parents, messages and dates; merge commits have a second parent);
+- pull requests;
 - flat trees (path → blob id);
 - blobs, stored as base64.
 

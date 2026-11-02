@@ -53,7 +53,7 @@ async function request(options: HttpOptions, path: string, init: RequestOptions 
 
   if (!response.ok) {
     const text = await response.text().catch(() => '')
-    throw new GitVFSError(`HTTP ${response.status}: ${text}`, 'HTTP_ERROR')
+    throw new GitVFSError(`HTTP ${response.status}: ${text}`, 'HTTP_ERROR', response.status)
   }
 
   return response
