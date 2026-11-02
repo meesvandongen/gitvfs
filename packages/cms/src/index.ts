@@ -1,6 +1,11 @@
 export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
+  ChangeComparison,
+  ChangeSummary,
+  ChangesOptions,
   CmsOptions,
+  CmsState,
+  ContentChange,
   LoadedDocument,
   SaveEntryOptions,
   SaveResult,
@@ -60,3 +65,5 @@ export type {
   MapTiles,
 } from './geo.js'
 export { isValidSlug, slugify } from './slug.js'
+export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
+export type { DiffLine } from './changes.js'
