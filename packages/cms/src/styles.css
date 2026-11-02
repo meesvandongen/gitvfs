@@ -1427,3 +1427,136 @@ a.gcms-button {
   color: var(--gcms-muted);
   text-align: center;
 }
+
+/* Basic inputs: datetime, time, slider, money, duration, phone */
+.gcms-app {
+  /* Native date and time pickers follow the theme. */
+  color-scheme: light dark;
+}
+
+.gcms-datetime,
+.gcms-phone,
+.gcms-money-field,
+.gcms-duration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.gcms-description a {
+  color: var(--gcms-accent);
+}
+
+.gcms-description code {
+  font: 0.75rem var(--gcms-mono);
+  overflow-wrap: anywhere;
+}
+
+.gcms-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gcms-slider-range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--gcms-accent);
+}
+
+.gcms-slider-range--empty {
+  opacity: 0.45;
+}
+
+.gcms-slider-value {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gcms-slider-value .gcms-input {
+  width: 6.5rem;
+}
+
+.gcms-unit {
+  color: var(--gcms-muted);
+}
+
+.gcms-money {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.gcms-money > .gcms-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.gcms-money-select {
+  flex: 0 1 15rem;
+  width: auto;
+  min-width: 6rem;
+}
+
+.gcms-money-currency {
+  display: grid;
+  place-items: center;
+  padding: 0 0.7rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-surface);
+  color: var(--gcms-muted);
+  font-weight: 600;
+}
+
+.gcms-duration {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.gcms-duration-part {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--gcms-muted);
+}
+
+.gcms-duration-part .gcms-input {
+  width: 5rem;
+}
+
+/* Read-only fields: field({ readOnly: true }) */
+.gcms-readonly {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.gcms-readonly > .gcms-field > .gcms-label::after,
+.gcms-readonly > .gcms-field > .gcms-field-row > .gcms-label::after,
+.gcms-readonly > .gcms-field > .gcms-group > .gcms-legend::after {
+  content: 'Read-only';
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 999px;
+  color: var(--gcms-muted);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
+.gcms-readonly .gcms-input:disabled {
+  border-style: dashed;
+  background: var(--gcms-surface);
+  color: var(--gcms-text);
+  -webkit-text-fill-color: currentColor;
+  opacity: 1;
+}
+
+.gcms-readonly .gcms-button:disabled,
+.gcms-readonly .gcms-map-draggable {
+  cursor: default;
+}

@@ -14,6 +14,12 @@ import { ZodProvider } from '@autoform/zod'
 import { z } from 'zod'
 import type { ContentType } from '../config.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPolygonField } from './map.js'
+import { DateTimeField, TimeField } from './datetime.js'
+import { DurationField } from './duration.js'
+import { withFieldState } from './field-utils.js'
+import { MoneyField } from './money.js'
+import { PhoneField } from './phone.js'
+import { SliderField } from './slider.js'
 import { TableField } from './table.js'
 import { TreeField } from './tree.js'
 import { FieldChange } from './field-changes.js'
@@ -373,6 +379,12 @@ export const formComponents: AutoFormFieldComponents = {
   geocircle: GeoCircleField,
   geoline: GeoLineField,
   geopolygon: GeoPolygonField,
+  datetime: DateTimeField,
+  time: TimeField,
+  slider: SliderField,
+  money: MoneyField,
+  duration: DurationField,
+  phone: PhoneField,
   table: TableField,
   tree: TreeField,
   fallback: StringField,
@@ -489,7 +501,12 @@ export function ContentForm(props: ContentFormProps) {
       schema={schema}
       defaultValues={defaultValues}
       onSubmit={props.onSubmit}
-      uiComponents={{ ...uiComponents, ...props.uiComponents }}
+      uiComponents={{
+        ...uiComponents,
+        ...props.uiComponents,
+        // `readOnly` and `hidden` work with any field wrapper, including a custom one.
+        FieldWrapper: withFieldState(props.uiComponents?.FieldWrapper ?? uiComponents.FieldWrapper),
+      }}
       formComponents={{ ...formComponents, ...props.formComponents } as AutoFormFieldComponents}
       formProps={{ id: props.formId }}
     >

@@ -1,5 +1,23 @@
 import { z } from 'zod'
-import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPolygon, markdown, table, textarea, tree } from 'gitvfs-cms'
+import {
+  datetime,
+  defineCollection,
+  defineSingleton,
+  duration,
+  field,
+  geoCircle,
+  geoLine,
+  geoPoint,
+  geoPolygon,
+  markdown,
+  money,
+  phone,
+  slider,
+  table,
+  textarea,
+  time,
+  tree,
+} from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
 // and singletons, custom fields and previews, and files the schema does not fully describe.
@@ -127,6 +145,32 @@ export const places = defineCollection({
   }),
 })
 
+export const shows = defineCollection({
+  name: 'shows',
+  label: 'Shows',
+  folder: 'data/shows',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    // Read-only fields cannot be filled in, so new shows get a generated id.
+    id: z
+      .string()
+      .default(() => `tm-${crypto.randomUUID().slice(0, 5)}`)
+      .check(field({ label: 'Ticketing ID', description: 'Set by the ticketing system', readOnly: true })),
+    // Import metadata: not shown in the editor, kept on save (see the Source tab).
+    importedAt: datetime({ timeZone: 'UTC', hidden: true }).optional(),
+    starts: datetime({ label: 'Starts', timeZone: 'Europe/Amsterdam', description: 'Amsterdam time, wherever you edit from' }),
+    doors: time({ label: 'Doors open', step: 900 }).optional(),
+    runtime: duration({ label: 'Running time' }),
+    intermission: duration({ label: 'Intermission', units: ['minutes'] }).optional(),
+    price: money({ label: 'Ticket price', currencies: ['EUR', 'GBP', 'USD'] }),
+    onSale: z.number().int().min(0).max(100).check(slider({ label: 'Seats on sale', unit: '%' })),
+    onSaleFrom: datetime({ label: 'Tickets on sale from', description: 'In your own time zone' }).optional(),
+    boxOffice: phone({ label: 'Box office', description: 'Try 020 123 4567', defaultCountryCode: '31' }).optional(),
+  }),
+  sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
+})
+
 export const site = defineSingleton({
   name: 'site',
   label: 'Site settings',
@@ -162,8 +206,8 @@ export const theme = defineSingleton({
   path: 'data/theme.yml',
   schema: z.object({
     mode: z.enum(['light', 'dark', 'system']).default('system'),
-    fontSize: z.number().int().min(12).max(24).check(field({ label: 'Base font size (px)' })),
-    radius: z.number().min(0).max(24).check(field({ label: 'Corner radius (px)' })),
+    fontSize: z.number().int().min(12).max(24).check(slider({ label: 'Base font size', unit: 'px' })),
+    radius: z.number().min(0).max(24).multipleOf(0.5).check(slider({ label: 'Corner radius', unit: 'px' })),
   }),
 })
 
@@ -210,7 +254,7 @@ export const navigation = defineSingleton({
   }),
 })
 
-export const collections = [posts, docs, authors, events, places]
+export const collections = [posts, docs, authors, events, places, shows]
 export const singletons = [site, homepage, theme, pricing, navigation]
 
 /** The repository visitors start with, and go back to on reset. */
@@ -389,6 +433,30 @@ location:
 starts: 2026-12-04
 online: true
 tickets: []
+`,
+  'data/shows/late-night-jazz.yml': `title: Late night jazz
+id: tm-48213
+importedAt: 2026-10-01T08:00:00Z
+starts: 2026-11-20T21:30:00+01:00
+doors: "20:45"
+runtime: PT1H45M
+intermission: PT15M
+price:
+  amount: 24.5
+  currency: EUR
+onSale: 80
+boxOffice: "+31201234567"
+`,
+  'data/shows/the-tempest-matinee.yml': `title: The Tempest (matinee)
+id: tm-48377
+importedAt: 2026-10-01T08:00:00Z
+starts: 2026-12-06T14:00:00+01:00
+runtime: PT2H30M
+price:
+  amount: 18
+  currency: GBP
+onSale: 45
+onSaleFrom: 2026-11-01T10:00:00+01:00
 `,
   'data/site.json': `${JSON.stringify(
     {

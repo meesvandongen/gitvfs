@@ -31,11 +31,7 @@ import {
   type GeoPoint,
   type MapTiles,
 } from '../geo.js'
-import { NestedErrors } from './field-utils.js'
-
-// Not imported from ./autoform.js, which imports this module for its field components.
-const useField = (name: string) => useFieldRHF({ name }).field
-import { useFieldRHF } from '@autoform/react/react-hook-form'
+import { NestedErrors, useField, useReadOnly } from './field-utils.js'
 
 export interface MapView {
   center: GeoPoint
@@ -79,6 +75,8 @@ const MIN_ZOOM = 1
 /** Used until the element is measured, and where layout is not available (tests, SSR). */
 const FALLBACK_WIDTH = 600
 const DRAG_THRESHOLD = 4
+const noop = () => {}
+const READ_ONLY_HANDLERS = { onPointerDown: noop, onPointerMove: noop, onPointerUp: noop, onClick: noop }
 
 function tileUrl(tiles: MapTiles, z: number, x: number, y: number): string {
   const subdomains = tiles.subdomains ?? []
@@ -98,6 +96,8 @@ export function SlippyMap({ view, onViewChange, onMapClick, tiles = OSM_TILES, h
   const element = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(FALLBACK_WIDTH)
   const [hint, setHint] = useState(false)
+  // A read-only field still pans and zooms, but clicks and drags change nothing.
+  const readOnly = useReadOnly()
   const size = useMemo(() => ({ width, height }), [width, height])
 
   useLayoutEffect(() => {
@@ -208,10 +208,10 @@ export function SlippyMap({ view, onViewChange, onMapClick, tiles = OSM_TILES, h
     if (!state || state.id !== event.pointerId) return
     pan.current = null
     event.currentTarget.releasePointerCapture?.(event.pointerId)
-    if (!state.moved && onMapClick) onMapClick(toPoint(localPixel(event)))
+    if (!state.moved && onMapClick && !readOnly) onMapClick(toPoint(localPixel(event)))
   }
 
-  const draggable: MapOverlayHelpers['draggable'] = (onDrag) => ({
+  const draggable: MapOverlayHelpers['draggable'] = (onDrag) => readOnly ? READ_ONLY_HANDLERS : ({
     onPointerDown: (event) => {
       if (event.button !== 0) return
       event.stopPropagation()
