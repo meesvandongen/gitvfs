@@ -17,6 +17,7 @@ import { mediaConfig, type UploadOptions } from '../media.js'
 import { EmbedField } from './embed.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPolygonField } from './map.js'
 import { FileField, GalleryField, ImageField, MarkdownMediaPanel } from './media.js'
+import { FieldChange } from './field-changes.js'
 
 /**
  * The form binding (`value`, `onChange`, `onBlur`, `name`, `ref`) for a field, for custom field
@@ -284,6 +285,7 @@ function FieldWrapper({ label, error, children, id, parsedField }: FieldWrapperP
   if (parsedField.type === 'array' || parsedField.type === 'object') {
     return (
       <div className={`gcms-field gcms-field--${parsedField.type}`}>
+        {parsedField.type === 'array' ? <FieldChange name={id} revertable={false} /> : null}
         {children}
         {error ? <p className="gcms-error" role="alert">{friendlyError(error)}</p> : null}
       </div>
@@ -301,18 +303,26 @@ function FieldWrapper({ label, error, children, id, parsedField }: FieldWrapperP
   return (
     <div className={`gcms-field gcms-field--${parsedField.type}`}>
       {isCheckbox ? (
-        <label className="gcms-checkbox" htmlFor={id}>
-          {children}
-          <span>{label}</span>
-        </label>
+        <div className="gcms-field-row">
+          <label className="gcms-checkbox" htmlFor={id}>
+            {children}
+            <span>{label}</span>
+          </label>
+          <FieldChange name={id} />
+        </div>
       ) : (
         <>
           {hasLabel ? (
-            <label className="gcms-label" htmlFor={id}>
-              {label}
-              {required}
-            </label>
-          ) : null}
+            <div className="gcms-field-row">
+              <label className="gcms-label" htmlFor={id}>
+                {label}
+                {required}
+              </label>
+              <FieldChange name={id} />
+            </div>
+          ) : (
+            <FieldChange name={id} />
+          )}
           {children}
         </>
       )}

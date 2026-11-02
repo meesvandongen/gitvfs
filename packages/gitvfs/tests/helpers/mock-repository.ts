@@ -5,6 +5,8 @@ import type {
   BranchInfo,
   CommitOptions,
   CommitResult,
+  MergeOptions,
+  MergeResult,
   ReadDirOptions,
 } from '../../src/types/provider'
 import { NotFoundError } from '../../src/types/errors'
@@ -28,6 +30,8 @@ export class MockRepository implements GitRepository {
   branches: Map<string, MockBranch> = new Map()
   commitCount = 0
   lastCommitShaCallCount = 0
+  /** Unset by default, like hosts that cannot merge; tests assign a stub. */
+  mergeBranch?: (options: MergeOptions) => Promise<MergeResult | null>
 
   constructor() {
     this.branches.set('main', {

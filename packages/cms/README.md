@@ -66,6 +66,7 @@ export const Admin = () => <CmsApp cms={cms} title="Acme" />
 - **Editor** with text, number, checkbox, date, select, list, group, textarea and markdown fields (the markdown field has a toolbar), and map fields for a point, a point with a radius, a line and a polygon.
 - **Media:** image, gallery and file uploads committed into the repository in the same commit as the entry (collision-safe names, alt text, focal point), an image button in the markdown toolbar, and video embeds with a click-to-load, privacy-friendly player.
 - **Preview** in an iframe sandboxed without scripts, so repository content cannot reach the user's token. A **Source** tab shows the exact file that will be committed.
+- **Changes** (`changes: true`): edit on branches, see changed fields marked (with revert) and both versions previewed before and after or as a source diff, then open a pull request and publish it from the editor.
 - **OIDC sign-in** via [oidc-spa](https://www.oidc-spa.dev/), with a GitLab preset whose OAuth tokens work directly against the GitLab API.
 
 Full documentation: [`packages/docs`](../docs), whose `/admin` page edits the docs with this package.

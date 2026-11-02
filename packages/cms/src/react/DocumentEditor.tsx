@@ -4,7 +4,8 @@ import type { ContentType } from '../config.js'
 import { mediaFolders } from '../media.js'
 import { isValidSlug, slugify } from '../slug.js'
 import { ContentForm, type ContentFormProps } from './autoform.js'
-import { useCms } from './context.js'
+import { useCms, useCmsState } from './context.js'
+import { BaseValuesContext } from './field-changes.js'
 import { MediaProvider, MediaStore } from './media-store.js'
 import { DocumentPreview, type PreviewProps } from './preview.js'
 import { errorMessage, useAsync } from './use-async.js'
@@ -43,6 +44,7 @@ const NEW_DOCUMENT: LoadedDocument = { path: '', exists: false, data: {}, issues
 /** Load, edit, preview and commit one document. */
 export function DocumentEditor(props: DocumentEditorProps) {
   const cms = useCms()
+  const { branch, inChange } = useCmsState()
   const { contentType } = props
   const isEntry = contentType.kind === 'collection'
   const slug = isEntry ? (props.slug ?? null) : null
@@ -50,7 +52,14 @@ export function DocumentEditor(props: DocumentEditorProps) {
   const document = useAsync<LoadedDocument>(async () => {
     if (contentType.kind === 'singleton') return cms.readSingleton(contentType.name)
     return slug === null ? NEW_DOCUMENT : cms.readEntry(contentType.name, slug)
-  }, [cms, contentType, slug])
+  }, [cms, contentType, slug, branch])
+
+  // Inside a change: the published version, to compare against. `null` when it is new.
+  const base = useAsync<LoadedDocument | null | undefined>(async () => {
+    if (!inChange) return undefined
+    if (contentType.kind === 'singleton') return cms.readBaseSingleton(contentType.name)
+    return slug === null ? null : cms.readBaseEntry(contentType.name, slug)
+  }, [cms, contentType, slug, branch, inChange])
 
   if (document.loading && !document.data) {
     return <div className="gcms-empty">Loading…</div>
@@ -65,17 +74,28 @@ export function DocumentEditor(props: DocumentEditorProps) {
 
   return (
     <LoadedEditor
-      key={`${contentType.name}:${slug ?? ''}:${document.data.path}`}
+      key={`${branch}:${contentType.name}:${slug ?? ''}:${document.data.path}`}
       {...props}
       slug={slug}
       document={document.data}
+      // While loading, `data` can still be the previous document's.
+      base={base.loading ? undefined : base.data}
     />
   )
 }
 
-function LoadedEditor(props: DocumentEditorProps & { slug: string | null; document: LoadedDocument }) {
+function LoadedEditor(
+  props: DocumentEditorProps & {
+    slug: string | null
+    document: LoadedDocument
+    /** The base branch's version inside a change (`null` when new there), else `undefined`. */
+    base: LoadedDocument | null | undefined
+  },
+) {
   const cms = useCms()
-  const { contentType, document } = props
+  const state = useCmsState()
+  const editable = cms.canEdit()
+  const { contentType, document, base } = props
   const isEntry = contentType.kind === 'collection'
   const formId = useId()
 
@@ -88,6 +108,18 @@ function LoadedEditor(props: DocumentEditorProps & { slug: string | null; docume
   // Uploads wait here until a save commits them along with the document.
   const media = useMemo(() => new MediaStore(cms, mediaFolders(contentType.schema)), [cms, contentType])
   useEffect(() => () => media.dispose(), [media])
+  // The base version as the form would hold it: with the schema's defaults filled in, so a
+  // default the file leaves out does not count as a change.
+  const baseFormValues = useMemo(() => {
+    if (!base) return base
+    const parsed = contentType.schema.safeParse(base.data)
+    return parsed.success ? { ...base.data, ...(parsed.data as Record<string, unknown>) } : base.data
+  }, [base, contentType])
+  const baseValues = useMemo(
+    () => (baseFormValues ? { values: baseFormValues, label: state.base } : null),
+    [baseFormValues, state.base],
+  )
+  const compare = baseFormValues === undefined ? undefined : { values: baseFormValues, label: state.base }
 
   const snapshot = JSON.stringify(values)
   const dirty = baseline !== null && baseline !== snapshot
@@ -162,20 +194,27 @@ function LoadedEditor(props: DocumentEditorProps & { slug: string | null; docume
               ? `${contentType.folder ? `${contentType.folder}/` : ''}${derivedSlug || '{slug}'}.${contentType.extension}`
               : document.path}
             {dirty ? <span className="gcms-badge">Unsaved</span> : null}
+            {base === null && document.exists ? <span className="gcms-badge gcms-badge--added">New in this change</span> : null}
           </p>
         </div>
         <div className="gcms-actions">
           <StatusText status={status} />
           {isEntry && props.slug !== null && (
-            <button type="button" className="gcms-button gcms-button--danger" disabled={busy} onClick={remove}>
+            <button type="button" className="gcms-button gcms-button--danger" disabled={busy || !editable} onClick={remove}>
               Delete
             </button>
           )}
-          <button type="submit" form={formId} className="gcms-button gcms-button--primary" disabled={busy}>
+          <button type="submit" form={formId} className="gcms-button gcms-button--primary" disabled={busy || !editable}>
             {props.slug === null && isEntry ? 'Create' : 'Save'}
           </button>
         </div>
       </header>
+
+      {!editable && (
+        <div className="gcms-notice" role="status">
+          {state.base} is published content. Start a change in the sidebar to edit it.
+        </div>
+      )}
 
       {document.issues.length > 0 && (
         <div className="gcms-notice" role="status">
@@ -207,18 +246,25 @@ function LoadedEditor(props: DocumentEditorProps & { slug: string | null; docume
                 </p>
               </div>
             )}
-            <ContentForm
-              contentType={contentType}
-              defaultValues={document.data}
-              onSubmit={save}
-              onValuesChange={handleValues}
-              formId={formId}
-              uiComponents={props.uiComponents}
-              formComponents={props.formComponents}
-            />
+            <BaseValuesContext.Provider value={baseValues}>
+              <ContentForm
+                contentType={contentType}
+                defaultValues={document.data}
+                onSubmit={save}
+                onValuesChange={handleValues}
+                formId={formId}
+                uiComponents={props.uiComponents}
+                formComponents={props.formComponents}
+              />
+            </BaseValuesContext.Provider>
           </div>
           <div className="gcms-pane gcms-pane--preview">
-            <DocumentPreview contentType={contentType} values={previewValues} render={props.renderPreview} />
+            <DocumentPreview
+              contentType={contentType}
+              values={previewValues}
+              render={props.renderPreview}
+              compare={compare}
+            />
           </div>
         </div>
       </MediaProvider>

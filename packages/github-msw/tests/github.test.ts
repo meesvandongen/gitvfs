@@ -1,11 +1,14 @@
 import { setupServer } from 'msw/node'
-import { GitVFS } from 'gitvfs'
+import { ConflictError, GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
 import { createGitHubHandlers, MockRepository, persistentRepository, type StorageLike } from '../src'
 
 const server = setupServer()
 beforeAll(() => server.listen())
-afterEach(() => server.resetHandlers())
+afterEach(() => {
+  server.resetHandlers()
+  vi.useRealTimers()
+})
 afterAll(() => server.close())
 
 async function setup(files: Record<string, string | Uint8Array> = {}) {
@@ -151,6 +154,90 @@ describe('gitvfs against the GitHub mock', () => {
     expect(repository.readFile('main', 'content/posts/draft.md')).toBeUndefined()
   })
 
+  it('reads back commits on the write branch and merges main into it', async () => {
+    const { repository, remote } = await setup()
+    const fs = new GitVFS({ repository: remote, branch: 'main', writeBranch: 'drafts', cache: 'none' })
+    expect(await fs.updateFromBase()).toBeNull() // No write branch yet.
+
+    fs.writeFile('README.md', '# Draft\n')
+    await fs.commit('Draft')
+    expect(await fs.readFile('README.md', { encoding: 'utf-8' })).toBe('# Draft\n')
+
+    const add = (path: string, text: string) => ({ path, content: new TextEncoder().encode(text) })
+    await repository.commit({ branch: 'main', message: 'News', additions: [add('news.md', 'News\n')] })
+    const merge = await fs.updateFromBase('Update drafts')
+
+    expect(merge?.sha).toBe(repository.branchHead('drafts'))
+    expect(repository.getCommit(merge!.sha)).toMatchObject({ message: 'Update drafts', mergeParent: repository.branchHead('main') })
+    expect(await fs.readFile('news.md', { encoding: 'utf-8' })).toBe('News\n')
+    expect(await fs.readFile('README.md', { encoding: 'utf-8' })).toBe('# Draft\n')
+    expect(await fs.updateFromBase()).toBeNull() // Already up to date.
+
+    // Both branches change the same file: a conflict, and nothing moves.
+    await repository.commit({ branch: 'main', message: 'Readme', additions: [add('README.md', '# Main\n')] })
+    const head = repository.branchHead('drafts')
+    await expect(fs.updateFromBase()).rejects.toBeInstanceOf(ConflictError)
+    expect(repository.branchHead('drafts')).toBe(head)
+  })
+
+  it('lists branches, compares them, and takes a pull request from opening to merging', async () => {
+    const { repository, remote } = await setup()
+    const add = (path: string, text: string) => ({ path, content: new TextEncoder().encode(text) })
+    const fs = new GitVFS({ repository: remote, branch: 'main', writeBranch: 'cms/spring', cache: 'none' })
+    fs.writeFile('content/posts/spring.md', 'Spring\n')
+    fs.writeFile('README.md', '# Spring\n')
+    fs.rm('data/site.json')
+    await fs.commit('Spring')
+    await repository.commit({ branch: 'main', message: 'Elsewhere', additions: [add('other.md', 'x')] })
+
+    expect((await remote.listBranches!()).map((branch) => branch.name)).toEqual(['cms/spring', 'main'])
+    expect(await remote.compareBranches!('main', 'cms/spring')).toEqual({
+      ahead: 1,
+      behind: 1,
+      files: [
+        { path: 'README.md', status: 'modified' },
+        { path: 'content/posts/spring.md', status: 'added' },
+        { path: 'data/site.json', status: 'removed' },
+      ],
+    })
+
+    const opened = await remote.createPullRequest!({ head: 'cms/spring', base: 'main', title: 'Spring update', body: 'New season' })
+    expect(opened).toMatchObject({ number: 1, state: 'open', head: 'cms/spring', base: 'main', body: 'New season', author: 'demo' })
+    expect(opened.url).toBe('https://github.com/acme/site/pull/1')
+    await expect(remote.createPullRequest!({ head: 'cms/spring', base: 'main', title: 'Again' })).rejects.toThrow(/already exists/)
+    expect(await remote.listPullRequests!({ head: 'cms/spring' })).toHaveLength(1)
+    expect(await remote.listPullRequests!({ head: 'other' })).toEqual([])
+    expect(await remote.getPullRequest!(1)).toMatchObject({ mergeable: true })
+
+    const merge = await remote.mergePullRequest!(1)
+    expect(merge.sha).toBe(repository.branchHead('main'))
+    expect(repository.readFile('main', 'content/posts/spring.md')).toBeDefined()
+    expect(repository.readFile('main', 'other.md')).toBeDefined()
+    expect(await remote.getPullRequest!(1)).toMatchObject({ state: 'merged' })
+    expect(await remote.listPullRequests!()).toEqual([])
+    expect(await remote.listPullRequests!({ state: 'closed' })).toHaveLength(1)
+  })
+
+  it('refuses to merge a conflicting pull request, and closes it', async () => {
+    const { repository, remote } = await setup()
+    const add = (path: string, text: string) => ({ path, content: new TextEncoder().encode(text) })
+    repository.createBranch('cms/clash', repository.branchHead('main')!)
+    await repository.commit({ branch: 'cms/clash', message: 'Mine', additions: [add('README.md', 'mine')] })
+    await repository.commit({ branch: 'main', message: 'Theirs', additions: [add('README.md', 'theirs')] })
+
+    const pull = await remote.createPullRequest!({ head: 'cms/clash', base: 'main', title: 'Clash' })
+    expect(await remote.getPullRequest!(pull.number)).toMatchObject({ mergeable: false })
+    await expect(remote.mergePullRequest!(pull.number)).rejects.toBeInstanceOf(ConflictError)
+    expect(await remote.closePullRequest!(pull.number)).toMatchObject({ state: 'closed' })
+  })
+
+  it('deletes branches through the real provider', async () => {
+    const { repository, remote } = await setup()
+    await remote.createBranch('old', repository.branchHead('main')!)
+    await remote.deleteBranch('old')
+    expect(repository.branchNames()).toEqual(['main'])
+  })
+
   it('serves blobs and the signed-in user', async () => {
     const { repository } = await setup()
     const sha = repository.readFile('main', 'README.md')!.sha
@@ -193,6 +280,10 @@ describe('gitvfs against the GitHub mock', () => {
 
 describe('several repositories', () => {
   it('lists them all and routes reads and commits to the right one', async () => {
+    // Commit dates have millisecond precision; on a fast machine both repositories and the blog's
+    // commit share one, and the order below would depend on that. Set the clock explicitly.
+    vi.useFakeTimers({ toFake: ['Date'] })
+    vi.setSystemTime(new Date('2026-01-01T00:00:00.000Z'))
     const site = await MockRepository.create({ files: { 'README.md': '# Site\n' } })
     const blog = await MockRepository.create({ files: { 'README.md': '# Blog\n' } })
     const changed: MockRepository[] = []
@@ -206,6 +297,7 @@ describe('several repositories', () => {
       }),
     )
     // The blog gets the newest commit, so it is listed first.
+    vi.setSystemTime(new Date('2026-01-01T00:01:00.000Z'))
     await blog.commit({ branch: 'main', message: 'Post', additions: [{ path: 'post.md', content: new TextEncoder().encode('hi') }] })
 
     const gh = github({ token: 't' })

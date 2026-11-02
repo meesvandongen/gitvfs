@@ -259,6 +259,36 @@ describe('GitCms assets', () => {
     expect(remote.commits).toHaveLength(0)
   })
 
+  it('commits uploads on the change branch when editing in a change', async () => {
+    const remote = new MemoryRepository({ 'content/posts/hello.yml': 'title: Hello\n' })
+    const fs = new GitVFS({ repository: remote, branch: 'main', cache: 'none' })
+    const cms = createCms({ fs, collections: [posts], changes: { required: true } })
+
+    // Required changes: main is read-only, and a refused save leaves nothing staged.
+    await expect(
+      cms.saveEntry('posts', { slug: 'hello', previousSlug: 'hello', data: { title: 'Hi' }, assets: [{ path: 'public/images/a.png', content: png }] }),
+    ).rejects.toThrow('Start a change')
+    expect(fs.status()).toEqual([])
+
+    await cms.startChange('Photos')
+    expect(await cms.availableAssetPath('public/images', 'a.png')).toBe('public/images/a.png')
+    await cms.saveEntry('posts', {
+      slug: 'hello',
+      previousSlug: 'hello',
+      data: { title: 'Hello', cover: { src: '/images/a.png' } },
+      assets: [{ path: 'public/images/a.png', content: png }],
+    })
+    expect(remote.commits).toHaveLength(1)
+    expect(remote.commits[0].branch).toBe('cms/photos')
+    expect(remote.commits[0].changes.map((change) => change.path).sort()).toEqual(['content/posts/hello.yml', 'public/images/a.png'])
+    expect([...(await remote.getFile('cms/photos', 'public/images/a.png')).content]).toEqual([...png])
+    await expect(remote.getFile('main', 'public/images/a.png')).rejects.toThrow()
+    expect([...(await cms.readAsset('public/images/a.png'))]).toEqual([...png])
+    // The upload is part of what the change changes, and the name is taken on its branch.
+    expect((await cms.changedContent()).map((change) => [change.path, change.status])).toContainEqual(['public/images/a.png', 'added'])
+    expect(await cms.availableAssetPath('public/images', 'a.png')).toBe('public/images/a-2.png')
+  })
+
   it('suggests free paths for uploads', async () => {
     const { cms } = setup({ 'public/images/team.png': png })
     expect(await cms.availableAssetPath('public/images', 'Team.PNG')).toBe('public/images/team-2.png')

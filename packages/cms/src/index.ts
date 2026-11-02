@@ -1,6 +1,11 @@
 export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
+  ChangeComparison,
+  ChangeSummary,
+  ChangesOptions,
   CmsOptions,
+  CmsState,
+  ContentChange,
   LoadedDocument,
   PendingAsset,
   SaveEntryOptions,
@@ -103,3 +108,5 @@ export type {
   MediaFolder,
   UploadOptions,
 } from './media.js'
+export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
+export type { DiffLine } from './changes.js'

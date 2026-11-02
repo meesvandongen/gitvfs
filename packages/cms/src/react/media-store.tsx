@@ -30,13 +30,17 @@ export interface AddedAsset {
   url: string
 }
 
-// Files read from the repository, per CMS, shared by all editors so each file is fetched once. Paths
-// are a good key: uploads never overwrite files. The URLs live as long as the CMS.
-const repositoryFiles = new WeakMap<GitCms, Map<string, Entry>>()
+// Files read from the repository, per CMS and branch (a change can hold uploads its base branch
+// does not have yet), shared by all editors so each file is fetched once. Paths are a good key
+// within a branch: uploads never overwrite files. The URLs live as long as the CMS.
+const repositoryFiles = new WeakMap<GitCms, Map<string, Map<string, Entry>>>()
 
 function cacheOf(cms: GitCms): Map<string, Entry> {
-  let cache = repositoryFiles.get(cms)
-  if (!cache) repositoryFiles.set(cms, (cache = new Map()))
+  let branches = repositoryFiles.get(cms)
+  if (!branches) repositoryFiles.set(cms, (branches = new Map()))
+  const { branch } = cms.getState()
+  let cache = branches.get(branch)
+  if (!cache) branches.set(branch, (cache = new Map()))
   return cache
 }
 

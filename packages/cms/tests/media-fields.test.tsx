@@ -7,7 +7,7 @@ import { CmsApp, rewriteImageSources } from '../src/react'
 import { MemoryRepository } from './helpers/memory-repository'
 
 ;(globalThis as { IS_REACT_ACT_ENVIRONMENT?: boolean }).IS_REACT_ACT_ENVIRONMENT = true
-// The embed test shows a video player; it must not reach the network.
+// No test may load a video player from the network.
 ;(window as unknown as { happyDOM: { settings: { disableIframePageLoading: boolean } } }).happyDOM.settings.disableIframePageLoading = true
 
 const png = (seed: number) => new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, seed, seed + 1])
@@ -225,6 +225,42 @@ describe('markdown images', () => {
   })
 })
 
+describe('media in a change', () => {
+  it('commits uploads on the change branch and shows images on both sides of the comparison', async () => {
+    const remote = new MemoryRepository({
+      'posts/post.md': '---\ntitle: Post\n---\n\n![Old](/images/old.png)\n',
+      'public/images/old.png': png(5),
+    })
+    const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [posts], changes: true })
+    await cms.startChange('New cover')
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    const entry = await waitFor(() => byText('Postpost'))
+    await act(async () => entry.click())
+    await waitFor(() => container.querySelector('input[name="title"]'))
+
+    await pickFiles(fileInput('cover'), [new File([png(1)], 'cover.png', { type: 'image/png' })])
+    await waitFor(() => field('cover').querySelector('img.gcms-media-image'))
+    const body = container.querySelector<HTMLTextAreaElement>('textarea[name="body"]')!
+    await act(async () => typeInto(body, `${body.value}![New](/images/cover.png)\n`))
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.commits[0].branch).toBe('cms/new-cover')
+    expect(remote.commits[0].changes.map((change) => change.path).sort()).toEqual(['posts/post.md', 'public/images/cover.png'])
+    expect([...(await remote.getFile('cms/new-cover', 'public/images/cover.png')).content]).toEqual([...png(1)])
+    await expect(remote.getFile('main', 'public/images/cover.png')).rejects.toThrow()
+
+    // Before and after: both rendered previews inline the repository images as data: URLs.
+    await act(async () => byText('Changes')!.click())
+    await waitFor(() => container.querySelectorAll('.gcms-compare-side iframe').length === 2)
+    const sides = () => [...container.querySelectorAll('.gcms-compare-side iframe')].map((frame) => frame.getAttribute('srcdoc') ?? '')
+    await waitFor(() => {
+      const [before, after] = sides()
+      return before.match(/src="data:image\/png;base64,/g)?.length === 1 && after.match(/src="data:image\/png;base64,/g)?.length === 2
+    })
+  })
+})
+
 describe('embed field', () => {
   it('recognizes a YouTube link and loads the privacy-friendly player only on request', async () => {
     const remote = await openPost({ 'posts/post.md': '---\ntitle: Post\n---\n' })
@@ -233,11 +269,13 @@ describe('embed field', () => {
     expect(container.querySelector('.gcms-embed-card')?.textContent).toContain('YouTube video dQw4w9WgXcQ from 1:15')
     expect(container.querySelector('.gcms-embed iframe')).toBeNull()
 
-    // happy-dom reports that it does not load the player; that is the point.
-    const report = vi.spyOn(window.console, 'error').mockImplementation(() => {})
+    // Out of the document, happy-dom does not try to load the player.
+    container.remove()
     await act(async () => byText('Load preview')!.click())
     expect(container.querySelector('.gcms-embed iframe')?.getAttribute('src')).toBe('https://www.youtube-nocookie.com/embed/dQw4w9WgXcQ?start=75')
-    report.mockRestore()
+    await act(async () => typeInto(input, 'https://vimeo.com/76979871'))
+    expect(container.querySelector('.gcms-embed iframe')).toBeNull()
+    document.body.append(container)
 
     await act(async () => typeInto(input, 'not a link'))
     await act(async () => byText('Save')!.click())
