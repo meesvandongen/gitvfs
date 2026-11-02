@@ -19,6 +19,7 @@ export type { AutoFormFieldProps as FieldProps } from '@autoform/react'
 export { CmsProvider, useCms } from './context.js'
 export { GeoCircleField, GeoLineField, GeoPointField, GeoPolygonField, SlippyMap, fitView } from './map.js'
 export type { MapOverlayHelpers, MapView, SlippyMapProps } from './map.js'
+export { GraphField } from './graph.js'
 export {
   DocumentPreview,
   MarkdownPreview,

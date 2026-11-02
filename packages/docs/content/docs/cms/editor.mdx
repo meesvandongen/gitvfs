@@ -99,6 +99,94 @@ For your site, `toGeoJSON(value)` converts a value to a GeoJSON geometry (a circ
 or a ring of points with `{ polygon: true }`), and `distance`, `pathLength` and `polygonArea` measure
 in meters.
 
+## Graph fields
+
+`graph()` returns a schema for a diagram of nodes and edges, such as a support decision tree, a
+content workflow or a site map, edited on a canvas. The value is the nodes-and-edges model of React
+Flow, Cytoscape and the JSON Graph Format, kept flat for files people read:
+
+```ts
+import { graph } from 'gitvfs-cms'
+
+const flows = defineCollection({
+  name: 'flows',
+  folder: 'data/flows',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string(),
+    flow: graph({
+      label: 'Flow',
+      nodeKinds: { question: { label: 'Question', shape: 'diamond' }, answer: { label: 'Answer' } },
+      nodeFields: { details: z.string().check(textarea({ label: 'Details' })).optional() },
+      edgeFields: { role: z.enum(['agent', 'lead']).optional() },
+      minNodes: 1,
+    }),
+  }),
+})
+```
+
+```yaml
+flow:
+  nodes:
+    - id: email-arrived
+      label: Did the reset email arrive?
+      x: 220
+      y: 160
+      kind: question
+    - id: use-reset-link
+      label: Use the link in the email
+      x: 100
+      y: 300
+      kind: answer
+      details: The link works for one hour.
+  edges:
+    - from: email-arrived
+      to: use-reset-link
+      label: "Yes"
+```
+
+- **Ids** are readable slugs of the label (`use-reset-link`, then `use-reset-link-2`). A node added
+  in the editor takes its id from its label while it is new; ids of stored nodes never change when
+  the label does, and the id of a deleted node is not handed to a new node in the same session.
+- **Edges** point at node ids with `from` and `to` and have no ids of their own. An edge to a node
+  that does not exist, a repeated node id, an edge from a node to itself and a second edge between
+  the same nodes are validation errors (the last two unless allowed by options).
+- **Positions** are whole numbers, the center of the node, so moving a node changes two short lines.
+  When you write a graph by hand you can leave out `x` and `y`; the editor lays the graph out when it
+  opens, and saving stores the positions.
+- Nodes and edges keep keys the schema does not declare, such as a color added by hand.
+
+The editor has a **Canvas** view: double-click (or **Add node**) to add a node, drag nodes (snapped
+to the grid), drag from a node's dot to another node to connect them, click a node or edge to edit it
+in the panel below, and press Delete or Backspace to remove it. Drag the background to pan; zoom with
+the buttons, `+` and `-`, or Ctrl/⌘ and the wheel. **Fit to view** shows the whole graph and **Auto
+layout** arranges it in layers. With the keyboard, Tab moves through the nodes, arrow keys move the
+focused node (Shift for bigger steps), and Enter edits its label. The **List** view does everything
+with ordinary inputs: labels, edges chosen with selects, adding and removing. The panel renders the
+declared `nodeFields` and `edgeFields` with the regular field inputs.
+
+| Option | Default | |
+| --- | --- | --- |
+| `directed` | `true` | Arrowheads, and `a → b` differs from `b → a`. |
+| `nodeKinds` | none | Adds a required `kind` select. A list of names, or names mapped to `{ label?, shape? }`, shape `'rounded'`, `'rect'`, `'diamond'` or `'ellipse'`. |
+| `nodeFields`, `edgeFields` | none | Extra zod fields for nodes and edges. Every edge has an optional `label`. |
+| `minNodes`, `maxNodes` | none | |
+| `allowSelfLoops`, `allowMultiEdges` | `false` | Allow edges from a node to itself, and repeated edges between two nodes. |
+| `grid` | `20` | Snap grid in pixels; `0` turns snapping off. |
+| `direction` | `'TB'` | Auto layout from top to bottom, or `'LR'` left to right. |
+| `height` | `420` | Canvas height in pixels. |
+
+For your site, `toMermaid(value, { nodeKinds })` turns a graph into a Mermaid flowchart, which many
+docs sites render, and `autoLayout`, `graphBounds`, `graphIssues` and `uniqueId` work without React.
+
+```ts
+toMermaid(entry.flow, { nodeKinds })
+// flowchart TB
+//   email_arrived{"Did the reset email arrive?"}
+//   use_reset_link("Use the link in the email")
+//   email_arrived -->|"Yes"| use_reset_link
+```
+
 ## Preview
 
 The editor shows two tabs next to the form:
