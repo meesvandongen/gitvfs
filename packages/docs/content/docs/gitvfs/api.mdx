@@ -31,8 +31,35 @@ description: Every method of GitVFS and the errors it throws.
 
 ## Branches
 
+- Reads come from `writeBranch` once it exists, and from `branch` until then.
+- `branches()` returns `{ base, write, read }`.
 - `createBranch(name)` branches from the current read branch.
-- `checkout(branch)` switches both the read and write branch.
+- `checkout(branch)` makes `branch` the base, read and write branch; `checkout(branch, { base })`
+  makes it the write branch on top of `base` instead.
+- `updateFromBase(message?)` merges `branch` into `writeBranch` on the host and returns the merge
+  commit (`{ sha, date }`), or `null` when there was nothing to merge. Needs a repository with
+  `mergeBranch` (GitHub).
+- `repository` is the `GitRepository` underneath, for what `GitVFS` does not wrap.
+
+## Pull requests
+
+The GitHub and GitLab repositories also list and compare branches, and handle pull requests (merge
+requests on GitLab). These methods are optional on `GitRepository`, so check them before use:
+
+```ts
+const repository = fs.repository
+await repository.listBranches?.() // [{ name, sha }]
+await repository.compareBranches?.('main', 'cms/spring') // { ahead, behind, files: [{ path, status }] }
+const pull = await repository.createPullRequest?.({ head: 'cms/spring', base: 'main', title: 'Spring' })
+await repository.listPullRequests?.({ head: 'cms/spring', state: 'all' })
+await repository.getPullRequest?.(12) // includes `mergeable`
+await repository.mergePullRequest?.(12, { method: 'squash' }) // ConflictError when it cannot merge
+await repository.closePullRequest?.(12)
+```
+
+A pull request is `{ number, title, body, state: 'open' | 'closed' | 'merged', draft, head, base,
+url, author, createdAt, updatedAt, mergeable }`. [gitvfs-cms changes](/docs/cms/changes) are built
+on these methods.
 
 ## Errors
 
@@ -43,5 +70,5 @@ All errors extend `GitVFSError` and carry a `code`:
 | `NotFoundError` | `NOT_FOUND` | The file, directory or branch does not exist. |
 | `AuthError` | `AUTH` | The token is missing, invalid or lacks access (401/403). |
 | `RateLimitError` | `RATE_LIMIT` | The API rate limit was hit; see `retryAfter`. |
-| `ConflictError` | `CONFLICT` | The branch moved since it was read. |
+| `ConflictError` | `CONFLICT` | The branch moved since it was read, or a merge conflicts. |
 | `NetworkError` | `NETWORK` | The request did not reach the API. |

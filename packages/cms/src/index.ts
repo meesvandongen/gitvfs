@@ -1,6 +1,11 @@
 export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
+  ChangeComparison,
+  ChangeSummary,
+  ChangesOptions,
   CmsOptions,
+  CmsState,
+  ContentChange,
   LoadedDocument,
   SaveEntryOptions,
   SaveResult,
@@ -60,6 +65,8 @@ export type {
   MapTiles,
 } from './geo.js'
 export { isValidSlug, slugify } from './slug.js'
+export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
+export type { DiffLine } from './changes.js'
 export { wallClockAt, wallClockToDate } from './calendar.js'
 export { dateRange, describeRangeLength, formatDateRange, isDateRange, rangeLength } from './date-range.js'
 export type { DateRange, DateRangeCustomData, DateRangeFieldConfig, DateRangeOptions } from './date-range.js'
