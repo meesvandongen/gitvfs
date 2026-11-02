@@ -12,6 +12,7 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
+| Pricing, Navigation | YAML | a table of plans (spreadsheet-like grid with paste and CSV copy, a read-only list column) and a nested menu edited as an outline (`tree()`); event tickets use the table too |
 
 The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.
 

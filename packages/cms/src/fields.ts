@@ -14,6 +14,8 @@ export type CmsFieldType =
   | 'geocircle'
   | 'geoline'
   | 'geopolygon'
+  | 'table'
+  | 'tree'
 
 export type CmsFieldConfig = FieldConfig<null, CmsFieldType | (string & {})>
 
