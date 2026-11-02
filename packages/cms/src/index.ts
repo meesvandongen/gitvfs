@@ -2,7 +2,9 @@ export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
   CmsOptions,
   LoadedDocument,
+  PendingAsset,
   SaveEntryOptions,
+  SaveSingletonOptions,
   SaveResult,
   ValidationIssue,
 } from './cms.js'
@@ -27,7 +29,7 @@ export {
 } from './document.js'
 export type { ParsedDocument } from './document.js'
 export { field, markdown, textarea } from './fields.js'
-export type { CmsFieldConfig, CmsFieldType, FieldConfigCheck } from './fields.js'
+export type { CmsFieldConfig, CmsFieldType, FieldConfigCheck, MarkdownFieldConfig } from './fields.js'
 export {
   OSM_TILES,
   destination,
@@ -60,3 +62,44 @@ export type {
   MapTiles,
 } from './geo.js'
 export { isValidSlug, slugify } from './slug.js'
+export {
+  DEFAULT_MAX_SIZE,
+  assetFileName,
+  defaultPublicPath,
+  embed,
+  file,
+  fileName,
+  focusToObjectPosition,
+  formatBytes,
+  gallery,
+  image,
+  imagePath,
+  isImagePath,
+  isSafeAssetPath,
+  matchesAccept,
+  mediaConfig,
+  mediaFolders,
+  mimeType,
+  parseEmbedUrl,
+  roundFocus,
+  toDataUrl,
+  toPublicPath,
+  toRepoPath,
+  uniqueAssetPath,
+  uploadError,
+} from './media.js'
+export type {
+  EmbedCustomData,
+  EmbedFieldConfig,
+  EmbedInfo,
+  EmbedProvider,
+  FocusPoint,
+  GalleryOptions,
+  ImageOptions,
+  ImageValue,
+  MediaConfig,
+  MediaCustomData,
+  MediaFieldConfig,
+  MediaFolder,
+  UploadOptions,
+} from './media.js'

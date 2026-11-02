@@ -2,6 +2,7 @@ import { useMemo, useState, type ReactNode } from 'react'
 import { Marked } from 'marked'
 import type { ContentType } from '../config.js'
 import { serializeDocument } from '../document.js'
+import { rewriteImageSources, useMediaStore, useMediaVersion } from './media-store.js'
 
 const marked = new Marked({ gfm: true })
 
@@ -18,7 +19,8 @@ function escapeHtml(value: string): string {
 }
 
 // The frame is sandboxed without allow-scripts, so content from the repository can never run
-// code next to the access token. The CSP is a second line of defence.
+// code next to the access token. The CSP is a second line of defence. Images from the media folders
+// arrive as data: URLs (see MarkdownPreview), so img-src needs nothing more for them.
 const PREVIEW_CSP =
   "default-src 'none'; img-src * data: blob:; media-src * data: blob:; style-src * 'unsafe-inline'; font-src * data:"
 
@@ -95,16 +97,26 @@ export interface PreviewProps {
   values: Record<string, unknown>
 }
 
-/** Default rendered preview: the title as a heading followed by the markdown body. */
+/**
+ * Default rendered preview: the title as a heading followed by the markdown body. Images in the
+ * media folders show even before they are committed, or when the repository is private: they are
+ * read through the CMS and inlined as data: URLs. (The frame's opaque origin cannot load the
+ * editor's blob: URLs.)
+ */
 export function MarkdownPreview({ contentType, values }: PreviewProps) {
   const title = values.title
   const body = values[contentType.bodyField]
-  const html = useMemo(
-    () =>
-      (typeof title === 'string' && title ? `<h1>${escapeHtml(title)}</h1>` : '')
-      + renderMarkdown(typeof body === 'string' ? body : ''),
-    [title, body],
-  )
+  const media = useMediaStore()
+  const mediaVersion = useMediaVersion(media)
+  const html = useMemo(() => {
+    const rendered = (typeof title === 'string' && title ? `<h1>${escapeHtml(title)}</h1>` : '')
+      + renderMarkdown(typeof body === 'string' ? body : '')
+    if (!media) return rendered
+    return rewriteImageSources(rendered, (src) => {
+      const path = media.resolve(src)
+      return path === undefined ? undefined : media.previewUrl(path)
+    })
+  }, [title, body, media, mediaVersion])
   return (
     <PreviewFrame html={html} stylesheets={contentType.previewStylesheets} baseUrl={contentType.previewBaseUrl} />
   )

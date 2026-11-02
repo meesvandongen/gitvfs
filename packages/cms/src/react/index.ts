@@ -35,3 +35,16 @@ export type {
 } from './preview.js'
 export { useAsync } from './use-async.js'
 export type { AsyncState } from './use-async.js'
+export { NestedErrors, useNestedErrors } from './field-utils.js'
+export { FileField, FocalPointPicker, GalleryField, ImageField, MarkdownMediaPanel } from './media.js'
+export {
+  MediaProvider,
+  MediaStore,
+  rewriteImageSources,
+  useAssetSize,
+  useAssetUrl,
+  useMediaStore,
+  useMediaUrl,
+} from './media-store.js'
+export type { AddedAsset } from './media-store.js'
+export { EmbedField } from './embed.js'

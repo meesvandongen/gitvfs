@@ -64,6 +64,7 @@ export const Admin = () => <CmsApp cms={cms} title="Acme" />
 - **Faithful saves:** keys the schema does not know are kept, and existing keys keep their order, so diffs stay small.
 - **Validation** against the schema before anything is committed. Stored files that do not match still open, with the issues listed.
 - **Editor** with text, number, checkbox, date, select, list, group, textarea and markdown fields (the markdown field has a toolbar), and map fields for a point, a point with a radius, a line and a polygon.
+- **Media:** image, gallery and file uploads committed into the repository in the same commit as the entry (collision-safe names, alt text, focal point), an image button in the markdown toolbar, and video embeds with a click-to-load, privacy-friendly player.
 - **Preview** in an iframe sandboxed without scripts, so repository content cannot reach the user's token. A **Source** tab shows the exact file that will be committed.
 - **OIDC sign-in** via [oidc-spa](https://www.oidc-spa.dev/), with a GitLab preset whose OAuth tokens work directly against the GitLab API.
 

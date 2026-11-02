@@ -6,10 +6,10 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 
 | Content | Format | Features |
 | --- | --- | --- |
-| Blog posts | markdown | every built-in field type (text, textarea, date, select, number, checkboxes, a list, a nested object, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
+| Blog posts | markdown | a cover image with alt text and focal point, and the markdown toolbar's image button (uploads are committed with the post); every built-in field type (text, textarea, date, select, number, checkboxes, a list, a nested object, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
 | Documentation | MDX | the site's own stylesheet in the preview (`previewStylesheets`) |
-| Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
-| Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
+| Authors | JSON | an avatar stored as a plain path (`imagePath`), a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
+| Events | YAML | a photo gallery, a PDF agenda (`file`), a YouTube recording (`embed`), an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 

@@ -29,7 +29,7 @@ export class MemoryRepository implements GitRepository {
   readonly branches = new Map<string, Branch>()
   readonly commits: CommitOptions[] = []
 
-  constructor(files: Record<string, string> = {}, branch = 'main') {
+  constructor(files: Record<string, string | Uint8Array> = {}, branch = 'main') {
     this.branches.set(branch, {
       sha: fakeSha(),
       files: new Map(

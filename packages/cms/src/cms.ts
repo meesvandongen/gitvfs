@@ -7,6 +7,7 @@ import type {
   Singleton,
 } from './config.js'
 import { parseDocument, serializeDocument } from './document.js'
+import { isSafeAssetPath, uniqueAssetPath } from './media.js'
 import { isValidSlug } from './slug.js'
 
 export interface CmsOptions {
@@ -38,12 +39,24 @@ export interface LoadedDocument {
   issues: ValidationIssue[]
 }
 
-export interface SaveEntryOptions {
+/** A file to commit along with a document, such as an uploaded image. */
+export interface PendingAsset {
+  /** Repository path, e.g. `public/images/team.jpg`. Saving fails when a file already exists there. */
+  path: string
+  content: Uint8Array
+}
+
+export interface SaveSingletonOptions {
+  message?: string
+  /** Files committed in the same commit as the document, such as uploads its fields refer to. */
+  assets?: PendingAsset[]
+}
+
+export interface SaveEntryOptions extends SaveSingletonOptions {
   slug: string
   data: Record<string, unknown>
   /** Slug the entry had before; renames the file when it differs. Omit for new entries. */
   previousSlug?: string
-  message?: string
 }
 
 export interface SaveResult {
@@ -180,12 +193,16 @@ export class GitCms {
 
       const original = previousPath === undefined ? undefined : await this.readText(previousPath)
       const action = previousPath === undefined ? 'create' : renamed ? 'rename' : 'update'
-
-      if (renamed) this.fs.rm(previousPath)
-      this.fs.writeFile(path, this.serialize(collection, data, original))
+      const source = this.serialize(collection, data, original)
+      const assets = await this.checkAssets(options.assets, [path, previousPath])
 
       const commit = await this.commit(
         options.message ?? this.commitMessage(collection, { action, name, path, previousPath }),
+        () => {
+          this.stageAssets(assets)
+          if (renamed) this.fs.rm(previousPath)
+          this.fs.writeFile(path, source)
+        },
       )
       return { path, commit }
     })
@@ -196,9 +213,9 @@ export class GitCms {
     const path = this.entryPath(collection, slug)
 
     return this.exclusive(async () => {
-      this.fs.rm(path)
       const commit = await this.commit(
         options.message ?? this.commitMessage(collection, { action: 'delete', name, path }),
+        () => this.fs.rm(path),
       )
       return { path, commit }
     })
@@ -222,7 +239,7 @@ export class GitCms {
   async saveSingleton(
     name: string,
     values: Record<string, unknown>,
-    options: { message?: string } = {},
+    options: SaveSingletonOptions = {},
   ): Promise<SaveResult> {
     const singleton = this.getSingleton(name)
     const path = singleton.path
@@ -231,14 +248,53 @@ export class GitCms {
       const data = this.validate(singleton, values)
       const exists = await this.fs.exists(path)
       const original = exists ? await this.readText(path) : undefined
+      const source = this.serialize(singleton, data, original)
+      const assets = await this.checkAssets(options.assets, [path])
 
-      this.fs.writeFile(path, this.serialize(singleton, data, original))
       const commit = await this.commit(
         options.message
           ?? this.commitMessage(singleton, { action: exists ? 'update' : 'create', name, path }),
+        () => {
+          this.stageAssets(assets)
+          this.fs.writeFile(path, source)
+        },
       )
       return { path, commit }
     })
+  }
+
+  /** Read a file of the repository as bytes, such as an image a field refers to. */
+  async readAsset(path: string): Promise<Uint8Array> {
+    const content = await this.fs.readFile(path)
+    return typeof content === 'string' ? new TextEncoder().encode(content) : content
+  }
+
+  /**
+   * A free path for an upload named `name` in `folder`: the name made safe (`Team Photo.JPG` →
+   * `team-photo.jpg`), with `-2`, `-3`, ... added while the repository or `reserved` (other pending
+   * uploads) already has it.
+   */
+  async availableAssetPath(folder: string, name: string, reserved: Iterable<string> = []): Promise<string> {
+    const taken = new Set(reserved)
+    return uniqueAssetPath(folder, name, async (path) => taken.has(path) || (await this.fs.exists(path)))
+  }
+
+  /** Validate uploads before anything is staged; uploads never overwrite files. */
+  private async checkAssets(assets: PendingAsset[] = [], documentPaths: Array<string | undefined>): Promise<PendingAsset[]> {
+    const seen = new Set(documentPaths.filter((path) => path !== undefined))
+    for (const asset of assets) {
+      if (!isSafeAssetPath(asset.path)) throw new Error(`Invalid file path: "${asset.path}"`)
+      if (seen.has(asset.path)) throw new Error(`Two files would be written to ${asset.path}`)
+      seen.add(asset.path)
+      if (await this.fs.exists(asset.path)) {
+        throw new Error(`A file already exists at ${asset.path}; remove the upload and add it again`)
+      }
+    }
+    return assets
+  }
+
+  private stageAssets(assets: PendingAsset[]): void {
+    for (const asset of assets) this.fs.writeFile(asset.path, asset.content)
   }
 
   private async readText(path: string): Promise<string> {
@@ -302,11 +358,13 @@ export class GitCms {
     return (contentType.commitMessage ?? defaultCommitMessage)(context)
   }
 
-  private async commit(message: string): Promise<CommitResult> {
+  /** Stage changes and commit them as one commit. */
+  private async commit(message: string, stage: () => void): Promise<CommitResult> {
     try {
+      stage()
       return await this.fs.commit(message)
     } catch (error) {
-      // Leave nothing staged, so a failed save does not leak into the next commit.
+      // Leave nothing staged, uploads included, so a failed save does not leak into the next commit.
       this.fs.discard()
       throw error
     }

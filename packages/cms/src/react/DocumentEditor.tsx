@@ -1,9 +1,11 @@
-import { useDeferredValue, useId, useState, type ReactNode } from 'react'
+import { useDeferredValue, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import type { LoadedDocument } from '../cms.js'
 import type { ContentType } from '../config.js'
+import { mediaFolders } from '../media.js'
 import { isValidSlug, slugify } from '../slug.js'
 import { ContentForm, type ContentFormProps } from './autoform.js'
 import { useCms } from './context.js'
+import { MediaProvider, MediaStore } from './media-store.js'
 import { DocumentPreview, type PreviewProps } from './preview.js'
 import { errorMessage, useAsync } from './use-async.js'
 
@@ -83,6 +85,9 @@ function LoadedEditor(props: DocumentEditorProps & { slug: string | null; docume
   const [slugTouched, setSlugTouched] = useState(props.slug !== null)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
   const previewValues = useDeferredValue(values)
+  // Uploads wait here until a save commits them along with the document.
+  const media = useMemo(() => new MediaStore(cms, mediaFolders(contentType.schema)), [cms, contentType])
+  useEffect(() => () => media.dispose(), [media])
 
   const snapshot = JSON.stringify(values)
   const dirty = baseline !== null && baseline !== snapshot
@@ -108,13 +113,16 @@ function LoadedEditor(props: DocumentEditorProps & { slug: string | null; docume
     }
     setStatus({ kind: 'busy', message: 'Committing…' })
     try {
+      const assets = await media.assets(data)
       const result = contentType.kind === 'collection'
         ? await cms.saveEntry(contentType.name, {
           slug: derivedSlug,
           data,
           previousSlug: props.slug ?? undefined,
+          assets,
         })
-        : await cms.saveSingleton(contentType.name, data)
+        : await cms.saveSingleton(contentType.name, data, { assets })
+      media.committed(assets.map((asset) => asset.path))
       setBaseline(snapshot)
       setSlugInput(derivedSlug)
       setSlugTouched(true)
@@ -176,42 +184,44 @@ function LoadedEditor(props: DocumentEditorProps & { slug: string | null; docume
         </div>
       )}
 
-      <div className="gcms-panes">
-        <div className="gcms-pane gcms-pane--form">
-          {isEntry && (
-            <div className="gcms-field">
-              <label className="gcms-label" htmlFor={`${formId}-slug`}>
-                Slug
-              </label>
-              <input
-                id={`${formId}-slug`}
-                className="gcms-input"
-                value={derivedSlug}
-                aria-invalid={slugError ? true : undefined}
-                onChange={(event) => {
-                  setSlugTouched(true)
-                  setSlugInput(event.target.value)
-                }}
-              />
-              <p className={slugError ? 'gcms-error' : 'gcms-description'}>
-                {slugError ?? 'File name of the entry.'}
-              </p>
-            </div>
-          )}
-          <ContentForm
-            contentType={contentType}
-            defaultValues={document.data}
-            onSubmit={save}
-            onValuesChange={handleValues}
-            formId={formId}
-            uiComponents={props.uiComponents}
-            formComponents={props.formComponents}
-          />
+      <MediaProvider store={media}>
+        <div className="gcms-panes">
+          <div className="gcms-pane gcms-pane--form">
+            {isEntry && (
+              <div className="gcms-field">
+                <label className="gcms-label" htmlFor={`${formId}-slug`}>
+                  Slug
+                </label>
+                <input
+                  id={`${formId}-slug`}
+                  className="gcms-input"
+                  value={derivedSlug}
+                  aria-invalid={slugError ? true : undefined}
+                  onChange={(event) => {
+                    setSlugTouched(true)
+                    setSlugInput(event.target.value)
+                  }}
+                />
+                <p className={slugError ? 'gcms-error' : 'gcms-description'}>
+                  {slugError ?? 'File name of the entry.'}
+                </p>
+              </div>
+            )}
+            <ContentForm
+              contentType={contentType}
+              defaultValues={document.data}
+              onSubmit={save}
+              onValuesChange={handleValues}
+              formId={formId}
+              uiComponents={props.uiComponents}
+              formComponents={props.formComponents}
+            />
+          </div>
+          <div className="gcms-pane gcms-pane--preview">
+            <DocumentPreview contentType={contentType} values={previewValues} render={props.renderPreview} />
+          </div>
         </div>
-        <div className="gcms-pane gcms-pane--preview">
-          <DocumentPreview contentType={contentType} values={previewValues} render={props.renderPreview} />
-        </div>
-      </div>
+      </MediaProvider>
     </div>
   )
 }
