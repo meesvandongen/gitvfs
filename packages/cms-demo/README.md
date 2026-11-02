@@ -14,6 +14,8 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Code snippets | YAML | code fields: a snippet with a language picker, JSON with live syntax checks, CSS, and a Mermaid diagram with a live preview; code fields use CodeMirror (`gitvfs-cms/codemirror`), the diagram the built-in editor and `gitvfs-cms/mermaid`, which also draws the diagram in the welcome post's preview |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
 
+Editing happens in **changes** (`changes: true`): **New change** in the sidebar starts a branch, saves become commits there, and **Review & publish** lists what changed, opens a pull request and merges it. Inside a change, fields that differ from `main` are marked (with **Revert**), and the preview's **Changes** tab shows both versions rendered (**Before & after**) or as a source diff. The mock serves the branch, compare and pull request endpoints this needs.
+
 The mock serves two repositories, `acme/site` and `acme/labs`. **Switch repository** in the sidebar opens `RepositoryPicker`, which lists them through `github({ token }).listRepositories()`; the choice is remembered across reloads, and **Reset demo** restores both.
 
 The content model is in `src/content.ts` and the seed files are at its end. Change the storage key in `src/main.tsx` when the seed changes, so returning visitors start over.

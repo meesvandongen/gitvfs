@@ -59,8 +59,6 @@ export function App({ repositories, subscribe, reset }: AppProps) {
   const [picking, setPicking] = useState(false)
   const { repository } = repositories.find((entry) => entry.fullName === current) ?? repositories[0]
 
-  // Re-render when a mock repository changes (every commit), to update the history.
-  const head = useSyncExternalStore(subscribe, () => repository.branchHead('main'))
   const [generation, setGeneration] = useState(0)
 
   // A fresh CMS per repository, and after a reset, so no cached file survives it.
@@ -70,10 +68,15 @@ export function App({ repositories, subscribe, reset }: AppProps) {
         fs: new GitVFS({ repository: provider.repository(current), branch: 'main' }),
         collections,
         singletons,
+        // Edit in changes: branches that are reviewed in a pull request and merged to publish.
+        changes: true,
       }),
     [provider, current, generation],
   )
-  const history = useMemo(() => repository.log('main', 6), [repository, head])
+  // The branch being edited, and its head, which moves on every commit.
+  const { branch } = useSyncExternalStore(cms.subscribe, cms.getState)
+  const head = useSyncExternalStore(subscribe, () => repository.branchHead(branch))
+  const history = useMemo(() => repository.log(branch, 6), [repository, branch, head])
 
   const resetDemo = async () => {
     if (!window.confirm('Throw away all your changes and start over?')) return
@@ -125,7 +128,7 @@ export function App({ repositories, subscribe, reset }: AppProps) {
                     Switch repository
                   </button>
                 </div>
-                <p className="gcms-nav-heading">History</p>
+                <p className="gcms-nav-heading">History of {branch}</p>
                 <ol>
                   {history.map((commit) => (
                     <li key={commit.sha} title={commit.sha}>

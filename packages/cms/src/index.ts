@@ -1,6 +1,11 @@
 export { GitCms, createCms, ContentValidationError } from './cms.js'
 export type {
+  ChangeComparison,
+  ChangeSummary,
+  ChangesOptions,
   CmsOptions,
+  CmsState,
+  ContentChange,
   LoadedDocument,
   SaveEntryOptions,
   SaveResult,
@@ -77,3 +82,5 @@ export {
 export type { CodeBlock, CodeCustomData, CodeError, CodeFieldConfig, CodeOptions, MermaidOptions, TextEdit } from './code.js'
 export { CODE_LANGUAGES, normalizeLanguage, tokenize } from './highlight.js'
 export type { CodeLanguage, Token, TokenType } from './highlight.js'
+export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
+export type { DiffLine } from './changes.js'

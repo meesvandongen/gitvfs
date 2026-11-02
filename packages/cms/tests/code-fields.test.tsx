@@ -3,7 +3,7 @@ import { createRoot, type Root } from 'react-dom/client'
 import { GitVFS } from 'gitvfs'
 import { z } from 'zod'
 import { code, codeBlock, createCms, defineCollection, markdown, mermaid } from '../src'
-import { CmsApp, createMermaidField, isDarkColor, type CmsAppProps, type MermaidRenderer } from '../src/react'
+import { CmsApp, DocumentPreview, createMermaidField, isDarkColor, type CmsAppProps, type MermaidRenderer } from '../src/react'
 import { CodeMirrorField } from '../src/codemirror'
 import { sizeSvg } from '../src/mermaid'
 import { MemoryRepository } from './helpers/memory-repository'
@@ -249,6 +249,28 @@ describe('mermaid fields', () => {
     expect(html).toContain('src="data:image/svg+xml;charset=utf-8,%3Csvg')
     expect(html).not.toContain('<script')
     expect(html).toContain('<code class="language-js">')
+  })
+
+  it('renders ```mermaid blocks on both sides of the change comparison', async () => {
+    const render = vi.fn<MermaidRenderer>(async (source) => `<svg xmlns="http://www.w3.org/2000/svg"><text>${source.slice(-1)}</text></svg>`)
+    const body = (edge: string) => `\`\`\`mermaid\ngraph TD\n  ${edge}\n\`\`\`\n`
+    act(() =>
+      root.render(
+        <DocumentPreview
+          contentType={posts}
+          values={{ title: 'Hello', body: body('A --> C') }}
+          compare={{ label: 'main', values: { title: 'Hello', body: body('A --> B') } }}
+          renderMermaid={render}
+        />,
+      ),
+    )
+    await click('Changes')
+    const frames = await waitFor(() => {
+      const found = [...container.querySelectorAll('.gcms-compare-side iframe')]
+      return found.length === 2 && found.every((frame) => frame.getAttribute('srcdoc')?.includes('<img class="mermaid"')) ? found : undefined
+    }, 3000)
+    expect(frames[0].getAttribute('srcdoc')).not.toBe(frames[1].getAttribute('srcdoc'))
+    expect(render.mock.calls.map(([source]) => source).sort()).toEqual(['graph TD\n  A --> B', 'graph TD\n  A --> C'])
   })
 
   it('leaves ```mermaid blocks as code without a renderer', async () => {

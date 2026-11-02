@@ -1,5 +1,5 @@
 import { http, HttpResponse, type HttpHandler } from 'msw/http'
-import { fromBase64, StaleHeadError, toBase64, toText, type MockRepository } from './repository.js'
+import { fromBase64, MergeConflictError, StaleHeadError, toBase64, toText, type MockRepository, type PullRecord } from './repository.js'
 
 export interface RepositoryDetails {
   description?: string
@@ -34,6 +34,38 @@ function notFound() {
 
 function unauthorized() {
   return HttpResponse.json({ message: 'Requires authentication' }, { status: 401 })
+}
+
+function unprocessable(message: string) {
+  return HttpResponse.json({ message: 'Validation Failed', errors: [{ message }] }, { status: 422 })
+}
+
+function describePull(entry: MockedRepository, pull: PullRecord, withMergeable: boolean) {
+  const { owner, repo, repository } = entry
+  return {
+    number: pull.number,
+    title: pull.title,
+    body: pull.body,
+    state: pull.state,
+    draft: pull.draft,
+    merged: Boolean(pull.mergedAt),
+    merged_at: pull.mergedAt ?? null,
+    merge_commit_sha: pull.mergeCommit ?? null,
+    head: { ref: pull.head, sha: repository.branchHead(pull.head) ?? null, label: `${owner}:${pull.head}` },
+    base: { ref: pull.base, sha: repository.branchHead(pull.base) ?? null, label: `${owner}:${pull.base}` },
+    html_url: `https://github.com/${owner}/${repo}/pull/${pull.number}`,
+    user: { login: pull.author },
+    created_at: pull.createdAt,
+    updated_at: pull.updatedAt,
+    // Like GitHub, only single pull requests say whether they merge cleanly.
+    ...(withMergeable
+      ? {
+        mergeable: pull.state === 'open' && repository.branchHead(pull.head) && repository.branchHead(pull.base)
+          ? repository.canMerge(pull.base, pull.head)
+          : null,
+      }
+      : {}),
+  }
 }
 
 function graphqlErrors(message: string, type?: string) {
@@ -77,7 +109,8 @@ function describeRepository(entry: MockedRepository, login: string) {
 
 /**
  * MSW request handlers for the parts of the GitHub API that gitvfs uses: the account's repository
- * list, refs, commits, trees, blobs, contents, the GraphQL file query and `createCommitOnBranch`.
+ * list, refs, branches, compare, pull requests, merges, commits, trees, blobs, contents, the GraphQL
+ * file query and `createCommitOnBranch`.
  * Requests for other repositories fall through to the network.
  */
 export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler[] {
@@ -102,7 +135,7 @@ export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler
       return HttpResponse.json(repos)
     }),
 
-    ...entries.flatMap((entry) => repositoryHandlers(entry, api, async () => options.onChange?.(entry.repository))),
+    ...entries.flatMap((entry) => repositoryHandlers(entry, api, login, async () => options.onChange?.(entry.repository))),
 
     http.post(`${api}/graphql`, async ({ request }) => {
       if (!isAuthenticated(request)) return unauthorized()
@@ -145,7 +178,12 @@ export function createGitHubHandlers(options: GitHubHandlerOptions): HttpHandler
 }
 
 /** The REST endpoints under `/repos/:owner/:repo` for one repository. */
-function repositoryHandlers(entry: MockedRepository, api: string, changed: () => Promise<void>): HttpHandler[] {
+function repositoryHandlers(
+  entry: MockedRepository,
+  api: string,
+  login: string,
+  changed: () => Promise<void>,
+): HttpHandler[] {
   const { repository, owner, repo } = entry
   const base = `${api}/repos/${owner}/${repo}`
 
@@ -179,6 +217,126 @@ function repositoryHandlers(entry: MockedRepository, api: string, changed: () =>
       return new HttpResponse(null, { status: 204 })
     }),
 
+    http.post(`${base}/merges`, async ({ request }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const body = (await request.json()) as { base?: string; head?: string; commit_message?: string }
+      if (!body.base || !body.head) return HttpResponse.json({ message: 'Invalid request' }, { status: 422 })
+      if (!repository.branchHead(body.base) || !repository.resolve(body.head)) return notFound()
+      let commit: { oid: string; date: string } | null
+      try {
+        commit = await repository.merge({ base: body.base, head: body.head, message: body.commit_message })
+      } catch (error) {
+        if (error instanceof MergeConflictError) return HttpResponse.json({ message: 'Merge conflict' }, { status: 409 })
+        throw error
+      }
+      if (!commit) return new HttpResponse(null, { status: 204 })
+      await changed()
+      const record = repository.getCommit(commit.oid)!
+      return HttpResponse.json(
+        {
+          sha: commit.oid,
+          commit: { message: record.message, tree: { sha: record.tree }, committer: { date: commit.date } },
+          parents: [{ sha: record.parent }, { sha: record.mergeParent }],
+        },
+        { status: 201 },
+      )
+    }),
+
+    http.get(`${base}/branches`, ({ request }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      return HttpResponse.json(
+        repository.branchNames().sort().map((name) => ({ name, commit: { sha: repository.branchHead(name) }, protected: false })),
+      )
+    }),
+
+    // `compare/BASE...HEAD`, where either side may contain slashes.
+    http.get(`${base}/compare/*`, ({ request, params }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const spec = String(params[0] ?? '').split('/').map(decodeURIComponent).join('/')
+      const [baseRef, headRef] = spec.split('...')
+      const result = baseRef && headRef ? repository.compare(baseRef, headRef) : undefined
+      if (!result) return notFound()
+      const status = result.ahead && result.behind ? 'diverged' : result.ahead ? 'ahead' : result.behind ? 'behind' : 'identical'
+      return HttpResponse.json({
+        status,
+        ahead_by: result.ahead,
+        behind_by: result.behind,
+        total_commits: result.ahead,
+        files: result.files.map((file) => ({ filename: file.path, status: file.status })),
+      })
+    }),
+
+    http.get(`${base}/pulls`, ({ request }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const query = new URL(request.url).searchParams
+      const state = query.get('state') ?? 'open'
+      const head = query.get('head')
+      const baseBranch = query.get('base')
+      const pulls = repository.pulls().filter((pull) =>
+        (state === 'all' || pull.state === state)
+        && (!head || head === `${owner}:${pull.head}` || head === pull.head)
+        && (!baseBranch || pull.base === baseBranch))
+      // Newest first, like GitHub's default sort.
+      return HttpResponse.json(pulls.reverse().map((pull) => describePull(entry, pull, false)))
+    }),
+
+    http.post(`${base}/pulls`, async ({ request }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const body = (await request.json()) as { title?: string; head?: string; base?: string; body?: string; draft?: boolean }
+      if (!body.head || !body.base) return unprocessable('head and base are required')
+      try {
+        const pull = repository.createPull({
+          head: body.head.replace(new RegExp(`^${owner}:`), ''),
+          base: body.base,
+          title: body.title ?? '',
+          body: body.body,
+          draft: body.draft,
+          author: login,
+        })
+        await changed()
+        return HttpResponse.json(describePull(entry, pull, true), { status: 201 })
+      } catch (error) {
+        return unprocessable((error as Error).message)
+      }
+    }),
+
+    http.get(`${base}/pulls/:number`, ({ request, params }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const pull = repository.getPull(Number(params.number))
+      return pull ? HttpResponse.json(describePull(entry, pull, true)) : notFound()
+    }),
+
+    http.patch(`${base}/pulls/:number`, async ({ request, params }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      if (!repository.getPull(Number(params.number))) return notFound()
+      const body = (await request.json()) as { title?: string; body?: string; state?: 'open' | 'closed' }
+      try {
+        const pull = repository.updatePull(Number(params.number), body)
+        await changed()
+        return HttpResponse.json(describePull(entry, pull, true))
+      } catch (error) {
+        return unprocessable((error as Error).message)
+      }
+    }),
+
+    http.put(`${base}/pulls/:number/merge`, async ({ request, params }) => {
+      if (!isAuthenticated(request)) return unauthorized()
+      const pull = repository.getPull(Number(params.number))
+      if (!pull) return notFound()
+      if (pull.state !== 'open') return HttpResponse.json({ message: 'Pull Request is not mergeable' }, { status: 405 })
+      const body = (await request.json().catch(() => ({}))) as { commit_title?: string }
+      try {
+        const merged = await repository.mergePull(pull.number, body.commit_title)
+        await changed()
+        return HttpResponse.json({ sha: merged.mergeCommit, merged: true, message: 'Pull Request successfully merged' })
+      } catch (error) {
+        if (error instanceof MergeConflictError) {
+          return HttpResponse.json({ message: 'Pull Request is not mergeable' }, { status: 405 })
+        }
+        throw error
+      }
+    }),
+
     http.get(`${base}/git/commits/:sha`, ({ request, params }) => {
       if (!isAuthenticated(request)) return unauthorized()
       const commit = repository.getCommit(String(params.sha))
@@ -187,7 +345,7 @@ function repositoryHandlers(entry: MockedRepository, api: string, changed: () =>
         sha: params.sha,
         message: commit.message,
         tree: { sha: commit.tree },
-        parents: commit.parent ? [{ sha: commit.parent }] : [],
+        parents: [commit.parent, commit.mergeParent].filter(Boolean).map((sha) => ({ sha })),
         committer: { date: commit.date },
       })
     }),

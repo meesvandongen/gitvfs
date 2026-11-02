@@ -96,8 +96,10 @@ const gh = github({ token: async () => session.getAccessToken() })
 ## Custom hosts
 
 Anything that implements `GitRepository` works with `GitVFS`: `readdir`, `getFile`, `getFiles`,
-`getBlob`, `getBranch`, `getLastCommitSha`, `createBranch`, `deleteBranch` and `commit`. An
-in-memory implementation is a convenient test double. Implement `GitProvider` (`name`,
+`getBlob`, `getBranch`, `getLastCommitSha`, `createBranch`, `deleteBranch` and `commit`. The
+branch and pull request methods are optional: `mergeBranch` for `updateFromBase()`, and
+`listBranches`, `compareBranches` and the pull request methods for
+[gitvfs-cms changes](/docs/cms/changes). An in-memory implementation is a convenient test double. Implement `GitProvider` (`name`,
 `listRepositories` and `repository`) as well when your host can list repositories.
 
 ## Upgrading from 0.1

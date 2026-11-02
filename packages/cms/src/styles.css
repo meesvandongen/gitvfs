@@ -751,6 +751,361 @@
   }
 }
 
+/* Changes: editing on a branch, reviewing and publishing it. */
+
+.gcms-app {
+  --gcms-added: #1d7f4e;
+  --gcms-removed: #c7333a;
+  --gcms-changed: #b26b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  .gcms-app {
+    --gcms-added: #4cc38a;
+    --gcms-removed: #f06a70;
+    --gcms-changed: #f0b45a;
+  }
+}
+
+.gcms-visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.gcms-change-switcher {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+  padding: 0 0.5rem 0.25rem;
+}
+
+.gcms-change-switcher .gcms-nav-heading {
+  margin: 0.25rem 0 0;
+}
+
+.gcms-change-switcher > .gcms-button {
+  align-self: flex-start;
+}
+
+.gcms-change-new,
+.gcms-change-new-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 0.4rem;
+}
+
+.gcms-change-new-actions {
+  flex-direction: row;
+}
+
+.gcms-nav-item--review {
+  margin-top: 0.25rem;
+  color: var(--gcms-accent);
+  font-weight: 600;
+}
+
+.gcms-nav-count {
+  float: right;
+  min-width: 1.4rem;
+  padding: 0 0.4rem;
+  border-radius: 999px;
+  background: color-mix(in srgb, var(--gcms-changed) 18%, transparent);
+  color: var(--gcms-changed);
+  font: 600 0.72rem/1.4rem var(--gcms-font);
+  text-align: center;
+}
+
+.gcms-badge.gcms-badge--added,
+.gcms-badge.gcms-badge--modified,
+.gcms-badge.gcms-badge--renamed,
+.gcms-badge.gcms-badge--removed,
+.gcms-badge.gcms-badge--open {
+  border-color: transparent;
+  font-weight: 600;
+}
+
+.gcms-badge.gcms-badge--added {
+  background: color-mix(in srgb, var(--gcms-added) 16%, transparent);
+  color: var(--gcms-added);
+}
+
+.gcms-badge.gcms-badge--modified,
+.gcms-badge.gcms-badge--renamed {
+  background: color-mix(in srgb, var(--gcms-changed) 16%, transparent);
+  color: var(--gcms-changed);
+}
+
+.gcms-badge.gcms-badge--removed {
+  background: color-mix(in srgb, var(--gcms-removed) 16%, transparent);
+  color: var(--gcms-removed);
+}
+
+.gcms-badge.gcms-badge--open {
+  margin-left: 0;
+  background: color-mix(in srgb, var(--gcms-ok) 16%, transparent);
+  color: var(--gcms-ok);
+}
+
+/* A field whose value differs from the base branch. */
+.gcms-field-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+}
+
+.gcms-change {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.35rem;
+  color: var(--gcms-changed);
+  font-size: 0.75rem;
+  font-weight: 600;
+}
+
+.gcms-change-dot {
+  width: 0.5rem;
+  height: 0.5rem;
+  border-radius: 50%;
+  background: var(--gcms-changed);
+}
+
+.gcms-change-revert {
+  font-weight: 400;
+}
+
+.gcms-field:has(> .gcms-field-row > .gcms-change),
+.gcms-field:has(> .gcms-change) {
+  margin-left: -0.75rem;
+  padding-left: calc(0.75rem - 3px);
+  border-left: 3px solid var(--gcms-changed);
+}
+
+/* Before and after. */
+.gcms-compare {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.gcms-compare-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.75rem;
+  padding: 0.6rem 1.25rem;
+  border-bottom: 1px solid var(--gcms-border);
+}
+
+.gcms-segmented {
+  display: inline-flex;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  overflow: hidden;
+}
+
+.gcms-segmented button {
+  padding: 0.25rem 0.7rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  font-size: 0.8rem;
+  cursor: pointer;
+}
+
+.gcms-segmented button + button {
+  border-left: 1px solid var(--gcms-border);
+}
+
+.gcms-segmented button[aria-pressed='true'] {
+  background: color-mix(in srgb, var(--gcms-accent) 16%, transparent);
+  font-weight: 600;
+}
+
+.gcms-compare-sides {
+  display: grid;
+  flex: 1;
+  grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+}
+
+.gcms-compare-side {
+  display: flex;
+  flex-direction: column;
+  min-width: 0;
+  min-height: 24rem;
+}
+
+.gcms-compare-side + .gcms-compare-side {
+  border-left: 1px solid var(--gcms-border);
+}
+
+.gcms-compare-label {
+  margin: 0;
+  padding: 0.4rem 1.25rem;
+  border-bottom: 1px solid var(--gcms-border);
+  color: var(--gcms-muted);
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+}
+
+.gcms-compare-body {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-height: 0;
+}
+
+.gcms-compare-body > .gcms-preview-frame {
+  flex: 1;
+}
+
+.gcms-diff {
+  padding: 0.5rem 0;
+}
+
+.gcms-diff-line {
+  display: block;
+  padding: 0 1.25rem 0 0.5rem;
+}
+
+.gcms-diff-mark {
+  display: inline-block;
+  width: 1.25rem;
+  color: var(--gcms-muted);
+  user-select: none;
+}
+
+.gcms-diff-line--added {
+  background: color-mix(in srgb, var(--gcms-added) 14%, transparent);
+}
+
+.gcms-diff-line--removed {
+  background: color-mix(in srgb, var(--gcms-removed) 14%, transparent);
+  text-decoration: line-through;
+  text-decoration-color: color-mix(in srgb, var(--gcms-removed) 50%, transparent);
+}
+
+/* Review and publish. */
+.gcms-review {
+  display: flex;
+  flex-direction: column;
+  min-height: 100%;
+}
+
+.gcms-review code {
+  font: 0.8rem var(--gcms-mono);
+}
+
+.gcms-review-behind {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.5rem;
+  border-color: color-mix(in srgb, var(--gcms-changed) 40%, transparent);
+  background: color-mix(in srgb, var(--gcms-changed) 8%, transparent);
+}
+
+.gcms-review-section {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  max-width: 52rem;
+  padding: 1rem 1.25rem 0;
+}
+
+.gcms-review-heading {
+  margin: 0.5rem 0 0;
+  font-size: 0.9rem;
+}
+
+.gcms-card {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  padding: 0.9rem 1rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: var(--gcms-radius);
+  background: var(--gcms-surface);
+}
+
+.gcms-card p {
+  margin: 0;
+}
+
+.gcms-card .gcms-actions {
+  justify-content: flex-end;
+}
+
+.gcms-card-header {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gcms-card-title {
+  color: inherit;
+  font-weight: 600;
+}
+
+a.gcms-button {
+  display: inline-flex;
+  align-items: center;
+  text-decoration: none;
+}
+
+.gcms-review-list {
+  display: flex;
+  flex-direction: column;
+  gap: 2px;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.gcms-review-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.1rem;
+}
+
+.gcms-review-item:disabled {
+  cursor: default;
+}
+
+.gcms-review-item-main {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.gcms-review-item-main .gcms-badge {
+  margin-left: 0;
+}
+
+.gcms-entry-label--changed {
+  display: flex;
+  align-items: center;
+}
+
+.gcms-entry-text {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.gcms-entry-label--changed .gcms-badge {
+  flex: none;
+}
+
 /* Code and mermaid fields. Token colors are custom properties too, shared with gitvfs-cms/codemirror. */
 .gcms-app {
   --gcms-code-comment: #6e7781;
