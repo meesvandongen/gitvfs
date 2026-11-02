@@ -65,6 +65,7 @@ export const Admin = () => <CmsApp cms={cms} title="Acme" />
 - **Validation** against the schema before anything is committed. Stored files that do not match still open, with the issues listed.
 - **Editor** with text, number, checkbox, date, select, list, group, textarea and markdown fields (the markdown field has a toolbar), and map fields for a point, a point with a radius, a line and a polygon. Lists of objects can be edited as a spreadsheet-like table (paste from spreadsheets, copy as CSV), and nested menus or page hierarchies as an outline with keyboard and drag-and-drop reordering.
 - **Preview** in an iframe sandboxed without scripts, so repository content cannot reach the user's token. A **Source** tab shows the exact file that will be committed.
+- **Changes** (`changes: true`): edit on branches, see changed fields marked (with revert) and both versions previewed before and after or as a source diff, then open a pull request and publish it from the editor.
 - **OIDC sign-in** via [oidc-spa](https://www.oidc-spa.dev/), with a GitLab preset whose OAuth tokens work directly against the GitLab API.
 
 Full documentation: [`packages/docs`](../docs), whose `/admin` page edits the docs with this package.

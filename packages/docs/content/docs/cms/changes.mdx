@@ -1,0 +1,104 @@
+---
+title: Changes and pull requests
+description: Edit on branches, review what changed, and publish through pull requests.
+---
+
+By default every save is a commit on the branch you gave `GitVFS`. With `changes`, editors work in
+**changes** instead: each change is a branch off that base branch. Saves are commits on the
+change's branch, and the base branch only moves when a change is published, usually by merging its
+pull request.
+
+```ts
+const cms = createCms({
+  fs: new GitVFS({ repository: github({ token }).repository('acme/site'), branch: 'main' }),
+  collections: [posts],
+  singletons: [site],
+  changes: true, // or { branchPrefix: 'cms/', required: false }
+})
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `branchPrefix` | `'cms/'` | Changes are branches with this prefix; other branches are left alone. |
+| `required` | `false` | Make the base branch read-only in the CMS, so content only changes by publishing a change. |
+
+Try it in the [CMS demo](https://demo.cms.gitvfs.mvd.im/), which has changes turned on.
+
+## In the editor
+
+`CmsApp` adds an **Editing** switcher to the sidebar. It lists the base branch and the open changes,
+with their pull request numbers. **New change** asks for a name and starts a branch from the latest
+base branch: “Spring update” becomes `cms/spring-update`.
+
+Inside a change:
+
+- **Review & publish** in the sidebar counts the changed files. Each collection shows how many of
+  its entries changed, and entry lists badge them as New or Edited.
+- **Changed fields are marked**, with a **Revert** button that puts back the base branch's value.
+  This works for every field type, custom ones included, because it compares values, not what a
+  field draws. Hover over the marker to see the old value of a text, number or checkbox.
+- **The preview's Changes tab** shows **Before & after**: the base branch's version and this
+  change's version, **rendered by the same preview**, side by side when there is room. Custom
+  previews compare the way readers will see the page. **Source changes** shows a line diff of the
+  file. That works for any content, including fields that are hard to compare any other way.
+
+The review page lists every changed file: entries and singletons by their label (open them from
+there), and any other files the branch touched. From there you can:
+
+- **Open pull request**: ask for review, with a title and description.
+- **Publish**: merge the pull request (or, on hosts without pull requests, the branch) into the
+  base branch, delete the change's branch and switch back. Publishing is disabled while the pull
+  request is a draft or conflicts with the base branch.
+- **Update from main**: shown when the base branch has moved on. It merges the base branch into
+  the change, so it includes what others published.
+- **Discard change**: close the pull request and delete the branch.
+
+Conflicts, where both sides changed the same file, are resolved on the host, in the pull request.
+The CMS says so instead of guessing.
+
+## The API
+
+Everything the UI does is available on the `GitCms` object:
+
+```ts
+await cms.startChange('Spring update') // creates cms/spring-update and switches to it
+await cms.saveEntry('posts', { slug: 'hello', previousSlug: 'hello', data }) // commits to the change
+
+const { ahead, behind, changes } = await cms.compareChange()
+// changes: [{ path, status: 'added' | 'modified' | 'removed' | 'renamed', contentType, slug, label }]
+const before = await cms.readBaseEntry('posts', 'hello') // as published, or null when new
+
+await cms.openPullRequest({ title: 'Spring update', body: 'New season' })
+await cms.pullRequest() // { number, state, url, mergeable, … } or null
+await cms.updateChange() // merge the base branch in
+await cms.publishChange() // merge, delete the branch, switch back
+await cms.discardChange()
+
+await cms.listChanges() // [{ branch, title, pullRequest? }]
+await cms.switchTo('cms/spring-update') // or null for the base branch
+cms.getState() // { base: 'main', branch: 'cms/spring-update', inChange: true, version }
+cms.subscribe(() => {}) // called after every commit and switch
+```
+
+`useCmsState()` reads the state in React components inside `CmsApp` or `CmsProvider`. The pieces of
+the UI are exported for custom layouts too: `ChangeSwitcher`, `ChangesView`, `FieldChange`,
+`PreviewComparisonView` and `SourceDiff`. The pure helpers `diffLines` and `valuesEqual` come from
+`gitvfs-cms`.
+
+## What the host needs
+
+Changes use the optional branch and pull request methods of the repository. The GitHub and GitLab
+providers implement all of them; on GitLab, pull requests are merge requests.
+
+| Feature | Repository methods |
+| --- | --- |
+| Starting and switching changes | `createBranch`, `listBranches` |
+| What changed | `compareBranches` |
+| Pull requests | `listPullRequests`, `getPullRequest`, `createPullRequest`, `mergePullRequest`, `closePullRequest` |
+| Update from main | `mergeBranch` (GitHub only so far) |
+| Publishing without pull requests | `mergeBranch` |
+
+The token needs to create branches. On GitHub, it also needs to open and merge pull requests: the
+*Pull requests: write* permission for fine-grained tokens and GitHub Apps. Branch protection
+applies as usual. If `main` requires approvals or passing checks, **Publish** fails until the pull
+request has them, and the error says why.
