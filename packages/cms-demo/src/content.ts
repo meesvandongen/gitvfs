@@ -1,5 +1,5 @@
 import { z } from 'zod'
-import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPolygon, markdown, textarea } from 'gitvfs-cms'
+import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPolygon, markdown, table, textarea, tree } from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
 // and singletons, custom fields and previews, and files the schema does not fully describe.
@@ -96,7 +96,8 @@ export const events = defineCollection({
           price: z.number().min(0).check(field({ label: 'Price (EUR)' })),
         }),
       )
-      .default([]),
+      .default([])
+      .check(table({ label: 'Tickets' })),
   }),
   sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
 })
@@ -166,8 +167,51 @@ export const theme = defineSingleton({
   }),
 })
 
+export const pricing = defineSingleton({
+  name: 'pricing',
+  label: 'Pricing',
+  path: 'data/pricing.yml',
+  schema: z.object({
+    currency: z.enum(['EUR', 'USD']).default('EUR'),
+    plans: z
+      .array(
+        z.object({
+          name: z.string().min(1).check(field({ label: 'Plan' })),
+          tier: z.enum(['starter', 'team', 'enterprise']).check(field({ label: 'Tier' })),
+          monthly: z.number().min(0, 'Prices cannot be negative').check(field({ label: 'Per month' })),
+          yearly: z.number().min(0, 'Prices cannot be negative').optional().check(field({ label: 'Per year' })),
+          seats: z.number().int('Use whole seats').min(1).optional().check(field({ label: 'Seats' })),
+          highlighted: z.boolean().default(false).check(field({ label: 'Highlight' })),
+          availableFrom: z.coerce.date().optional().check(field({ label: 'Available from' })),
+          // A list: shown read-only in the table, and kept as is.
+          features: z.array(z.string()).default([]).check(field({ label: 'Features' })),
+        }),
+      )
+      .min(1, 'Add at least one plan')
+      .check(table({ label: 'Plans', description: 'Paste rows copied from a spreadsheet, or copy the plans as CSV' })),
+  }),
+})
+
+export const navigation = defineSingleton({
+  name: 'navigation',
+  label: 'Navigation',
+  path: 'data/navigation.yml',
+  schema: z.object({
+    main: tree({
+      label: 'Main menu',
+      description: 'The menu in the site header',
+      maxDepth: 3,
+      fields: {
+        label: z.string().min(1).check(field({ label: 'Label' })),
+        href: z.string().min(1).optional().check(field({ label: 'Link' })),
+        external: z.boolean().optional().check(field({ label: 'Opens in a new tab' })),
+      },
+    }).default([]),
+  }),
+})
+
 export const collections = [posts, docs, authors, events, places]
-export const singletons = [site, homepage, theme]
+export const singletons = [site, homepage, theme, pricing, navigation]
 
 /** The repository visitors start with, and go back to on reset. */
 export const seedFiles: Record<string, string> = {
@@ -372,6 +416,65 @@ cta:
 Welcome! This body is markdown too.
 `,
   'data/theme.yml': 'mode: system\nfontSize: 16\nradius: 8\n',
+  'data/pricing.yml': `currency: EUR
+plans:
+  - name: Free
+    tier: starter
+    monthly: 0
+    seats: 1
+    highlighted: false
+    features:
+      - 1 site
+      - Community support
+  - name: Team
+    tier: team
+    monthly: 12
+    yearly: 120
+    seats: 10
+    highlighted: true
+    features:
+      - 10 sites
+      - Preview deployments
+      - Email support
+  - name: Enterprise
+    tier: enterprise
+    monthly: 49
+    yearly: 490
+    highlighted: false
+    availableFrom: 2027-01-01
+    features:
+      - Unlimited sites
+      - Single sign-on
+`,
+  'data/navigation.yml': `main:
+  - label: Home
+    href: /
+  - label: Product
+    children:
+      - label: Features
+        href: /features
+      - label: Pricing
+        href: /pricing
+      - label: Integrations
+        href: /integrations
+        children:
+          - label: GitHub
+            href: /integrations/github
+          - label: GitLab
+            href: /integrations/gitlab
+  - label: Docs
+    href: /docs
+    children:
+      - label: Getting started
+        href: /docs/getting-started
+      - label: Content types
+        href: /docs/content-types
+  - label: Blog
+    href: /blog
+  - label: Status
+    href: https://status.example.com
+    external: true
+`,
 }
 
 /** A second repository with the same content model, to show switching with the repository picker. */
