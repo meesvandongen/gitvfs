@@ -25,6 +25,9 @@ import { TableField } from './table.js'
 import { TreeField } from './tree.js'
 import { ReferenceField, ReferencesField } from './references.js'
 import { FieldChange } from './field-changes.js'
+import { DateRangeField } from './date-range.js'
+import { OpeningHoursField } from './opening-hours.js'
+import { RecurrenceField } from './recurrence.js'
 
 /**
  * The form binding (`value`, `onChange`, `onBlur`, `name`, `ref`) for a field, for custom field
@@ -383,6 +386,9 @@ export const formComponents: AutoFormFieldComponents = {
   geoline: GeoLineField,
   geopolygon: GeoPolygonField,
   geopoints: GeoPointsField,
+  daterange: DateRangeField,
+  openinghours: OpeningHoursField,
+  recurrence: RecurrenceField,
   datetime: DateTimeField,
   time: TimeField,
   slider: SliderField,

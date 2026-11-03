@@ -209,3 +209,50 @@ export type {
 } from './references.js'
 export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
 export type { DiffLine } from './changes.js'
+export { wallClockAt, wallClockToDate } from './calendar.js'
+export { dateRange, describeRangeLength, formatDateRange, isDateRange, rangeLength } from './date-range.js'
+export type { DateRange, DateRangeCustomData, DateRangeFieldConfig, DateRangeOptions } from './date-range.js'
+export {
+  WEEKDAYS,
+  WEEKDAY_NAMES,
+  hoursOn,
+  isOpenAt,
+  isOvernight,
+  openingHours,
+  openingHoursIssues,
+  toOpeningHoursSpecification,
+  toOsmOpeningHours,
+} from './opening-hours.js'
+export type {
+  OpeningHours,
+  OpeningHoursCustomData,
+  OpeningHoursException,
+  OpeningHoursFieldConfig,
+  OpeningHoursIssue,
+  OpeningHoursOptions,
+  OpeningHoursSpecification,
+  OpeningInterval,
+  Weekday,
+} from './opening-hours.js'
+export {
+  FREQUENCIES,
+  RRULE_WEEKDAYS,
+  describeRecurrence,
+  expandRecurrence,
+  formatRule,
+  parseRule,
+  recurrence,
+  toICalendar,
+  unsupportedParts,
+} from './recurrence.js'
+export type {
+  ByDay,
+  ExpandOptions,
+  Frequency,
+  Recurrence,
+  RecurrenceCustomData,
+  RecurrenceFieldConfig,
+  RecurrenceOptions,
+  RecurrenceRule,
+  RRuleWeekday,
+} from './recurrence.js'

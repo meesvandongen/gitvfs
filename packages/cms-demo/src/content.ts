@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import {
+  dateRange,
   datetime,
   defineCollection,
   defineSingleton,
@@ -13,7 +14,9 @@ import {
   graph,
   markdown,
   money,
+  openingHours,
   phone,
+  recurrence,
   reference,
   references,
   slider,
@@ -123,6 +126,8 @@ export const events = defineCollection({
       )
       .default([])
       .check(table({ label: 'Tickets' })),
+    dates: dateRange({ label: 'Dates', description: 'For events that run over several days', maxLength: 14, locale: 'en-GB' }).optional(),
+    repeats: recurrence({ label: 'Repeats', description: 'For a series, such as office hours', time: true, locale: 'en-GB' }).optional(),
   }),
   sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
 })
@@ -149,6 +154,7 @@ export const places = defineCollection({
     }).optional(),
     serviceArea: geoPolygon({ label: 'Service area', center: amsterdam, zoom: 11 }).optional(),
     route: geoLine({ label: 'Walking route from the station', center: amsterdam, zoom: 14, maxPoints: 20 }).optional(),
+    hours: openingHours({ label: 'Opening hours', description: 'Local times; a closing time before the opening time is on the next day' }).optional(),
     branches: geoPoints({
       label: 'Branches',
       description: 'Pickup points: click the map or search to add one, and name it in the list',
@@ -479,17 +485,83 @@ branches:
   - lat: 52.3843
     lng: 4.9025
     label: Ferry pier Noord
+hours:
+  mon: []
+  tue:
+    - opens: "10:00"
+      closes: "18:00"
+  wed:
+    - opens: "10:00"
+      closes: "13:00"
+    - opens: "14:00"
+      closes: "18:00"
+  thu:
+    - opens: "10:00"
+      closes: "21:00"
+  fri:
+    - opens: "10:00"
+      closes: "18:00"
+  sat:
+    - opens: "10:00"
+      closes: "17:00"
+  sun:
+    - opens: "12:00"
+      closes: "17:00"
+  exceptions:
+    - date: 2026-12-25
+      until: 2026-12-26
+      label: Christmas
+      hours: []
+    - date: 2026-12-31
+      label: New Year's Eve
+      hours:
+        - opens: "10:00"
+          closes: "16:00"
 `,
   'data/places/warehouse-west.yml': `title: Warehouse west
 kind: warehouse
 location:
   lat: 52.3874
   lng: 4.8212
+hours:
+  mon:
+    - opens: "06:00"
+      closes: "22:00"
+  tue:
+    - opens: "06:00"
+      closes: "22:00"
+  wed:
+    - opens: "06:00"
+      closes: "22:00"
+  thu:
+    - opens: "06:00"
+      closes: "22:00"
+  fri:
+    - opens: "06:00"
+      closes: "02:00"
+  sat: []
+  sun: []
 `,
   'data/events/cms-office-hours.yml': `title: CMS office hours
 starts: 2026-12-04
 online: true
 tickets: []
+repeats:
+  start: 2026-12-04T16:00
+  rule: FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;UNTIL=20270625T235959
+`,
+  'data/events/git-summer-camp.yml': `title: Git summer camp
+starts: 2027-07-19
+online: false
+location:
+  venue: The forest camp
+  city: Utrecht
+tickets:
+  - name: Full week
+    price: 180
+dates:
+  start: 2027-07-19
+  end: 2027-07-23
 `,
   'data/flows/login-trouble.yml': `title: Login trouble
 description: Support decision tree for customers who cannot sign in.
