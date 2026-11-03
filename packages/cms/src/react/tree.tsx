@@ -20,6 +20,7 @@ import {
   type TreePath,
 } from '../tree.js'
 import { ValueInput, blankObject, errorAt, errorMessages, objectFields, summarize, useErrorTree } from './cells.js'
+import { useReadOnly } from './field-utils.js'
 
 // Not imported from ./autoform.js, which imports this module for its field components.
 const useField = (name: string) => useFieldRHF({ name }).field
@@ -61,6 +62,8 @@ export function TreeField(props: AutoFormFieldProps) {
   const nodes: Node[] = Array.isArray(field.value) ? field.value : []
   const errors = useErrorTree(props.id)
   const element = useRef<HTMLDivElement | null>(null)
+  // Read-only: its buttons and inputs are disabled by the fieldset; drags and keys must not move or delete either.
+  const readOnly = useReadOnly()
 
   const [collapsed, setCollapsed] = useState<ReadonlySet<string>>(() => new Set())
   const [selected, setSelected] = useState<string | null>(null)
@@ -107,7 +110,7 @@ export function TreeField(props: AutoFormFieldProps) {
 
   /** Commit a structural change, keeping expanded state, editing and focus on the same nodes. */
   const apply = (change: TreeChange | undefined, focus?: { path?: TreePath; edit?: boolean }) => {
-    if (!change) return
+    if (!change || readOnly) return
     const remap = (key: string) => {
       const path = remapPath(toPath(key), change)
       return path ? pathKey(path) : undefined
@@ -141,7 +144,7 @@ export function TreeField(props: AutoFormFieldProps) {
   const remove = (path: TreePath) => {
     const key = pathKey(path)
     const node = getNode(nodes, path, options)
-    if (!node) return
+    if (!node || readOnly) return
     if (countDescendants(node, options) > 0 && confirming !== key) {
       setConfirming(key)
       return
@@ -401,7 +404,7 @@ export function TreeField(props: AutoFormFieldProps) {
         >
           <div
             className={`gcms-tree-row${isActive ? ' gcms-tree-row--active' : ''}${invalid.has(key) ? ' gcms-tree-row--invalid' : ''}${dragging === key ? ' gcms-tree-row--dragging' : ''}${dropHere}`}
-            draggable
+            draggable={!readOnly}
             onClick={(event) => {
               if ((event.target as HTMLElement).closest('button')) return
               focusItem(key)

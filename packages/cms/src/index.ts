@@ -42,6 +42,7 @@ export {
   geoCircle,
   geoLine,
   geoPoint,
+  geoPoints,
   geoPolygon,
   isGeoPoint,
   metersPerPixel,
@@ -59,12 +60,57 @@ export type {
   GeoCircleOptions,
   GeoCustomData,
   GeoFieldConfig,
+  GeoMarker,
   GeoPoint,
+  GeoPointsOptions,
   GeoShapeOptions,
   MapOptions,
   MapTiles,
 } from './geo.js'
+export { NOMINATIM_ENDPOINT, nominatimGeocoder } from './geocode.js'
+export type { GeoBounds, GeocodeOptions, GeocodeResult, Geocoder, NominatimOptions } from './geocode.js'
 export { isValidSlug, slugify } from './slug.js'
+export {
+  datetime,
+  formatDateTime,
+  formatOffset,
+  formatTime,
+  fromWallClock,
+  isDateTime,
+  isTime,
+  parseDateTime,
+  time,
+  timeZoneOffset,
+  toWallClock,
+} from './datetime.js'
+export type { DateTimeCustomData, DateTimeOptions, DateTimeParts, DateTimeZone, TimeOptions } from './datetime.js'
+export { numberBounds, slider } from './slider.js'
+export type { NumberBounds, SliderCustomData, SliderOptions } from './slider.js'
+export {
+  currencyCodes,
+  currencyDecimals,
+  formatMoney,
+  fromMinorUnits,
+  money,
+  parseAmount,
+  toMinorUnits,
+} from './money.js'
+export type { Money, MoneyCustomData, MoneyOptions } from './money.js'
+export {
+  DURATION_UNITS,
+  describeDuration,
+  duration,
+  durationInUnits,
+  durationToSeconds,
+  formatDuration,
+  isDuration,
+  parseDuration,
+  splitDuration,
+} from './duration.js'
+export type { DurationCustomData, DurationOptions, DurationParts, DurationUnit } from './duration.js'
+export { isPhoneNumber, normalizePhone, phone, phoneHref } from './phone.js'
+export type { PhoneCustomData, PhoneOptions } from './phone.js'
+export type { FieldOptions } from './field-options.js'
 export {
   cellType,
   detectDelimiter,
