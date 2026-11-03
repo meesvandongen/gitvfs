@@ -1,7 +1,7 @@
 import { useState } from 'react'
 import type { AutoFormFieldProps } from '@autoform/react'
 import { parseEmbedUrl } from '../media.js'
-import { useFieldBinding as useField } from './field-utils.js'
+import { useField } from './field-utils.js'
 
 const PROVIDERS = {
   youtube: { name: 'YouTube', host: 'youtube-nocookie.com' },

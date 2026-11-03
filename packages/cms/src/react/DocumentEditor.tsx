@@ -2,11 +2,14 @@ import { useDeferredValue, useEffect, useId, useMemo, useState, type ReactNode }
 import type { LoadedDocument } from '../cms.js'
 import type { ContentType } from '../config.js'
 import { mediaFolders } from '../media.js'
+import { describeReferences } from '../references.js'
 import { isValidSlug, slugify } from '../slug.js'
 import { ContentForm, type ContentFormProps } from './autoform.js'
+import type { CmsView } from './CmsApp.js'
 import { useCms, useCmsState } from './context.js'
 import { BaseValuesContext } from './field-changes.js'
 import { MediaProvider, MediaStore } from './media-store.js'
+import { CmsNavigationProvider, useCmsNavigate } from './navigation.js'
 import { DocumentPreview, type PreviewProps } from './preview.js'
 import { errorMessage, useAsync } from './use-async.js'
 
@@ -133,15 +136,40 @@ function LoadedEditor(
     ? 'Use letters, digits, dots, dashes and underscores'
     : null
 
+  // Fields can open other documents (a reference's entry); ask before dropping unsaved changes.
+  const navigate = useCmsNavigate()
+  const leave = (view: CmsView) => {
+    if (dirty && !window.confirm('Leave this document? Your unsaved changes are lost.')) return
+    navigate?.(view)
+  }
+
   const handleValues = (next: Record<string, unknown>) => {
     setValues(next)
     setBaseline((current) => current ?? JSON.stringify(next))
+  }
+
+  /** "Referenced by …" for this entry, or '' when nothing references it (or it cannot be checked). */
+  const referencedBy = async (): Promise<string> => {
+    if (props.slug === null) return ''
+    setStatus({ kind: 'busy', message: 'Checking references…' })
+    try {
+      return describeReferences(await cms.findReferences(contentType.name, props.slug))
+    } catch {
+      return ''
+    } finally {
+      setStatus({ kind: 'idle' })
+    }
   }
 
   const save = async (data: Record<string, unknown>) => {
     if (isEntry && (!derivedSlug || slugError)) {
       setStatus({ kind: 'error', message: slugError ?? 'Enter a slug for this entry' })
       return
+    }
+    if (isEntry && props.slug !== null && derivedSlug !== props.slug) {
+      // References store the slug, so they would point at nothing after the rename.
+      const references = await referencedBy()
+      if (references && !window.confirm(`${references} Renaming “${props.slug}” to “${derivedSlug}” breaks those references. Rename anyway?`)) return
     }
     setStatus({ kind: 'busy', message: 'Committing…' })
     try {
@@ -170,7 +198,10 @@ function LoadedEditor(
   }
 
   const remove = async () => {
-    if (props.slug === null || !window.confirm(`Delete ${document.path}? This creates a commit.`)) return
+    if (props.slug === null) return
+    const references = await referencedBy()
+    const warning = references ? `\n\n${references} Their references will point at a missing entry.` : ''
+    if (!window.confirm(`Delete ${document.path}? This creates a commit.${warning}`)) return
     setStatus({ kind: 'busy', message: 'Deleting…' })
     try {
       await cms.deleteEntry(contentType.name, props.slug)
@@ -247,6 +278,7 @@ function LoadedEditor(
               </div>
             )}
             <BaseValuesContext.Provider value={baseValues}>
+            <CmsNavigationProvider navigate={navigate ? leave : undefined}>
               <ContentForm
                 contentType={contentType}
                 defaultValues={document.data}
@@ -256,6 +288,7 @@ function LoadedEditor(
                 uiComponents={props.uiComponents}
                 formComponents={props.formComponents}
               />
+            </CmsNavigationProvider>
             </BaseValuesContext.Provider>
           </div>
           <div className="gcms-pane gcms-pane--preview">

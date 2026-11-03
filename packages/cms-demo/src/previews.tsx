@@ -1,4 +1,17 @@
-import { focusToObjectPosition, type ImageValue } from 'gitvfs-cms'
+import {
+  describeDuration,
+  describeRecurrence,
+  focusToObjectPosition,
+  formatDateRange,
+  formatMoney,
+  isDateRange,
+  isDateTime,
+  isDuration,
+  phoneHref,
+  type ImageValue,
+  type Money,
+  type Recurrence,
+} from 'gitvfs-cms'
 import { useMediaUrl, type PreviewProps } from 'gitvfs-cms/react'
 
 const text = (value: unknown, fallback = ''): string => (typeof value === 'string' && value ? value : fallback)
@@ -47,6 +60,7 @@ export function EventPreview({ values }: PreviewProps) {
   const photos = Array.isArray(values.photos) ? (values.photos as ImageValue[]).filter((photo) => photo?.src) : []
   const tickets = Array.isArray(values.tickets) ? (values.tickets as Array<{ name?: string; price?: number }>) : []
   const location = values.location as { venue?: string; city?: string } | undefined
+  const repeats = values.repeats as Recurrence | null | undefined
   const starts = values.starts instanceof Date || typeof values.starts === 'string' ? new Date(values.starts) : null
   return (
     <div className="demo-preview">
@@ -61,6 +75,8 @@ export function EventPreview({ values }: PreviewProps) {
           </div>
         ) : null}
         <p>{values.online ? 'Online' : [location?.venue, location?.city].filter(Boolean).join(', ') || 'Location to be announced'}</p>
+        {isDateRange(values.dates) ? <p>{formatDateRange(values.dates, 'en-GB')}</p> : null}
+        {repeats ? <p>{describeRecurrence(repeats, { locale: 'en-GB' })}</p> : null}
         {tickets.length > 0 ? (
           <table>
             <tbody>
@@ -72,6 +88,44 @@ export function EventPreview({ values }: PreviewProps) {
               ))}
             </tbody>
           </table>
+        ) : null}
+      </article>
+    </div>
+  )
+}
+
+/** What a site would do with the stored formats, using the helpers from `gitvfs-cms`. */
+export function ShowPreview({ values }: PreviewProps) {
+  const price = values.price as Partial<Money> | undefined
+  const starts = isDateTime(values.starts)
+    ? new Intl.DateTimeFormat('en-GB', { dateStyle: 'full', timeStyle: 'short', timeZone: 'Europe/Amsterdam' }).format(new Date(values.starts))
+    : 'Date to be announced'
+  return (
+    <div className="demo-preview">
+      <article className="demo-event">
+        <p className="demo-role">{starts}</p>
+        <h2>{text(values.title, 'Untitled show')}</h2>
+        <p>
+          {typeof values.doors === 'string' && values.doors ? `Doors ${values.doors}. ` : ''}
+          {isDuration(values.runtime) ? `Running time ${describeDuration(values.runtime, 'en')}` : ''}
+          {isDuration(values.intermission) ? `, plus an intermission of ${describeDuration(values.intermission, 'en')}` : ''}.
+        </p>
+        <table>
+          <tbody>
+            <tr>
+              <td>Tickets</td>
+              <td>{typeof price?.amount === 'number' && price.currency ? formatMoney(price as Money, 'en') : ''}</td>
+            </tr>
+            <tr>
+              <td>On sale</td>
+              <td>{typeof values.onSale === 'number' ? `${values.onSale}% of seats` : ''}</td>
+            </tr>
+          </tbody>
+        </table>
+        {typeof values.boxOffice === 'string' && values.boxOffice ? (
+          <p>
+            Box office: <a href={phoneHref(values.boxOffice)}>{values.boxOffice}</a>
+          </p>
         ) : null}
       </article>
     </div>

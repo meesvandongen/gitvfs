@@ -1,7 +1,10 @@
 import { z } from 'zod'
 import {
+  dateRange,
+  datetime,
   defineCollection,
   defineSingleton,
+  duration,
   embed,
   field,
   file,
@@ -9,12 +12,22 @@ import {
   geoCircle,
   geoLine,
   geoPoint,
+  geoPoints,
   geoPolygon,
+  graph,
   image,
   imagePath,
   markdown,
+  money,
+  openingHours,
+  phone,
+  recurrence,
+  reference,
+  references,
+  slider,
   table,
   textarea,
+  time,
   tree,
 } from 'gitvfs-cms'
 
@@ -40,12 +53,15 @@ export const posts = defineCollection({
     readingTime: z.number().int().min(1).max(120).optional().check(field({ label: 'Reading time (minutes)' })),
     featured: z.boolean().default(false).check(field({ label: 'Featured on the homepage' })),
     draft: z.boolean().default(false).check(field({ label: 'Draft', description: 'Hidden from the site' })),
-    author: z
-      .object({
-        name: z.string().min(1).check(field({ label: 'Name' })),
-        url: z.url().optional().check(field({ label: 'Website' })),
-      })
-      .check(field({ label: 'Author' })),
+    // References store the slug of an entry of another collection: `author: ada-lovelace`.
+    author: reference({ collection: 'authors', label: 'Author', display: ['role'] }),
+    relatedPosts: references({
+      collection: 'posts',
+      label: 'Related posts',
+      description: 'Up to three, in the order they are shown',
+      max: 3,
+      display: ['category', 'date'],
+    }).default([]),
     body: z.string().check(markdown({ label: 'Content', media: postImages })).default(''),
   }),
   // Newest first; the default sorts by label.
@@ -122,6 +138,8 @@ export const events = defineCollection({
     photos: gallery({ label: 'Photos', folder: 'public/images/events', publicPath: '/images/events', max: 8, maxSize: 1024 * 1024 }).optional(),
     agenda: file({ label: 'Agenda (PDF)', folder: 'public/files', publicPath: '/files', accept: '.pdf,application/pdf', maxSize: 1024 * 1024 }).optional(),
     video: embed({ label: 'Recording', description: 'A YouTube or Vimeo link', providers: ['youtube', 'vimeo'] }).optional(),
+    dates: dateRange({ label: 'Dates', description: 'For events that run over several days', maxLength: 14, locale: 'en-GB' }).optional(),
+    repeats: recurrence({ label: 'Repeats', description: 'For a series, such as office hours', time: true, locale: 'en-GB' }).optional(),
   }),
   sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
 })
@@ -148,6 +166,70 @@ export const places = defineCollection({
     }).optional(),
     serviceArea: geoPolygon({ label: 'Service area', center: amsterdam, zoom: 11 }).optional(),
     route: geoLine({ label: 'Walking route from the station', center: amsterdam, zoom: 14, maxPoints: 20 }).optional(),
+    hours: openingHours({ label: 'Opening hours', description: 'Local times; a closing time before the opening time is on the next day' }).optional(),
+    branches: geoPoints({
+      label: 'Branches',
+      description: 'Pickup points: click the map or search to add one, and name it in the list',
+      labels: true,
+      center: amsterdam,
+      zoom: 12,
+      maxPoints: 10,
+    }).optional(),
+  }),
+})
+
+export const shows = defineCollection({
+  name: 'shows',
+  label: 'Shows',
+  folder: 'data/shows',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    // Read-only fields cannot be filled in, so new shows get a generated id.
+    id: z
+      .string()
+      .default(() => `tm-${crypto.randomUUID().slice(0, 5)}`)
+      .check(field({ label: 'Ticketing ID', description: 'Set by the ticketing system', readOnly: true })),
+    // Import metadata: not shown in the editor, kept on save (see the Source tab).
+    importedAt: datetime({ timeZone: 'UTC', hidden: true }).optional(),
+    starts: datetime({ label: 'Starts', timeZone: 'Europe/Amsterdam', description: 'Amsterdam time, wherever you edit from' }),
+    doors: time({ label: 'Doors open', step: 900 }).optional(),
+    runtime: duration({ label: 'Running time' }),
+    intermission: duration({ label: 'Intermission', units: ['minutes'] }).optional(),
+    price: money({ label: 'Ticket price', currencies: ['EUR', 'GBP', 'USD'] }),
+    onSale: z.number().int().min(0).max(100).check(slider({ label: 'Seats on sale', unit: '%' })),
+    onSaleFrom: datetime({ label: 'Tickets on sale from', description: 'In your own time zone' }).optional(),
+    boxOffice: phone({ label: 'Box office', description: 'Try 020 123 4567', defaultCountryCode: '31' }).optional(),
+  }),
+  sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
+})
+
+export const flows = defineCollection({
+  name: 'flows',
+  label: 'Flows',
+  folder: 'data/flows',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    description: z.string().check(textarea({ label: 'Description' })).optional(),
+    flow: graph({
+      label: 'Flow',
+      description: 'Double-click to add a step, drag from its dot to connect it; or use the List view',
+      nodeKinds: {
+        start: { label: 'Start', shape: 'ellipse' },
+        question: { label: 'Question', shape: 'diamond' },
+        step: { label: 'Step', shape: 'rounded' },
+        handoff: { label: 'Hand off', shape: 'rect' },
+      },
+      nodeFields: {
+        details: z.string().check(textarea({ label: 'Details', description: 'What to say or do at this step' })).optional(),
+        article: z.url().optional().check(field({ label: 'Help article' })),
+      },
+      edgeFields: {
+        role: z.enum(['anyone', 'writer', 'editor', 'support']).optional().check(field({ label: 'Who takes this path' })),
+      },
+      minNodes: 1,
+    }),
   }),
 })
 
@@ -176,6 +258,8 @@ export const homepage = defineSingleton({
     title: z.string().min(1),
     subtitle: z.string().check(textarea()).optional(),
     cta: z.object({ label: z.string().min(1), href: z.string().min(1) }).check(field({ label: 'Call to action' })),
+    // A reference to one of several collections stores `{ collection, slug }`.
+    highlight: reference({ collection: ['posts', 'docs'], label: 'Highlighted entry' }).optional(),
     body: z.string().check(markdown()).default(''),
   }),
 })
@@ -186,8 +270,8 @@ export const theme = defineSingleton({
   path: 'data/theme.yml',
   schema: z.object({
     mode: z.enum(['light', 'dark', 'system']).default('system'),
-    fontSize: z.number().int().min(12).max(24).check(field({ label: 'Base font size (px)' })),
-    radius: z.number().min(0).max(24).check(field({ label: 'Corner radius (px)' })),
+    fontSize: z.number().int().min(12).max(24).check(slider({ label: 'Base font size', unit: 'px' })),
+    radius: z.number().min(0).max(24).multipleOf(0.5).check(slider({ label: 'Corner radius', unit: 'px' })),
   }),
 })
 
@@ -234,7 +318,7 @@ export const navigation = defineSingleton({
   }),
 })
 
-export const collections = [posts, docs, authors, events, places]
+export const collections = [posts, docs, authors, events, places, shows, flows]
 export const singletons = [site, homepage, theme, pricing, navigation]
 
 const fromBase64 = (base64: string) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
@@ -289,9 +373,10 @@ tags:
 readingTime: 3
 featured: true
 draft: false
-author:
-  name: Ada Lovelace
-  url: https://example.com/ada
+author: ada-lovelace
+relatedPosts:
+  - editing-frontmatter
+  - release-notes-0-2
 ---
 
 Every entry in this demo is a file in a Git repository. The editor on the left is generated from a
@@ -318,8 +403,7 @@ tags:
   - frontmatter
 layout: wide
 canonical: https://example.com/original
-author:
-  name: Grace Hopper
+author: grace-hopper
 ---
 
 This file has \`layout\` and \`canonical\` keys that the schema does not describe. Edit and save the
@@ -331,12 +415,14 @@ title: A post that needs fixing
 date: 2026-09-01
 category: tutorials
 tags: []
-author:
-  name: Alan Turing
+author: alan-turing
 ---
 
 The stored category, \`tutorials\`, is not one of the allowed options. The editor still opens the
 file and lists what does not match the schema; pick a valid category and save to fix it.
+
+The author, \`alan-turing\`, is not in the Authors collection either. That is a warning rather than
+an error, since the author may simply not be committed yet.
 `,
   'content/posts/release-notes-0-2.md': `---
 title: Release notes 0.2
@@ -346,8 +432,7 @@ tags:
   - release
 readingTime: 1
 draft: true
-author:
-  name: Ada Lovelace
+author: ada-lovelace
 ---
 
 ### Added
@@ -452,17 +537,218 @@ route:
     lng: 4.8921
   - lat: 52.374
     lng: 4.8897
+branches:
+  - lat: 52.3791
+    lng: 4.9003
+    label: Central Station
+  - lat: 52.3579
+    lng: 4.8813
+    label: Museumplein
+  - lat: 52.3843
+    lng: 4.9025
+    label: Ferry pier Noord
+hours:
+  mon: []
+  tue:
+    - opens: "10:00"
+      closes: "18:00"
+  wed:
+    - opens: "10:00"
+      closes: "13:00"
+    - opens: "14:00"
+      closes: "18:00"
+  thu:
+    - opens: "10:00"
+      closes: "21:00"
+  fri:
+    - opens: "10:00"
+      closes: "18:00"
+  sat:
+    - opens: "10:00"
+      closes: "17:00"
+  sun:
+    - opens: "12:00"
+      closes: "17:00"
+  exceptions:
+    - date: 2026-12-25
+      until: 2026-12-26
+      label: Christmas
+      hours: []
+    - date: 2026-12-31
+      label: New Year's Eve
+      hours:
+        - opens: "10:00"
+          closes: "16:00"
 `,
   'data/places/warehouse-west.yml': `title: Warehouse west
 kind: warehouse
 location:
   lat: 52.3874
   lng: 4.8212
+hours:
+  mon:
+    - opens: "06:00"
+      closes: "22:00"
+  tue:
+    - opens: "06:00"
+      closes: "22:00"
+  wed:
+    - opens: "06:00"
+      closes: "22:00"
+  thu:
+    - opens: "06:00"
+      closes: "22:00"
+  fri:
+    - opens: "06:00"
+      closes: "02:00"
+  sat: []
+  sun: []
 `,
   'data/events/cms-office-hours.yml': `title: CMS office hours
 starts: 2026-12-04
 online: true
 tickets: []
+repeats:
+  start: 2026-12-04T16:00
+  rule: FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;UNTIL=20270625T235959
+`,
+  'data/events/git-summer-camp.yml': `title: Git summer camp
+starts: 2027-07-19
+online: false
+location:
+  venue: The forest camp
+  city: Utrecht
+tickets:
+  - name: Full week
+    price: 180
+dates:
+  start: 2027-07-19
+  end: 2027-07-23
+`,
+  'data/flows/login-trouble.yml': `title: Login trouble
+description: Support decision tree for customers who cannot sign in.
+flow:
+  nodes:
+    - id: cannot-sign-in
+      label: Customer cannot sign in
+      x: 220
+      y: 20
+      kind: start
+    - id: reset-email-arrived
+      label: Did the reset email arrive?
+      x: 220
+      y: 160
+      kind: question
+    - id: use-reset-link
+      label: Use the link in the email
+      x: -80
+      y: 300
+      kind: step
+      details: The link works for one hour. Ask them to open it on the same device.
+      article: https://example.com/help/reset-password
+    - id: in-spam
+      label: Is it in the spam folder?
+      x: 220
+      y: 300
+      kind: question
+    - id: check-address
+      label: Check the address on file
+      x: 360
+      y: 440
+      kind: step
+    - id: escalate
+      label: Escalate to tier 2
+      x: 360
+      y: 560
+      kind: handoff
+  edges:
+    - from: cannot-sign-in
+      to: reset-email-arrived
+    - from: reset-email-arrived
+      to: use-reset-link
+      label: "Yes"
+    - from: reset-email-arrived
+      to: in-spam
+      label: "No"
+    - from: in-spam
+      to: use-reset-link
+      label: "Yes"
+    - from: in-spam
+      to: check-address
+      label: "No"
+    - from: check-address
+      to: escalate
+      label: Still nothing
+      role: support
+`,
+  'data/flows/publishing-workflow.yml': `title: Publishing workflow
+description: How a post moves from draft to the site. Edges in both directions bend apart.
+flow:
+  nodes:
+    - id: draft
+      label: Draft
+      x: 100
+      y: 20
+      kind: start
+    - id: in-review
+      label: In review
+      x: 100
+      y: 160
+      kind: step
+    - id: scheduled
+      label: Scheduled
+      x: 100
+      y: 300
+      kind: step
+    - id: published
+      label: Published
+      x: 340
+      y: 300
+      kind: handoff
+  edges:
+    - from: draft
+      to: in-review
+      label: Submit
+      role: writer
+    - from: in-review
+      to: draft
+      label: Changes requested
+      role: editor
+    - from: in-review
+      to: scheduled
+      label: Approve
+      role: editor
+    - from: scheduled
+      to: published
+      label: Publish date reached
+    - from: published
+      to: draft
+      label: Update
+      role: writer
+`,
+  'data/shows/late-night-jazz.yml': `title: Late night jazz
+id: tm-48213
+importedAt: 2026-10-01T08:00:00Z
+starts: 2026-11-20T21:30:00+01:00
+doors: "20:45"
+runtime: PT1H45M
+intermission: PT15M
+price:
+  amount: 24.5
+  currency: EUR
+onSale: 80
+boxOffice: "+31201234567"
+`,
+  'data/shows/the-tempest-matinee.yml': `title: The Tempest (matinee)
+id: tm-48377
+importedAt: 2026-10-01T08:00:00Z
+starts: 2026-12-06T14:00:00+01:00
+runtime: PT2H30M
+price:
+  amount: 18
+  currency: GBP
+onSale: 45
+onSaleFrom: 2026-11-01T10:00:00+01:00
 `,
   'data/site.json': `${JSON.stringify(
     {
@@ -485,6 +771,9 @@ subtitle: Edit this homepage, a markdown singleton with frontmatter.
 cta:
   label: Read the blog
   href: /blog
+highlight:
+  collection: posts
+  slug: welcome-to-gitvfs-cms
 ---
 
 Welcome! This body is markdown too.
@@ -561,8 +850,7 @@ category: news
 tags:
   - labs
 featured: true
-author:
-  name: Grace Hopper
+author: grace-hopper
 ---
 
 This post lives in a different repository, **acme/labs**. You opened it with the repository

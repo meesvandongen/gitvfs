@@ -24,7 +24,7 @@ import {
   type MediaConfig,
   type MediaCustomData,
 } from '../media.js'
-import { NestedErrors, useFieldBinding as useField } from './field-utils.js'
+import { NestedErrors, useField, useReadOnly } from './field-utils.js'
 import { useAssetSize, useAssetUrl, useMediaStore, useMediaVersion, type AddedAsset, type MediaStore } from './media-store.js'
 import { errorMessage, useAsync } from './use-async.js'
 
@@ -98,18 +98,20 @@ const draggingFiles = (event: DragEvent) => [...event.dataTransfer.types].includ
 /** Drag and drop of files onto an element. */
 function useFileDrop(onFiles: (files: File[]) => void) {
   const [over, setOver] = useState(false)
+  // A read-only field takes no files.
+  const readOnly = useReadOnly()
   return {
     over,
     handlers: {
       onDragOver: (event: DragEvent) => {
-        if (!draggingFiles(event)) return
+        if (readOnly || !draggingFiles(event)) return
         event.preventDefault()
         event.dataTransfer.dropEffect = 'copy'
         setOver(true)
       },
       onDragLeave: () => setOver(false),
       onDrop: (event: DragEvent) => {
-        if (!draggingFiles(event)) return
+        if (readOnly || !draggingFiles(event)) return
         event.preventDefault()
         setOver(false)
         const files = [...event.dataTransfer.files]
@@ -191,8 +193,10 @@ export function FocalPointPicker({ children, focus, onChange }: {
 }) {
   const box = useRef<HTMLDivElement | null>(null)
   const point = focus ?? { x: 0.5, y: 0.5 }
+  const readOnly = useReadOnly()
 
   const pick = (event: MouseEvent) => {
+    if (readOnly) return
     const rect = box.current?.getBoundingClientRect()
     // Without layout (tests, hidden elements) there is nothing to measure against.
     if (!rect || rect.width === 0 || rect.height === 0) return
@@ -200,6 +204,7 @@ export function FocalPointPicker({ children, focus, onChange }: {
   }
 
   const onKeyDown = (event: KeyboardEvent) => {
+    if (readOnly) return
     const step = event.shiftKey ? 0.1 : 0.02
     const moves: Record<string, [number, number]> = {
       ArrowLeft: [-step, 0],
@@ -222,6 +227,7 @@ export function FocalPointPicker({ children, focus, onChange }: {
       role="slider"
       tabIndex={0}
       aria-label="Focal point"
+      aria-readonly={readOnly || undefined}
       aria-valuemin={0}
       aria-valuemax={100}
       aria-valuenow={x}
@@ -490,6 +496,7 @@ export function GalleryField(props: AutoFormFieldProps) {
   const dragged = useRef<number | null>(null)
   const [dropTarget, setDropTarget] = useState<number | null>(null)
   const store = uploader.store
+  const readOnly = useReadOnly()
   const items: ImageValue[] = Array.isArray(field.value) ? field.value.filter(isImageValue) : []
   const full = media.max !== undefined && items.length >= media.max
   const keys = stableKeys(items)
@@ -548,7 +555,7 @@ export function GalleryField(props: AutoFormFieldProps) {
               {/* The thumbnail is the drag handle, so text in the inputs stays selectable. */}
               <div
                 className="gcms-gallery-thumb"
-                draggable
+                draggable={!readOnly}
                 title="Drag to reorder"
                 onDragStart={(event) => {
                   dragged.current = index
