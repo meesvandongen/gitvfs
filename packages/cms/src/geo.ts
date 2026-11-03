@@ -1,5 +1,6 @@
 import { z } from 'zod'
 import { field, type CmsFieldConfig } from './fields.js'
+import type { Geocoder } from './geocode.js'
 
 // Map fields store plain `{ lat, lng }` objects, the shape Sanity, Contentful, DatoCMS and Hygraph
 // use, rather than GeoJSON. Content files are read and edited by people, and `lat: 52.37` cannot be
@@ -50,6 +51,8 @@ export interface MapOptions {
   height?: number
   /** Tile layer. Default: `OSM_TILES`. */
   tiles?: MapTiles
+  /** Address search shown above the map, such as `nominatimGeocoder()`. Default: none. */
+  geocoder?: Geocoder
 }
 
 export interface GeoCircleOptions extends MapOptions {
@@ -67,12 +70,25 @@ export interface GeoShapeOptions extends MapOptions {
   maxPoints?: number
 }
 
+export interface GeoPointsOptions extends MapOptions {
+  /** Fewest markers. Default: 1 (an empty list is saved as absent; use `.optional()` to allow it). */
+  minPoints?: number
+  maxPoints?: number
+  /** Give every marker an optional name, such as a branch or a stop. Default: false. */
+  labels?: boolean
+}
+
+/** A marker of a `geoPoints` field; `label` only exists with `labels: true`. */
+export interface GeoMarker extends GeoPoint {
+  label?: string
+}
+
 /** Editor options of a geo field, without `fieldType` (set by the helper). */
 export type GeoFieldConfig<O extends MapOptions = MapOptions> = Omit<CmsFieldConfig, 'fieldType' | 'customData'> & O
 
 /** Where geo fields keep their map options in AutoForm's `customData`. */
 export interface GeoCustomData {
-  map: GeoCircleOptions & GeoShapeOptions
+  map: GeoCircleOptions & GeoShapeOptions & GeoPointsOptions
 }
 
 const MAP_OPTION_KEYS = [
@@ -87,9 +103,11 @@ const MAP_OPTION_KEYS = [
   'maxRadius',
   'minPoints',
   'maxPoints',
+  'geocoder',
+  'labels',
 ] as const
 
-function splitConfig(config: GeoFieldConfig<GeoCircleOptions & GeoShapeOptions>, fieldType: string) {
+function splitConfig(config: GeoFieldConfig<GeoCustomData['map']>, fieldType: string) {
   const fieldConfig: Record<string, unknown> = {}
   const map: Record<string, unknown> = {}
   for (const [key, value] of Object.entries(config)) {
@@ -136,6 +154,22 @@ export function geoLine(config: GeoFieldConfig<GeoShapeOptions> = {}) {
 /** An area drawn on a map: an array of `{ lat, lng }` corners. The ring closes itself. */
 export function geoPolygon(config: GeoFieldConfig<GeoShapeOptions> = {}) {
   return shape(config, 'geopolygon', 3)
+}
+
+/**
+ * Several markers in one field, such as branches or stops: an array of `{ lat, lng }`, or of
+ * `{ lat, lng, label? }` with `labels: true`.
+ *
+ * ```ts
+ * branches: geoPoints({ label: 'Branches', labels: true, maxPoints: 20 }).optional()
+ * ```
+ */
+export function geoPoints(config: GeoFieldConfig<GeoPointsOptions> = {}) {
+  const min = config.minPoints ?? 1
+  const marker = config.labels ? pointShape().extend({ label: z.string().optional() }) : pointShape()
+  let markers = z.array(marker).min(min, min === 1 ? 'Add at least 1 marker' : `Add at least ${min} markers`)
+  if (config.maxPoints !== undefined) markers = markers.max(config.maxPoints, `Use at most ${config.maxPoints} markers`)
+  return markers.check(splitConfig({ ...config, minPoints: min }, 'geopoints'))
 }
 
 // --- Geometry ------------------------------------------------------------------------------------
@@ -265,23 +299,27 @@ export function isGeoPoint(value: unknown): value is GeoPoint {
 
 type GeoJSONGeometry =
   | { type: 'Point'; coordinates: [number, number] }
+  | { type: 'MultiPoint'; coordinates: Array<[number, number]> }
   | { type: 'LineString'; coordinates: Array<[number, number]> }
   | { type: 'Polygon'; coordinates: Array<Array<[number, number]>> }
 
 /**
  * Convert a geo field value to a GeoJSON geometry, for map libraries and geo databases. A circle
  * becomes its center point (GeoJSON has no circles); pass `{ polygon: true }` for a ring of points.
+ * Lists become a LineString, a Polygon with `{ polygon: true }`, or, for `geoPoints` markers, a
+ * MultiPoint with `{ multiPoint: true }` (labels are left out).
  */
 export function toGeoJSON(value: GeoPoint | GeoCircle, options?: { polygon?: false }): GeoJSONGeometry
 export function toGeoJSON(value: GeoCircle, options: { polygon: true; steps?: number }): GeoJSONGeometry
-export function toGeoJSON(value: readonly GeoPoint[], options?: { polygon?: boolean }): GeoJSONGeometry
+export function toGeoJSON(value: readonly GeoMarker[], options?: { polygon?: boolean; multiPoint?: boolean }): GeoJSONGeometry
 export function toGeoJSON(
   value: GeoPoint | GeoCircle | readonly GeoPoint[],
-  options: { polygon?: boolean; steps?: number } = {},
+  options: { polygon?: boolean; multiPoint?: boolean; steps?: number } = {},
 ): GeoJSONGeometry {
   const pair = (point: GeoPoint): [number, number] => [point.lng, point.lat]
   if (Array.isArray(value)) {
     const points = value as readonly GeoPoint[]
+    if (options.multiPoint) return { type: 'MultiPoint', coordinates: points.map(pair) }
     if (!options.polygon) return { type: 'LineString', coordinates: points.map(pair) }
     const ring = points.map(pair)
     if (ring.length > 0) ring.push(ring[0])

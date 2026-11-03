@@ -6,13 +6,16 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 
 | Content | Format | Features |
 | --- | --- | --- |
-| Blog posts | markdown | every built-in field type (text, textarea, date, select, number, checkboxes, a list, a nested object, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
+| Blog posts | markdown | every built-in field type (text, textarea, date, select, number, checkboxes, a list, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
 | Documentation | MDX | the site's own stylesheet in the preview (`previewStylesheets`) |
 | Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
 | Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
-| Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
+| Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon, a route line and labelled branch markers (`geoPoints`); address search on every map field through `mapDefaults={{ geocoder: nominatimGeocoder() }}` |
 | Events, Places (scheduling) | YAML | a date range (Git summer camp), a recurring series with an RRULE (CMS office hours), opening hours with a lunch break, hours past midnight and holidays (both places) |
-| Site settings, Homepage, Theme | JSON, markdown, YAML | singletons |
+| Flows | YAML | a graph field: a support decision tree and a publishing workflow, with node kinds (shapes), node and edge fields, canvas and list views |
+| Shows | YAML | date and time in a fixed time zone and in the editor's own, time, durations, money, a phone number, a slider, a read-only id and hidden import metadata, a custom preview using the formatting helpers |
+| Blog posts, Homepage | markdown | references: each post's author (one post points at an author that does not exist), up to three related posts in order, and a homepage highlight that can be a post or a doc (`{ collection, slug }`); deleting a referenced author lists the posts that use it |
+| Site settings, Homepage, Theme | JSON, markdown, YAML | singletons; the theme uses sliders |
 | Pricing, Navigation | YAML | a table of plans (spreadsheet-like grid with paste and CSV copy, a read-only list column) and a nested menu edited as an outline (`tree()`); event tickets use the table too |
 
 Editing happens in **changes** (`changes: true`): **New change** in the sidebar starts a branch, saves become commits there, and **Review & publish** lists what changed, opens a pull request and merges it. Inside a change, fields that differ from `main` are marked (with **Revert**), and the preview's **Changes** tab shows both versions rendered (**Before & after**) or as a source diff. The mock serves the branch, compare and pull request endpoints this needs.

@@ -4,6 +4,9 @@ import type { Collection, EntrySummary } from '../config.js'
 import { ChangeStatusBadge, ChangeSwitcher, ChangesView } from './ChangesView.js'
 import { ChangeReviewContext, CmsProvider, useChangeReview, useCms, useCmsState } from './context.js'
 import { DocumentEditor, type DocumentEditorProps } from './DocumentEditor.js'
+import { CmsNavigationProvider } from './navigation.js'
+import type { MapOptions } from '../geo.js'
+import { MapDefaultsProvider } from './map.js'
 import { errorMessage, useAsync, type AsyncState } from './use-async.js'
 
 export type CmsView =
@@ -25,7 +28,11 @@ export interface CmsAppProps {
   onViewChange?: (view: CmsView) => void
   uiComponents?: DocumentEditorProps['uiComponents']
   formComponents?: DocumentEditorProps['formComponents']
+  /** Options for every map field, such as `{ tiles, geocoder }`; a field's own options win. */
+  mapDefaults?: MapOptions
 }
+
+const NO_MAP_DEFAULTS = {}
 
 function firstView(cms: GitCms): CmsView | undefined {
   if (cms.collections[0]) return { type: 'collection', name: cms.collections[0].name }
@@ -58,27 +65,31 @@ export function CmsApp(props: CmsAppProps) {
   return (
     <CmsProvider cms={cms}>
       <ChangeReviewContext.Provider value={review}>
-      <div className="gcms-app">
-        <Sidebar title={props.title} footer={props.sidebarFooter} view={view} onNavigate={navigate} />
-        {view === undefined ? (
-          <main className="gcms-main gcms-empty">Configure a collection or singleton to start editing.</main>
-        ) : view.type === 'changes' ? (
-          <main className="gcms-main">
-            <ChangesView onOpen={open} />
-          </main>
-        ) : view.type === 'collection' ? (
-          <CollectionView {...props} view={view} onNavigate={navigate} />
-        ) : (
-          <main className="gcms-main">
-            <DocumentEditor
-              contentType={props.cms.getSingleton(view.name)}
-              renderPreview={props.previews?.[view.name]}
-              uiComponents={props.uiComponents}
-              formComponents={props.formComponents}
-            />
-          </main>
-        )}
-      </div>
+        <CmsNavigationProvider navigate={navigate}>
+          <MapDefaultsProvider value={props.mapDefaults ?? NO_MAP_DEFAULTS}>
+            <div className="gcms-app">
+              <Sidebar title={props.title} footer={props.sidebarFooter} view={view} onNavigate={navigate} />
+              {view === undefined ? (
+                <main className="gcms-main gcms-empty">Configure a collection or singleton to start editing.</main>
+              ) : view.type === 'changes' ? (
+                <main className="gcms-main">
+                  <ChangesView onOpen={open} />
+                </main>
+              ) : view.type === 'collection' ? (
+                <CollectionView {...props} view={view} onNavigate={navigate} />
+              ) : (
+                <main className="gcms-main">
+                  <DocumentEditor
+                    contentType={props.cms.getSingleton(view.name)}
+                    renderPreview={props.previews?.[view.name]}
+                    uiComponents={props.uiComponents}
+                    formComponents={props.formComponents}
+                  />
+                </main>
+              )}
+            </div>
+          </MapDefaultsProvider>
+        </CmsNavigationProvider>
       </ChangeReviewContext.Provider>
     </CmsProvider>
   )

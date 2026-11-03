@@ -153,7 +153,7 @@ hours:
     await act(async () => typeInto(container.querySelector<HTMLInputElement>('.gcms-hours-exception input[placeholder="Christmas"]')!, 'Christmas'))
 
     const saved = await save(remote)
-    expect(saved).toContain('hours:\n  mon:\n    - opens: 09:00\n      closes: 17:00\n  tue:\n')
+    expect(saved).toContain('hours:\n  mon:\n    - opens: "09:00"\n      closes: "17:00"\n  tue:\n')
     expect(saved).toContain('  sat: []\n  sun: []\n  exceptions:\n    - date: 2026-12-25\n      label: Christmas\n      hours: []\n')
   })
 

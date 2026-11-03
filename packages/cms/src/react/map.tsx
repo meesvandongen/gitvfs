@@ -1,6 +1,9 @@
 import {
+  createContext,
   useCallback,
+  useContext,
   useEffect,
+  useId,
   useLayoutEffect,
   useMemo,
   useRef,
@@ -8,6 +11,7 @@ import {
   type KeyboardEvent,
   type PointerEvent as ReactPointerEvent,
   type ReactNode,
+  type SetStateAction,
 } from 'react'
 import type { AutoFormFieldProps } from '@autoform/react'
 import {
@@ -28,14 +32,13 @@ import {
   wrapLongitude,
   type GeoCircle,
   type GeoCustomData,
+  type GeoMarker,
   type GeoPoint,
+  type MapOptions,
   type MapTiles,
 } from '../geo.js'
-import { NestedErrors } from './field-utils.js'
-
-// Not imported from ./autoform.js, which imports this module for its field components.
-const useField = (name: string) => useFieldRHF({ name }).field
-import { useFieldRHF } from '@autoform/react/react-hook-form'
+import type { GeocodeResult, Geocoder } from '../geocode.js'
+import { NestedErrors, useField, useReadOnly } from './field-utils.js'
 
 export interface MapView {
   center: GeoPoint
@@ -71,6 +74,8 @@ export interface SlippyMapProps {
   height?: number
   /** Accessible name of the map. */
   label?: string
+  /** Called with the measured size of the map, for fitting views to it. */
+  onSizeChange?: (size: { width: number; height: number }) => void
   /** SVG content drawn over the tiles. */
   children?: (helpers: MapOverlayHelpers) => ReactNode
 }
@@ -79,6 +84,8 @@ const MIN_ZOOM = 1
 /** Used until the element is measured, and where layout is not available (tests, SSR). */
 const FALLBACK_WIDTH = 600
 const DRAG_THRESHOLD = 4
+const noop = () => {}
+const READ_ONLY_HANDLERS = { onPointerDown: noop, onPointerMove: noop, onPointerUp: noop, onClick: noop }
 
 function tileUrl(tiles: MapTiles, z: number, x: number, y: number): string {
   const subdomains = tiles.subdomains ?? []
@@ -94,11 +101,17 @@ function clampZoom(zoom: number, tiles: MapTiles) {
  * A dependency-free raster map: tiles, drag to pan, buttons, Ctrl/⌘ + scroll and keys to zoom, and an
  * SVG overlay for markers and shapes. Zoom levels are whole numbers, so tiles stay sharp.
  */
-export function SlippyMap({ view, onViewChange, onMapClick, tiles = OSM_TILES, height = 320, label = 'Map', children }: SlippyMapProps) {
+export function SlippyMap({ view, onViewChange, onMapClick, tiles = OSM_TILES, height = 320, label = 'Map', onSizeChange, children }: SlippyMapProps) {
   const element = useRef<HTMLDivElement | null>(null)
   const [width, setWidth] = useState(FALLBACK_WIDTH)
   const [hint, setHint] = useState(false)
+  // A read-only field still pans and zooms, but clicks and drags change nothing.
+  const readOnly = useReadOnly()
   const size = useMemo(() => ({ width, height }), [width, height])
+
+  const reportSize = useRef(onSizeChange)
+  reportSize.current = onSizeChange
+  useEffect(() => reportSize.current?.(size), [size])
 
   useLayoutEffect(() => {
     const node = element.current
@@ -208,10 +221,10 @@ export function SlippyMap({ view, onViewChange, onMapClick, tiles = OSM_TILES, h
     if (!state || state.id !== event.pointerId) return
     pan.current = null
     event.currentTarget.releasePointerCapture?.(event.pointerId)
-    if (!state.moved && onMapClick) onMapClick(toPoint(localPixel(event)))
+    if (!state.moved && onMapClick && !readOnly) onMapClick(toPoint(localPixel(event)))
   }
 
-  const draggable: MapOverlayHelpers['draggable'] = (onDrag) => ({
+  const draggable: MapOverlayHelpers['draggable'] = (onDrag) => readOnly ? READ_ONLY_HANDLERS : ({
     onPointerDown: (event) => {
       if (event.button !== 0) return
       event.stopPropagation()
@@ -351,8 +364,26 @@ export function fitView(
 
 // --- Fields --------------------------------------------------------------------------------------
 
-function mapOptions(props: AutoFormFieldProps): GeoCustomData['map'] {
-  return (props.parsedField.fieldConfig?.customData as GeoCustomData | undefined)?.map ?? {}
+type FieldMapOptions = GeoCustomData['map']
+
+const MapDefaultsContext = createContext<MapOptions>({})
+
+/**
+ * Map options for every map field inside, such as `tiles` and `geocoder`, so they are set once
+ * instead of per field. A field's own options win. `CmsApp` sets it from its `mapDefaults` prop.
+ */
+export function MapDefaultsProvider({ value, children }: { value: MapOptions; children?: ReactNode }) {
+  const outer = useContext(MapDefaultsContext)
+  const merged = useMemo(() => ({ ...outer, ...value }), [outer, value])
+  return <MapDefaultsContext.Provider value={merged}>{children}</MapDefaultsContext.Provider>
+}
+
+function useMapOptions(props: AutoFormFieldProps): FieldMapOptions {
+  const defaults = useContext(MapDefaultsContext)
+  const own = (props.parsedField.fieldConfig?.customData as GeoCustomData | undefined)?.map ?? {}
+  const merged: Record<string, unknown> = { ...defaults }
+  for (const [key, value] of Object.entries(own)) if (value !== undefined) merged[key] = value
+  return merged as FieldMapOptions
 }
 
 /** A text input for one number that lets people type freely (`-`, `52.`) and reports finite values. */
@@ -410,28 +441,247 @@ function NumberInput({
   )
 }
 
-function useMapView(points: readonly GeoPoint[], options: GeoCustomData['map'], padding?: number) {
-  const [view, setView] = useState<MapView>(() =>
-    fitView(points, { width: FALLBACK_WIDTH, height: options.height ?? 320 }, {
-      ...options,
-      maxZoom: options.tiles?.maxZoom,
-      padding,
-    }),
-  )
-  return [view, setView] as const
+/**
+ * The view of a field's map. It opens fitted to the value, and keeps fitting it to the map's
+ * measured width until the user moves the map (the first fit can only guess the width).
+ */
+function useMapView(points: readonly GeoPoint[], options: FieldMapOptions, padding?: number) {
+  const size = useRef({ width: FALLBACK_WIDTH, height: options.height ?? 320 })
+  const moved = useRef(false)
+  const fitOptions = { center: options.center, zoom: options.zoom, pointZoom: options.pointZoom, maxZoom: options.tiles?.maxZoom }
+  const [view, setFitted] = useState<MapView>(() => fitView(points, size.current, { ...fitOptions, padding }))
+  const latest = useRef({ points, padding, fitOptions })
+  latest.current = { points, padding, fitOptions }
+
+  const setView = useCallback((next: SetStateAction<MapView>) => {
+    moved.current = true
+    setFitted(next)
+  }, [])
+  const onSizeChange = useCallback((measured: { width: number; height: number }) => {
+    size.current = measured
+    const { points: current, padding: currentPadding, fitOptions: currentOptions } = latest.current
+    if (!moved.current) setFitted(fitView(current, measured, { ...currentOptions, padding: currentPadding }))
+  }, [])
+  /** Show `targets`, with `around` meters of room. */
+  const fit = (targets: readonly GeoPoint[], around?: number) => setView(fitView(targets, size.current, { ...fitOptions, padding: around }))
+  /** Show a search result: its whole extent when known. */
+  const show = (place: GeocodeResult) =>
+    place.bounds
+      ? fit([
+          { lat: place.bounds.south, lng: place.bounds.west },
+          { lat: place.bounds.north, lng: place.bounds.east },
+        ])
+      : fit([place])
+  return { view, setView, onSizeChange, fit, show }
 }
+
+type FieldMapView = ReturnType<typeof useMapView>
+
+/** Searches only bias towards the map's area once the user has zoomed in on a region. */
+const nearby = (view: MapView) => (view.zoom >= 5 ? view.center : undefined)
 
 function round(point: GeoPoint, decimals?: number): GeoPoint {
   return { lat: roundCoordinate(point.lat, decimals), lng: roundCoordinate(wrapLongitude(point.lng), decimals) }
 }
 
-function Marker({ point, helpers, label, onMove }: { point: GeoPoint; helpers: MapOverlayHelpers; label: string; onMove?: (point: GeoPoint) => void }) {
+function FieldMap({
+  props,
+  options,
+  map,
+  onMapClick,
+  children,
+}: {
+  props: AutoFormFieldProps
+  options: FieldMapOptions
+  map: FieldMapView
+  onMapClick?: (point: GeoPoint) => void
+  children: SlippyMapProps['children']
+}) {
+  return (
+    <SlippyMap
+      view={map.view}
+      onViewChange={map.setView}
+      onSizeChange={map.onSizeChange}
+      tiles={options.tiles}
+      height={options.height}
+      label={typeof props.label === 'string' ? props.label : 'Map'}
+      onMapClick={onMapClick}
+    >
+      {children}
+    </SlippyMap>
+  )
+}
+
+type SearchState =
+  | { status: 'idle' }
+  | { status: 'busy' }
+  | { status: 'done'; results: GeocodeResult[] }
+  | { status: 'error'; message: string }
+
+/**
+ * Address search: a combobox whose results open in a listbox. It searches on Enter or the button
+ * only, as services such as Nominatim forbid searching on every keystroke.
+ */
+function GeoSearch({ id, geocoder, near, onPick }: { id: string; geocoder: Geocoder; near?: GeoPoint; onPick: (result: GeocodeResult) => void }) {
+  const listId = useId()
+  const [query, setQuery] = useState('')
+  const [state, setState] = useState<SearchState>({ status: 'idle' })
+  const [open, setOpen] = useState(false)
+  const [active, setActive] = useState(-1)
+  const controller = useRef<AbortController | null>(null)
+  useEffect(() => () => controller.current?.abort(), [])
+
+  const results = state.status === 'done' ? state.results : []
+  const expanded = open && results.length > 0
+
+  const search = async () => {
+    const text = query.trim()
+    if (text === '') return
+    controller.current?.abort()
+    const current = new AbortController()
+    controller.current = current
+    setState({ status: 'busy' })
+    setActive(-1)
+    setOpen(true)
+    try {
+      const found = await geocoder(text, { signal: current.signal, near })
+      if (!current.signal.aborted) setState({ status: 'done', results: found })
+    } catch (error) {
+      if (!current.signal.aborted) setState({ status: 'error', message: error instanceof Error ? error.message : String(error) })
+    }
+  }
+
+  const choose = (result: GeocodeResult) => {
+    setOpen(false)
+    onPick(result)
+  }
+
+  const onKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    const step = (by: number) => {
+      event.preventDefault()
+      setOpen(true)
+      setActive((current) => (current + by + results.length) % results.length)
+    }
+    if (event.key === 'Enter') {
+      // Enter would otherwise submit the whole form.
+      event.preventDefault()
+      if (expanded && results[active]) choose(results[active])
+      else void search()
+    } else if (event.key === 'ArrowDown' && results.length > 0) step(1)
+    else if (event.key === 'ArrowUp' && results.length > 0) step(active < 0 ? 0 : -1)
+    else if (event.key === 'Escape' && open) {
+      event.preventDefault()
+      setOpen(false)
+    }
+  }
+
+  const status =
+    state.status === 'busy'
+      ? 'Searching…'
+      : state.status === 'error'
+        ? state.message
+        : state.status === 'done'
+          ? results.length === 0
+            ? 'No places found.'
+            : `${results.length} ${results.length === 1 ? 'place' : 'places'} found. Use the arrow keys and Enter to choose.`
+          : ''
+
+  return (
+    <div
+      className="gcms-map-search"
+      onBlur={(event) => {
+        if (!event.currentTarget.contains(event.relatedTarget as Node | null)) setOpen(false)
+      }}
+    >
+      <div className="gcms-map-search-row">
+        <input
+          id={`${id}-search`}
+          type="search"
+          className="gcms-input"
+          role="combobox"
+          aria-label="Search for a place or address"
+          aria-autocomplete="none"
+          aria-expanded={expanded}
+          aria-controls={expanded ? listId : undefined}
+          aria-activedescendant={expanded && active >= 0 ? `${listId}-${active}` : undefined}
+          placeholder="Search for a place or address"
+          autoComplete="off"
+          value={query}
+          onChange={(event) => {
+            setQuery(event.target.value)
+            setOpen(false)
+          }}
+          onKeyDown={onKeyDown}
+        />
+        <button type="button" className="gcms-button gcms-button--small" disabled={state.status === 'busy'} onClick={() => void search()}>
+          Search
+        </button>
+      </div>
+      {open ? (
+        // Keep focus in the input while choosing with the mouse.
+        <div className="gcms-map-search-popup" onMouseDown={(event) => event.preventDefault()}>
+          {expanded ? (
+            <ul className="gcms-map-search-results" role="listbox" id={listId} aria-label="Search results">
+              {results.map((result, index) => (
+                <li
+                  key={`${index}:${result.label}`}
+                  id={`${listId}-${index}`}
+                  role="option"
+                  aria-selected={index === active}
+                  onMouseEnter={() => setActive(index)}
+                  onClick={() => choose(result)}
+                >
+                  {result.label}
+                </li>
+              ))}
+            </ul>
+          ) : (
+            <p className={`gcms-map-search-status${state.status === 'error' ? ' gcms-error' : ''}`}>{status}</p>
+          )}
+          {expanded && geocoder.attribution ? <p className="gcms-map-search-credit">{geocoder.attribution}</p> : null}
+        </div>
+      ) : null}
+      <span className="gcms-map-search-live" role="status">
+        {open ? status : ''}
+      </span>
+    </div>
+  )
+}
+
+function Marker({
+  point,
+  helpers,
+  label,
+  onMove,
+  badge,
+  caption,
+}: {
+  point: GeoPoint
+  helpers: MapOverlayHelpers
+  label: string
+  onMove?: (point: GeoPoint) => void
+  /** Short text in the head of the pin, such as its number. */
+  badge?: string
+  /** Text next to the pin. */
+  caption?: string
+}) {
   const { x, y } = helpers.toPixel(point)
   return (
     <g className={`gcms-map-marker${onMove ? ' gcms-map-draggable' : ''}`} transform={`translate(${x} ${y})`} {...(onMove ? helpers.draggable(onMove) : {})}>
       <title>{label}</title>
       <path d="M0 0 C -3 -9 -11 -13 -11 -21 A 11 11 0 1 1 11 -21 C 11 -13 3 -9 0 0 Z" />
-      <circle cy={-21} r={4} />
+      {badge === undefined ? (
+        <circle cy={-21} r={4} />
+      ) : (
+        <text className="gcms-map-marker-badge" y={-21} textAnchor="middle" dominantBaseline="central">
+          {badge}
+        </text>
+      )}
+      {caption ? (
+        <text className="gcms-map-marker-caption" x={14} y={-21} dominantBaseline="central">
+          {caption}
+        </text>
+      ) : null}
     </g>
   )
 }
@@ -508,31 +758,35 @@ function PointControls({
   )
 }
 
-/** Picks one coordinate: click the map or drag the marker, type or paste `lat, lng`, or use the device location. */
+/** Picks one coordinate: click the map or drag the marker, search, type or paste `lat, lng`, or use the device location. */
 export function GeoPointField(props: AutoFormFieldProps) {
   const field = useField(props.id)
-  const options = mapOptions(props)
+  const options = useMapOptions(props)
   const value = (field.value ?? undefined) as Partial<GeoPoint> | undefined
   const point = isGeoPoint(value) ? value : undefined
-  const [view, setView] = useMapView(point ? [point] : [], options)
+  const map = useMapView(point ? [point] : [], options)
 
   const set = (next: Partial<GeoPoint>, follow = false) => {
     field.onChange(next)
-    if (follow && isGeoPoint(next)) setView((current) => ({ center: next, zoom: Math.max(current.zoom, options.pointZoom ?? 15) }))
+    if (follow && isGeoPoint(next)) map.setView((current) => ({ center: next, zoom: Math.max(current.zoom, options.pointZoom ?? 15) }))
   }
 
   return (
     <div className="gcms-geo" tabIndex={-1} ref={field.ref as never}>
-      <SlippyMap
-        view={view}
-        onViewChange={setView}
-        tiles={options.tiles}
-        height={options.height}
-        label={typeof props.label === 'string' ? props.label : 'Map'}
-        onMapClick={(clicked) => set(round(clicked, options.decimals))}
-      >
+      {options.geocoder ? (
+        <GeoSearch
+          id={props.id}
+          geocoder={options.geocoder}
+          near={nearby(map.view)}
+          onPick={(place) => {
+            field.onChange(round(place, options.decimals))
+            map.show(place)
+          }}
+        />
+      ) : null}
+      <FieldMap props={props} options={options} map={map} onMapClick={(clicked) => set(round(clicked, options.decimals))}>
         {(helpers) => (point ? <Marker point={point} helpers={helpers} label="Drag to move" onMove={(moved) => set(round(moved, options.decimals))} /> : null)}
-      </SlippyMap>
+      </FieldMap>
       <p className="gcms-map-help">{point ? 'Drag the marker or click elsewhere to move it.' : 'Click the map to place a marker, or type or paste coordinates.'}</p>
       <PointControls
         id={props.id}
@@ -552,10 +806,10 @@ export function GeoPointField(props: AutoFormFieldProps) {
 /** A point with a range: click to place the center, drag the edge handle or use the slider to resize. */
 export function GeoCircleField(props: AutoFormFieldProps) {
   const field = useField(props.id)
-  const options = mapOptions(props)
+  const options = useMapOptions(props)
   const value = (field.value ?? undefined) as Partial<GeoCircle> | undefined
   const circle = isGeoPoint(value) && Number.isFinite((value as Partial<GeoCircle>).radius) ? (value as GeoCircle) : undefined
-  const [view, setView] = useMapView(circle ? [circle] : isGeoPoint(value) ? [value] : [], options, circle?.radius)
+  const map = useMapView(circle ? [circle] : isGeoPoint(value) ? [value] : [], options, circle?.radius)
 
   const min = options.minRadius ?? 0
   const max = options.maxRadius
@@ -567,14 +821,20 @@ export function GeoCircleField(props: AutoFormFieldProps) {
 
   return (
     <div className="gcms-geo" tabIndex={-1} ref={field.ref as never}>
-      <SlippyMap
-        view={view}
-        onViewChange={setView}
-        tiles={options.tiles}
-        height={options.height}
-        label={typeof props.label === 'string' ? props.label : 'Map'}
-        onMapClick={place}
-      >
+      {options.geocoder ? (
+        <GeoSearch
+          id={props.id}
+          geocoder={options.geocoder}
+          near={nearby(map.view)}
+          onPick={(found) => {
+            const radius = value?.radius ?? defaultRadius
+            set({ ...round(found, options.decimals), radius })
+            // Show the range, which matters more here than the extent of the place.
+            map.fit([found], radius)
+          }}
+        />
+      ) : null}
+      <FieldMap props={props} options={options} map={map} onMapClick={place}>
         {(helpers) => {
           if (!circle) return null
           const center = helpers.toPixel(circle)
@@ -588,7 +848,7 @@ export function GeoCircleField(props: AutoFormFieldProps) {
             </>
           )
         }}
-      </SlippyMap>
+      </FieldMap>
       <p className="gcms-map-help">
         {circle ? 'Drag the marker to move the center, or the handle on the edge to change the radius.' : 'Click the map to place the center.'}
       </p>
@@ -620,62 +880,99 @@ export function GeoCircleField(props: AutoFormFieldProps) {
   )
 }
 
-function GeoShapeField(props: AutoFormFieldProps & { closed: boolean }) {
+type ListKind = 'line' | 'polygon' | 'points'
+
+const NOUNS: Record<ListKind, string> = { line: 'point', polygon: 'corner', points: 'marker' }
+
+/** `label` set to `text`, or removed when blank, so files do not collect `label: ''`. */
+function withLabel(point: Partial<GeoMarker>, text: string): Partial<GeoMarker> {
+  const next = { ...point }
+  if (text === '') delete next.label
+  else next.label = text
+  return next
+}
+
+/** Lists of coordinates: the points of a line, the corners of a polygon, or separate markers. */
+function GeoListField(props: AutoFormFieldProps & { kind: ListKind }) {
+  const { kind } = props
   const field = useField(props.id)
-  const options = mapOptions(props)
-  const points: Array<Partial<GeoPoint>> = Array.isArray(field.value) ? field.value : []
+  const options = useMapOptions(props)
+  const points: Array<Partial<GeoMarker>> = Array.isArray(field.value) ? field.value : []
   const complete = points.filter(isGeoPoint)
-  const [view, setView] = useMapView(complete, options)
+  const map = useMapView(complete, options)
   const max = options.maxPoints
   const full = max !== undefined && points.length >= max
+  const labels = kind === 'points' && options.labels === true
+  const noun = NOUNS[kind]
 
-  const set = (next: Array<Partial<GeoPoint>>) => field.onChange(next)
-  const update = (index: number, point: Partial<GeoPoint>) => set(points.map((current, at) => (at === index ? point : current)))
+  // An empty list is saved as absent, so clearing an optional field does not fail its minimum.
+  const set = (next: Array<Partial<GeoMarker>>) => field.onChange(next.length > 0 ? next : undefined)
+  const update = (index: number, point: Partial<GeoMarker>) => set(points.map((current, at) => (at === index ? point : current)))
+  const move = (index: number, point: GeoPoint) => update(index, { ...points[index], ...round(point, options.decimals) })
   const remove = (index: number) => set(points.filter((_, at) => at !== index))
-  const noun = props.closed ? 'corner' : 'point'
+  const add = (point: GeoPoint) => set([...points, round(point, options.decimals)])
+
+  const measure =
+    kind === 'points' || complete.length < 2
+      ? ''
+      : kind === 'polygon' && complete.length > 2
+        ? `Area ${formatArea(polygonArea(complete))}, perimeter ${formatDistance(pathLength([...complete, complete[0]]))}.`
+        : `Length ${formatDistance(pathLength(complete))}.`
 
   return (
     <div className="gcms-geo" tabIndex={-1} ref={field.ref as never}>
-      <SlippyMap
-        view={view}
-        onViewChange={setView}
-        tiles={options.tiles}
-        height={options.height}
-        label={typeof props.label === 'string' ? props.label : 'Map'}
-        onMapClick={full ? undefined : (point) => set([...points, round(point, options.decimals)])}
-      >
+      {options.geocoder ? (
+        <GeoSearch
+          id={props.id}
+          geocoder={options.geocoder}
+          near={nearby(map.view)}
+          onPick={(place) => {
+            // A found place becomes a marker; for lines and polygons it only shows where to draw.
+            if (kind === 'points' && !full) add(place)
+            map.show(place)
+          }}
+        />
+      ) : null}
+      <FieldMap props={props} options={options} map={map} onMapClick={full ? undefined : add}>
         {(helpers) => {
+          if (kind === 'points') {
+            return points.map(({ label, ...point }, index) =>
+              isGeoPoint(point) ? (
+                <Marker
+                  key={index}
+                  point={point}
+                  helpers={helpers}
+                  badge={String(index + 1)}
+                  caption={label}
+                  label={`${label || `Marker ${index + 1}`}: drag to move`}
+                  onMove={(moved) => move(index, moved)}
+                />
+              ) : null,
+            )
+          }
           const pixels = complete.map((point) => helpers.toPixel(point))
           const path = pixels.map((pixel) => `${pixel.x},${pixel.y}`).join(' ')
           return (
             <>
               {pixels.length > 1 ? (
-                props.closed ? <polygon className="gcms-map-shape" points={path} /> : <polyline className="gcms-map-shape gcms-map-line" points={path} />
+                kind === 'polygon' ? <polygon className="gcms-map-shape" points={path} /> : <polyline className="gcms-map-shape gcms-map-line" points={path} />
               ) : null}
               {points.map((point, index) =>
                 isGeoPoint(point) ? (
-                  <Vertex
-                    key={index}
-                    point={point}
-                    helpers={helpers}
-                    label={`${noun} ${index + 1}: drag to move`}
-                    onMove={(moved) => update(index, round(moved, options.decimals))}
-                  />
+                  <Vertex key={index} point={point} helpers={helpers} label={`${noun} ${index + 1}: drag to move`} onMove={(moved) => move(index, moved)} />
                 ) : null,
               )}
             </>
           )
         }}
-      </SlippyMap>
+      </FieldMap>
       <p className="gcms-map-help">
-        {full ? `The maximum of ${max} ${noun}s is reached.` : `Click the map to add a ${noun}; drag ${noun}s to move them.`}{' '}
-        {complete.length > 1
-          ? props.closed && complete.length > 2
-            ? `Area ${formatArea(polygonArea(complete))}, perimeter ${formatDistance(pathLength([...complete, complete[0]]))}.`
-            : `Length ${formatDistance(pathLength(complete))}.`
-          : ''}
+        {full ? `The maximum of ${max} ${noun}s is reached.` : `Click the map to add a ${noun}; drag ${noun}s to move them.`} {measure}
       </p>
       <div className="gcms-map-actions">
+        <button type="button" className="gcms-button gcms-button--small" disabled={complete.length === 0} onClick={() => map.fit(complete)}>
+          Show all
+        </button>
         <button type="button" className="gcms-button gcms-button--small" disabled={points.length === 0} onClick={() => set(points.slice(0, -1))}>
           Remove last {noun}
         </button>
@@ -683,7 +980,8 @@ function GeoShapeField(props: AutoFormFieldProps & { closed: boolean }) {
           Clear
         </button>
       </div>
-      <details className="gcms-map-points">
+      {/* Markers are mostly edited in the list (their labels), so it starts open for them. */}
+      <details className="gcms-map-points" open={kind === 'points' || undefined}>
         <summary>
           {points.length} {noun}
           {points.length === 1 ? '' : 's'}
@@ -691,14 +989,26 @@ function GeoShapeField(props: AutoFormFieldProps & { closed: boolean }) {
         <ol>
           {points.map((point, index) => (
             <li key={index}>
+              {labels ? (
+                <label className="gcms-map-number gcms-map-label">
+                  <span>Label</span>
+                  <input
+                    className="gcms-input"
+                    autoComplete="off"
+                    id={index === 0 ? props.id : undefined}
+                    value={point.label ?? ''}
+                    onChange={(event) => update(index, withLabel(point, event.target.value))}
+                  />
+                </label>
+              ) : null}
               <NumberInput
-                id={index === 0 ? props.id : undefined}
+                id={index === 0 && !labels ? props.id : undefined}
                 label="Lat"
                 value={point.lat}
                 onChange={(lat) => update(index, { ...point, lat })}
-                onPastePair={(pair) => update(index, round(pair, options.decimals))}
+                onPastePair={(pair) => move(index, pair)}
               />
-              <NumberInput label="Lng" value={point.lng} onChange={(lng) => update(index, { ...point, lng })} onPastePair={(pair) => update(index, round(pair, options.decimals))} />
+              <NumberInput label="Lng" value={point.lng} onChange={(lng) => update(index, { ...point, lng })} onPastePair={(pair) => move(index, pair)} />
               <button type="button" className="gcms-button gcms-button--ghost gcms-button--small" aria-label={`Remove ${noun} ${index + 1}`} onClick={() => remove(index)}>
                 Remove
               </button>
@@ -706,7 +1016,7 @@ function GeoShapeField(props: AutoFormFieldProps & { closed: boolean }) {
           ))}
         </ol>
         {full ? null : (
-          <button type="button" className="gcms-button gcms-button--small" onClick={() => set([...points, { ...round(view.center, options.decimals) }])}>
+          <button type="button" className="gcms-button gcms-button--small" onClick={() => add(map.view.center)}>
             Add {noun} at map center
           </button>
         )}
@@ -718,10 +1028,16 @@ function GeoShapeField(props: AutoFormFieldProps & { closed: boolean }) {
 
 /** A path, such as a route: click to add points, drag them to move. */
 export function GeoLineField(props: AutoFormFieldProps) {
-  return <GeoShapeField {...props} closed={false} />
+  return <GeoListField {...props} kind="line" />
 }
 
 /** An area: click to add corners, drag them to move. */
 export function GeoPolygonField(props: AutoFormFieldProps) {
-  return <GeoShapeField {...props} closed />
+  return <GeoListField {...props} kind="polygon" />
 }
+
+/** Several markers: click to add, drag to move, and name them in the list when `labels` is on. */
+export function GeoPointsField(props: AutoFormFieldProps) {
+  return <GeoListField {...props} kind="points" />
+}
+
