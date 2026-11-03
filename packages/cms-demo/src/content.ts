@@ -13,6 +13,8 @@ import {
   markdown,
   money,
   phone,
+  reference,
+  references,
   slider,
   table,
   textarea,
@@ -38,12 +40,15 @@ export const posts = defineCollection({
     readingTime: z.number().int().min(1).max(120).optional().check(field({ label: 'Reading time (minutes)' })),
     featured: z.boolean().default(false).check(field({ label: 'Featured on the homepage' })),
     draft: z.boolean().default(false).check(field({ label: 'Draft', description: 'Hidden from the site' })),
-    author: z
-      .object({
-        name: z.string().min(1).check(field({ label: 'Name' })),
-        url: z.url().optional().check(field({ label: 'Website' })),
-      })
-      .check(field({ label: 'Author' })),
+    // References store the slug of an entry of another collection: `author: ada-lovelace`.
+    author: reference({ collection: 'authors', label: 'Author', display: ['role'] }),
+    relatedPosts: references({
+      collection: 'posts',
+      label: 'Related posts',
+      description: 'Up to three, in the order they are shown',
+      max: 3,
+      display: ['category', 'date'],
+    }).default([]),
     body: z.string().check(markdown({ label: 'Content' })).default(''),
   }),
   // Newest first; the default sorts by label.
@@ -205,6 +210,8 @@ export const homepage = defineSingleton({
     title: z.string().min(1),
     subtitle: z.string().check(textarea()).optional(),
     cta: z.object({ label: z.string().min(1), href: z.string().min(1) }).check(field({ label: 'Call to action' })),
+    // A reference to one of several collections stores `{ collection, slug }`.
+    highlight: reference({ collection: ['posts', 'docs'], label: 'Highlighted entry' }).optional(),
     body: z.string().check(markdown()).default(''),
   }),
 })
@@ -280,9 +287,10 @@ tags:
 readingTime: 3
 featured: true
 draft: false
-author:
-  name: Ada Lovelace
-  url: https://example.com/ada
+author: ada-lovelace
+relatedPosts:
+  - editing-frontmatter
+  - release-notes-0-2
 ---
 
 Every entry in this demo is a file in a Git repository. The editor on the left is generated from a
@@ -305,8 +313,7 @@ tags:
   - frontmatter
 layout: wide
 canonical: https://example.com/original
-author:
-  name: Grace Hopper
+author: grace-hopper
 ---
 
 This file has \`layout\` and \`canonical\` keys that the schema does not describe. Edit and save the
@@ -318,12 +325,14 @@ title: A post that needs fixing
 date: 2026-09-01
 category: tutorials
 tags: []
-author:
-  name: Alan Turing
+author: alan-turing
 ---
 
 The stored category, \`tutorials\`, is not one of the allowed options. The editor still opens the
 file and lists what does not match the schema; pick a valid category and save to fix it.
+
+The author, \`alan-turing\`, is not in the Authors collection either. That is a warning rather than
+an error, since the author may simply not be committed yet.
 `,
   'content/posts/release-notes-0-2.md': `---
 title: Release notes 0.2
@@ -333,8 +342,7 @@ tags:
   - release
 readingTime: 1
 draft: true
-author:
-  name: Ada Lovelace
+author: ada-lovelace
 ---
 
 ### Added
@@ -498,6 +506,9 @@ subtitle: Edit this homepage, a markdown singleton with frontmatter.
 cta:
   label: Read the blog
   href: /blog
+highlight:
+  collection: posts
+  slug: welcome-to-gitvfs-cms
 ---
 
 Welcome! This body is markdown too.
@@ -574,8 +585,7 @@ category: news
 tags:
   - labs
 featured: true
-author:
-  name: Grace Hopper
+author: grace-hopper
 ---
 
 This post lives in a different repository, **acme/labs**. You opened it with the repository

@@ -143,5 +143,28 @@ export {
   updateNode,
 } from './tree.js'
 export type { FlatTreeNode, TreeChange, TreeConfig, TreeCustomData, TreeNode, TreeOptions, TreePath } from './tree.js'
+export {
+  describeReferences,
+  displayText,
+  findReferences,
+  isReferenceValue,
+  matchesQuery,
+  reference,
+  referenceFields,
+  referenceKey,
+  referencesIn,
+  references,
+  toReferenceValues,
+} from './references.js'
+export type {
+  ReferenceCustomData,
+  ReferenceDisplay,
+  ReferenceField,
+  ReferenceFieldConfig,
+  ReferenceOptions,
+  ReferenceSource,
+  ReferenceValue,
+  ReferencesOptions,
+} from './references.js'
 export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
 export type { DiffLine } from './changes.js'

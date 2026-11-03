@@ -23,6 +23,8 @@ export type CmsFieldType =
   | 'phone'
   | 'table'
   | 'tree'
+  | 'reference'
+  | 'references'
 
 export type CmsFieldConfig = FieldConfig<null, CmsFieldType | (string & {})> & {
   /** Show the value without letting it be edited, such as an id or a computed value. */

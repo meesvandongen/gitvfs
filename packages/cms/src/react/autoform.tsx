@@ -22,6 +22,7 @@ import { PhoneField } from './phone.js'
 import { SliderField } from './slider.js'
 import { TableField } from './table.js'
 import { TreeField } from './tree.js'
+import { ReferenceField, ReferencesField } from './references.js'
 import { FieldChange } from './field-changes.js'
 
 /**
@@ -388,6 +389,8 @@ export const formComponents: AutoFormFieldComponents = {
   phone: PhoneField,
   table: TableField,
   tree: TreeField,
+  reference: ReferenceField,
+  references: ReferencesField,
   fallback: StringField,
 }
 
