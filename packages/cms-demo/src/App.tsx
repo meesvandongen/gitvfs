@@ -1,16 +1,21 @@
 import { useMemo, useState, useSyncExternalStore } from 'react'
 import { GitVFS } from 'gitvfs'
 import { github } from 'gitvfs/providers/github'
-import { createCms } from 'gitvfs-cms'
+import { createCms, nominatimGeocoder, type MapOptions } from 'gitvfs-cms'
 import { CmsApp, RepositoryPicker } from 'gitvfs-cms/react'
 import type { MockRepository } from 'gitvfs-github-msw'
 import { CodeMirrorField } from 'gitvfs-cms/codemirror'
 import { MermaidField } from 'gitvfs-cms/mermaid'
 import { ColorField } from './ColorField'
 import { collections, singletons } from './content'
-import { AuthorPreview, EventPreview } from './previews'
+import { AuthorPreview, EventPreview, ShowPreview } from './previews'
 
 const DOCS_URL = 'https://docs.gitvfs.mvd.im/docs/cms'
+
+// Address search on every map field, through OpenStreetMap's public Nominatim instance: searches
+// run on Enter only, at most one per second, and repeated ones come from a cache, as its usage
+// policy asks (https://operations.osmfoundation.org/policies/nominatim/).
+const mapDefaults: MapOptions = { geocoder: nominatimGeocoder({ language: 'en' }) }
 
 // Both optional subpaths: CodeMirror for code fields, and live Mermaid previews (in the field and
 // for ```mermaid blocks in markdown). Mermaid fields keep the built-in editor, so the demo shows
@@ -118,7 +123,8 @@ export function App({ repositories, subscribe, reset }: AppProps) {
             cms={cms}
             title="Acme content"
             formComponents={formComponents}
-            previews={{ authors: AuthorPreview, events: EventPreview }}
+            mapDefaults={mapDefaults}
+            previews={{ authors: AuthorPreview, events: EventPreview, shows: ShowPreview }}
             sidebarFooter={
               <div className="demo-history">
                 <div className="demo-repository">

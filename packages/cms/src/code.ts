@@ -98,13 +98,13 @@ export function codeBlock(config: CodeFieldConfig<Omit<CodeOptions, 'language'> 
 }
 
 /** Options of a mermaid field: those of a code field, without the language. */
-export type MermaidOptions = Omit<CodeOptions, 'language'>
+export type MermaidCodeOptions = Omit<CodeOptions, 'language'>
 
 /**
  * A [Mermaid](https://mermaid.js.org) diagram, stored as its source text, edited with a live
  * preview. The preview needs `gitvfs-cms/mermaid`; see the docs.
  */
-export function mermaid(config: CodeFieldConfig<MermaidOptions> = {}) {
+export function mermaid(config: CodeFieldConfig<MermaidCodeOptions> = {}) {
   return z.string().check(splitConfig(config, CODE_OPTION_KEYS, 'mermaid', { language: 'mermaid' }))
 }
 

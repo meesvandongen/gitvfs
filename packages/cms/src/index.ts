@@ -42,6 +42,7 @@ export {
   geoCircle,
   geoLine,
   geoPoint,
+  geoPoints,
   geoPolygon,
   isGeoPoint,
   metersPerPixel,
@@ -59,11 +60,15 @@ export type {
   GeoCircleOptions,
   GeoCustomData,
   GeoFieldConfig,
+  GeoMarker,
   GeoPoint,
+  GeoPointsOptions,
   GeoShapeOptions,
   MapOptions,
   MapTiles,
 } from './geo.js'
+export { NOMINATIM_ENDPOINT, nominatimGeocoder } from './geocode.js'
+export type { GeoBounds, GeocodeOptions, GeocodeResult, Geocoder, NominatimOptions } from './geocode.js'
 export { isValidSlug, slugify } from './slug.js'
 export {
   applyTextEdit,
@@ -79,9 +84,91 @@ export {
   validateJson,
   validateYaml,
 } from './code.js'
-export type { CodeBlock, CodeCustomData, CodeError, CodeFieldConfig, CodeOptions, MermaidOptions, TextEdit } from './code.js'
+export type { CodeBlock, CodeCustomData, CodeError, CodeFieldConfig, CodeOptions, MermaidCodeOptions, TextEdit } from './code.js'
 export { CODE_LANGUAGES, normalizeLanguage, tokenize } from './highlight.js'
 export type { CodeLanguage, Token, TokenType } from './highlight.js'
+export {
+  NODE_ID_PATTERN,
+  autoLayout,
+  boundaryPoint,
+  canConnect,
+  edgeKey,
+  edgeOffsets,
+  fitGraph,
+  graph,
+  graphBounds,
+  graphIssues,
+  kindList,
+  nodeAt,
+  nodeBox,
+  nodeSize,
+  routeEdge,
+  shapeOf,
+  snap,
+  toGraph,
+  toMermaid,
+  uniqueId,
+} from './graph.js'
+export type {
+  Bounds,
+  EdgeRoute,
+  Graph,
+  GraphCustomData,
+  GraphDirection,
+  GraphEdge,
+  GraphFieldConfig,
+  GraphIssue,
+  GraphNode,
+  GraphOptions,
+  GraphView,
+  LayoutOptions,
+  MermaidOptions,
+  NodeBox,
+  NodeKind,
+  NodeKinds,
+  NodeShape,
+} from './graph.js'
+export {
+  datetime,
+  formatDateTime,
+  formatOffset,
+  formatTime,
+  fromWallClock,
+  isDateTime,
+  isTime,
+  parseDateTime,
+  time,
+  timeZoneOffset,
+  toWallClock,
+} from './datetime.js'
+export type { DateTimeCustomData, DateTimeOptions, DateTimeParts, DateTimeZone, TimeOptions } from './datetime.js'
+export { numberBounds, slider } from './slider.js'
+export type { NumberBounds, SliderCustomData, SliderOptions } from './slider.js'
+export {
+  currencyCodes,
+  currencyDecimals,
+  formatMoney,
+  fromMinorUnits,
+  money,
+  parseAmount,
+  toMinorUnits,
+} from './money.js'
+export type { Money, MoneyCustomData, MoneyOptions } from './money.js'
+export {
+  DURATION_UNITS,
+  describeDuration,
+  duration,
+  durationInUnits,
+  durationToSeconds,
+  formatDuration,
+  isDuration,
+  parseDuration,
+  splitDuration,
+} from './duration.js'
+export type { DurationCustomData, DurationOptions, DurationParts, DurationUnit } from './duration.js'
+export { isPhoneNumber, normalizePhone, phone, phoneHref } from './phone.js'
+export type { PhoneCustomData, PhoneOptions } from './phone.js'
+export type { FieldOptions } from './field-options.js'
 export {
   cellType,
   detectDelimiter,
@@ -114,5 +201,75 @@ export {
   updateNode,
 } from './tree.js'
 export type { FlatTreeNode, TreeChange, TreeConfig, TreeCustomData, TreeNode, TreeOptions, TreePath } from './tree.js'
+export {
+  describeReferences,
+  displayText,
+  findReferences,
+  isReferenceValue,
+  matchesQuery,
+  reference,
+  referenceFields,
+  referenceKey,
+  referencesIn,
+  references,
+  toReferenceValues,
+} from './references.js'
+export type {
+  ReferenceCustomData,
+  ReferenceDisplay,
+  ReferenceField,
+  ReferenceFieldConfig,
+  ReferenceOptions,
+  ReferenceSource,
+  ReferenceValue,
+  ReferencesOptions,
+} from './references.js'
 export { changeBranchName, changeTitle, diffLines, valueAt, valuesEqual } from './changes.js'
 export type { DiffLine } from './changes.js'
+export { wallClockAt, wallClockToDate } from './calendar.js'
+export { dateRange, describeRangeLength, formatDateRange, isDateRange, rangeLength } from './date-range.js'
+export type { DateRange, DateRangeCustomData, DateRangeFieldConfig, DateRangeOptions } from './date-range.js'
+export {
+  WEEKDAYS,
+  WEEKDAY_NAMES,
+  hoursOn,
+  isOpenAt,
+  isOvernight,
+  openingHours,
+  openingHoursIssues,
+  toOpeningHoursSpecification,
+  toOsmOpeningHours,
+} from './opening-hours.js'
+export type {
+  OpeningHours,
+  OpeningHoursCustomData,
+  OpeningHoursException,
+  OpeningHoursFieldConfig,
+  OpeningHoursIssue,
+  OpeningHoursOptions,
+  OpeningHoursSpecification,
+  OpeningInterval,
+  Weekday,
+} from './opening-hours.js'
+export {
+  FREQUENCIES,
+  RRULE_WEEKDAYS,
+  describeRecurrence,
+  expandRecurrence,
+  formatRule,
+  parseRule,
+  recurrence,
+  toICalendar,
+  unsupportedParts,
+} from './recurrence.js'
+export type {
+  ByDay,
+  ExpandOptions,
+  Frequency,
+  Recurrence,
+  RecurrenceCustomData,
+  RecurrenceFieldConfig,
+  RecurrenceOptions,
+  RecurrenceRule,
+  RRuleWeekday,
+} from './recurrence.js'

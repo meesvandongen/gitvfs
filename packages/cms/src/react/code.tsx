@@ -10,8 +10,6 @@ import {
   type ReactNode,
   type Ref,
 } from 'react'
-import { useFormState } from 'react-hook-form'
-import { useFieldRHF } from '@autoform/react/react-hook-form'
 import type { AutoFormFieldProps } from '@autoform/react'
 import {
   applyTextEdit,
@@ -24,9 +22,7 @@ import {
   type TextEdit,
 } from '../code.js'
 import { CODE_LANGUAGES, normalizeLanguage, tokenize, type CodeLanguage } from '../highlight.js'
-
-// Not imported from ./autoform.js, which imports this module for its field components.
-const useField = (name: string) => useFieldRHF({ name }).field
+import { fieldOptions, useErrorTree, useField } from './field-utils.js'
 
 /**
  * What a code editor component gets. The built-in `CodeEditor` and the CodeMirror one in
@@ -190,16 +186,11 @@ export function CodeEditor({
 // --- Fields --------------------------------------------------------------------------------------
 
 export function codeOptions(props: AutoFormFieldProps): CodeCustomData['code'] {
-  return (props.parsedField.fieldConfig?.customData as CodeCustomData | undefined)?.code ?? {}
+  return fieldOptions<CodeCustomData['code']>(props.parsedField, 'code')
 }
 
-/** The form's error for a field, which the field wrapper shows; set after a save attempt. */
-function useFormError(name: string): boolean {
-  const { errors } = useFormState({ name })
-  let node: unknown = errors
-  for (const key of name.split('.')) node = (node as Record<string, unknown> | undefined)?.[key]
-  return node !== undefined
-}
+/** Whether the form has an error for a field, which the field wrapper shows; set after a save attempt. */
+const useFormError = (name: string): boolean => useErrorTree(name) !== undefined
 
 /** `error` once it has stayed the same for a moment, so typing does not flash errors; clears at once. */
 function useSettled(error: CodeError | undefined, delay = 500): CodeError | undefined {

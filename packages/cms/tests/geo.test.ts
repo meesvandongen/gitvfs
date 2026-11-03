@@ -7,6 +7,7 @@ import {
   geoCircle,
   geoLine,
   geoPoint,
+  geoPoints,
   geoPolygon,
   metersPerPixel,
   parseCoordinates,
@@ -44,6 +45,17 @@ describe('geo schemas', () => {
     expect(geoLine().safeParse([amsterdam, utrecht]).success).toBe(true)
     expect(geoPolygon().safeParse([amsterdam, utrecht]).success).toBe(false)
     expect(geoPolygon({ maxPoints: 3 }).safeParse([amsterdam, utrecht, amsterdam, utrecht]).success).toBe(false)
+  })
+
+  it('keeps several markers, with labels only when asked', () => {
+    const labelled = geoPoints({ labels: true, maxPoints: 2 })
+    expect(labelled.parse([{ ...amsterdam, label: 'Centre' }, utrecht])).toEqual([{ ...amsterdam, label: 'Centre' }, utrecht])
+    expect(labelled.safeParse([amsterdam, utrecht, amsterdam]).error?.issues[0].message).toBe('Use at most 2 markers')
+    expect(labelled.safeParse([]).error?.issues[0].message).toBe('Add at least 1 marker')
+    expect(geoPoints({ minPoints: 2 }).safeParse([amsterdam]).error?.issues[0].message).toBe('Add at least 2 markers')
+    // Without `labels`, a hand-written label is not part of the value.
+    expect(geoPoints().parse([{ ...amsterdam, label: 'Centre' }])).toEqual([amsterdam])
+    expect(z.object({ branches: geoPoints().optional() }).parse({})).toEqual({})
   })
 })
 
@@ -95,6 +107,7 @@ describe('geometry', () => {
   it('converts to GeoJSON with longitude first', () => {
     expect(toGeoJSON(amsterdam)).toEqual({ type: 'Point', coordinates: [4.8922, 52.3731] })
     expect(toGeoJSON([amsterdam, utrecht])).toEqual({ type: 'LineString', coordinates: [[4.8922, 52.3731], [5.1214, 52.0907]] })
+    expect(toGeoJSON([{ ...amsterdam, label: 'Centre' }], { multiPoint: true })).toEqual({ type: 'MultiPoint', coordinates: [[4.8922, 52.3731]] })
     const polygon = toGeoJSON([amsterdam, utrecht, { lat: 52, lng: 4 }], { polygon: true })
     expect(polygon.type).toBe('Polygon')
     expect((polygon.coordinates as number[][][])[0]).toHaveLength(4)

@@ -1,10 +1,7 @@
 import { useEffect, useLayoutEffect, useRef, useState, type JSX, type RefObject } from 'react'
-import { useFieldRHF } from '@autoform/react/react-hook-form'
 import type { AutoFormFieldComponents, AutoFormFieldProps } from '@autoform/react'
 import { CodeBody, CodeEditor, type CodeEditorComponent } from './code.js'
-
-// Not imported from ./autoform.js, which imports this module for its field components.
-const useField = (name: string) => useFieldRHF({ name }).field
+import { useField } from './field-utils.js'
 
 /**
  * Renders Mermaid source to SVG markup, or rejects with the syntax error. `gitvfs-cms/mermaid`
