@@ -2,9 +2,25 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { GitVFS, type GitProvider, type RepositoryInfo } from 'gitvfs'
 import { z } from 'zod'
-import { createCms, defineCollection, defineSingleton, geoCircle, geoPoint, geoPolygon, graph, markdown } from '../src'
+import {
+  createCms,
+  defineCollection,
+  defineSingleton,
+  geoCircle,
+  geoPoint,
+  geoPoints,
+  geoPolygon,
+  graph,
+  markdown,
+  reference,
+  references,
+  type Geocoder,
+  type MapOptions,
+} from '../src'
 import {
   CmsApp,
+  CmsProvider,
+  DocumentEditor,
   RepositoryPicker,
   applyMarkdownFormat,
   buildPreviewDocument,
@@ -160,16 +176,31 @@ describe('map fields', () => {
       location: geoPoint({ label: 'Location' }),
       delivery: geoCircle({ label: 'Delivery range', maxRadius: 5000 }).optional(),
       area: geoPolygon({ label: 'Area' }).optional(),
+      branches: geoPoints({ label: 'Branches', labels: true, maxPoints: 3 }).optional(),
       // An ordinary optional group: left blank, it must not block saving.
       contact: z.object({ phone: z.string().min(1) }).optional(),
     }),
   })
 
-  function setupPlaces(file: string) {
+  function setupPlaces(file: string, mapDefaults?: MapOptions) {
     const remote = new MemoryRepository({ 'places/shop.yml': file })
     const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [places] })
-    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" mapDefaults={mapDefaults} />))
     return remote
+  }
+
+  /** The map field labelled `label`. */
+  function geoField(label: string): HTMLElement {
+    const wrapper = [...container.querySelectorAll('.gcms-field')].find((el) => el.querySelector('label')?.textContent?.startsWith(label))
+    return wrapper!.querySelector<HTMLElement>('.gcms-geo')!
+  }
+
+  function inField(field: HTMLElement, text: string, selector = 'button') {
+    return [...field.querySelectorAll<HTMLElement>(selector)].find((el) => el.textContent?.trim() === text)
+  }
+
+  function key(target: Element, name: string) {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }))
   }
 
   async function openShop() {
@@ -250,6 +281,127 @@ describe('map fields', () => {
     const saved = remote.text('places/shop.yml')!
     expect(saved).toContain('delivery:\n  lat: 20\n  lng: 0\n  radius: 1000\n')
     expect(saved.match(/- lat: /g)).toHaveLength(3)
+  })
+
+  it('searches places and picks a result with the keyboard or the mouse', async () => {
+    const queries: Array<{ query: string; signal: AbortSignal }> = []
+    const geocoder: Geocoder = async (query, options) => {
+      queries.push({ query, signal: options.signal })
+      return [
+        { label: 'Dam, Amsterdam', lat: 52.3731, lng: 4.8926, bounds: { south: 52.372, north: 52.374, west: 4.891, east: 4.894 } },
+        { label: 'Utrecht Centraal', lat: 52.0894, lng: 5.1101 },
+      ]
+    }
+    geocoder.attribution = 'Search by Test'
+    const remote = setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n', { geocoder })
+    const lat = await openShop()
+
+    const search = container.querySelector<HTMLInputElement>('input[id="location-search"]')!
+    expect(search.getAttribute('role')).toBe('combobox')
+    // Typing alone does not search.
+    await act(async () => typeInto(search, 'station'))
+    expect(queries).toHaveLength(0)
+    await act(async () => key(search, 'Enter'))
+    const options = await waitFor(() => {
+      const found = container.querySelectorAll('[role="option"]')
+      return found.length === 2 ? found : undefined
+    })
+    expect(queries[0].query).toBe('station')
+    expect(queries[0].signal).toBeInstanceOf(AbortSignal)
+    expect(search.getAttribute('aria-expanded')).toBe('true')
+    expect(byText('Search by Test', 'p')).toBeTruthy()
+
+    await act(async () => key(search, 'ArrowDown'))
+    await act(async () => key(search, 'ArrowDown'))
+    expect(options[1].getAttribute('aria-selected')).toBe('true')
+    expect(search.getAttribute('aria-activedescendant')).toBe(options[1].id)
+    await act(async () => key(search, 'Enter'))
+    expect(container.querySelector('[role="listbox"]')).toBeNull()
+    expect(lat.value).toBe('52.0894')
+    expect(container.querySelector<HTMLInputElement>('input[id="location-lng"]')!.value).toBe('5.1101')
+    // Enter searched and chose; it did not submit the form.
+    expect(remote.commits).toHaveLength(0)
+
+    // A polygon only moves its map to the place.
+    const areaSearch = container.querySelector<HTMLInputElement>('input[id="area-search"]')!
+    await act(async () => typeInto(areaSearch, 'dam'))
+    await act(async () => inField(geoField('Area'), 'Search')!.click())
+    const dam = await waitFor(() => byText('Dam, Amsterdam', 'li'))
+    await act(async () => dam.click())
+    expect(container.querySelector('polygon')).toBeNull()
+    expect(inField(geoField('Area'), '0 corners', 'summary')).toBeTruthy()
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('places/shop.yml')).toBe('title: Shop\nlocation:\n  lat: 52.0894\n  lng: 5.1101\n')
+  })
+
+  it('shows search failures', async () => {
+    const geocoder: Geocoder = async () => {
+      throw new Error('Address search failed (HTTP 503)')
+    }
+    setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n', { geocoder })
+    await openShop()
+    const search = container.querySelector<HTMLInputElement>('input[id="location-search"]')!
+    await act(async () => typeInto(search, 'nowhere'))
+    await act(async () => key(search, 'Enter'))
+    await waitFor(() => byText('Address search failed (HTTP 503)', 'p'))
+  })
+
+  it('edits several numbered, labelled markers', async () => {
+    const remote = setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\nbranches:\n  - lat: 52.3731\n    lng: 4.8922\n    label: Centre\n')
+    await openShop()
+    const branches = geoField('Branches')
+    const viewport = branches.querySelector('.gcms-map-viewport')!
+    expect(branches.querySelector('.gcms-map-marker-badge')?.textContent).toBe('1')
+    expect(branches.querySelector('.gcms-map-marker-caption')?.textContent).toBe('Centre')
+
+    for (const [x, y] of [[200, 100], [400, 220]]) {
+      await act(async () => {
+        pointer(viewport, 'pointerdown', x, y)
+        pointer(viewport, 'pointerup', x, y)
+      })
+    }
+    expect([...branches.querySelectorAll('.gcms-map-marker-badge')].map((el) => el.textContent)).toEqual(['1', '2', '3'])
+    expect(branches.textContent).toContain('The maximum of 3 markers is reached.')
+    // Full: clicking the map adds nothing.
+    await act(async () => {
+      pointer(viewport, 'pointerdown', 300, 300)
+      pointer(viewport, 'pointerup', 300, 300)
+    })
+    expect(branches.querySelectorAll('.gcms-map-marker')).toHaveLength(3)
+
+    const labels = [...branches.querySelectorAll<HTMLInputElement>('.gcms-map-label input')]
+    await act(async () => typeInto(labels[1], 'North'))
+    expect(branches.querySelectorAll('.gcms-map-marker-caption')[1]?.textContent).toBe('North')
+    await act(async () => branches.querySelector<HTMLButtonElement>('button[aria-label="Remove marker 3"]')!.click())
+
+    // Drag the first marker to the east; its label stays.
+    const [first] = branches.querySelectorAll('.gcms-map-marker')
+    await act(async () => {
+      pointer(first, 'pointerdown', 300, 160)
+      pointer(first, 'pointermove', 340, 160)
+      pointer(first, 'pointerup', 340, 160)
+    })
+    const lngs = [...branches.querySelectorAll<HTMLInputElement>('.gcms-map-points input')].filter((_, index) => index % 3 === 2)
+    expect(Number(lngs[0].value)).toBeGreaterThan(4.8922)
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    const saved = remote.text('places/shop.yml')!
+    expect(saved).toMatch(/branches:\n  - lat: 52\.3731\n    lng: 4\.89\d+\n    label: Centre\n  - lat: [\d.]+\n    lng: [\d.]+\n    label: North\n$/)
+  })
+
+  it('saves cleared optional lists as absent', async () => {
+    const remote = setupPlaces(
+      'title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\narea:\n  - lat: 52.37\n    lng: 4.89\n  - lat: 52.38\n    lng: 4.9\n  - lat: 52.36\n    lng: 4.91\nbranches:\n  - lat: 52.3731\n    lng: 4.8922\n',
+    )
+    await openShop()
+    await act(async () => inField(geoField('Area'), 'Clear')!.click())
+    await act(async () => inField(geoField('Branches'), 'Remove last marker')!.click())
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('places/shop.yml')).toBe('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n')
   })
 
   it('clears a stored point and a stored circle', async () => {
@@ -535,6 +687,269 @@ describe('RepositoryPicker', () => {
     act(() => byText('Try again')!.click())
     await waitFor(() => byText('acme/siteprivate'))
     expect(container.querySelector('[role="alert"]')).toBeNull()
+  })
+})
+
+describe('reference fields', () => {
+  const authors = defineCollection({
+    name: 'authors',
+    label: 'Authors',
+    folder: 'authors',
+    format: 'json',
+    labelField: 'name',
+    slugField: 'name',
+    schema: z.object({ name: z.string().min(1), role: z.string().optional() }),
+  })
+  const articles = defineCollection({
+    name: 'articles',
+    label: 'Articles',
+    folder: 'articles',
+    format: 'yaml',
+    schema: z.object({
+      title: z.string().min(1),
+      author: reference({ collection: 'authors', label: 'Author', display: ['role'] }),
+      reviewer: reference({ collection: 'authors', label: 'Reviewer' }).optional(),
+      related: references({ collection: 'articles', label: 'Related', max: 2 }).default([]),
+    }),
+  })
+
+  const files = {
+    'authors/ada.json': '{ "name": "Ada Lovelace", "role": "editor" }\n',
+    'authors/grace.json': '{ "name": "Grace Hopper", "role": "writer" }\n',
+    'articles/one.yml': 'title: One\nauthor: ada\n',
+    'articles/two.yml': 'title: Two\nauthor: grace\n',
+    'articles/three.yml': 'title: Three\nauthor: alan\nrelated: [one, gone]\n',
+  }
+
+  let confirmations: string[] = []
+  let answer = false
+  // Defined rather than assigned: earlier tests may leave `confirm` read-only.
+  const originalConfirm = Object.getOwnPropertyDescriptor(window, 'confirm')
+  beforeEach(() => {
+    confirmations = []
+    answer = false
+    const confirm = (message?: string) => {
+      confirmations.push(String(message))
+      return answer
+    }
+    Object.defineProperty(window, 'confirm', { value: confirm, configurable: true, writable: true })
+  })
+  afterEach(() => {
+    if (originalConfirm) Object.defineProperty(window, 'confirm', originalConfirm)
+    else delete (window as { confirm?: unknown }).confirm
+  })
+
+  function setupArticles() {
+    const remote = new MemoryRepository(files)
+    const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [articles, authors] })
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    return { remote, cms }
+  }
+
+  async function open(label: string) {
+    const entry = await waitFor(() => [...container.querySelectorAll<HTMLElement>('.gcms-entry')].find((el) => el.querySelector('.gcms-entry-label')?.textContent === label))
+    await act(async () => entry.click())
+    return waitFor(() => container.querySelector<HTMLInputElement>('input[id="author"]'))
+  }
+
+  const key = (element: Element, name: string) =>
+    element.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }))
+  const options = () => [...container.querySelectorAll('#author ~ .gcms-ref-popup [role="option"]')].map((el) => el.firstChild?.textContent)
+
+  it('picks an entry with the keyboard and opens it', async () => {
+    const { remote, cms } = setupArticles()
+    const listEntries = vi.spyOn(cms, 'listEntries')
+    const author = await open('One')
+    await waitFor(() => author.value === 'Ada Lovelace')
+    expect(byText('editor · ada', 'p')).toBeTruthy()
+    expect(author.getAttribute('role')).toBe('combobox')
+    // Both author fields share one listing of the collection.
+    expect(listEntries.mock.calls.filter(([name]) => name === 'authors')).toHaveLength(1)
+
+    await act(async () => author.focus())
+    await act(async () => typeInto(author, 'hop'))
+    expect(author.getAttribute('aria-expanded')).toBe('true')
+    expect(options()).toEqual(['Grace Hopper'])
+    await act(async () => key(author, 'ArrowDown'))
+    await act(async () => key(author, 'Enter'))
+    expect(author.value).toBe('Grace Hopper')
+    expect(author.getAttribute('aria-expanded')).toBe('false')
+
+    // Escape restores the picked entry after typing.
+    await act(async () => typeInto(author, 'zzz'))
+    expect(byText('No matching entries.', 'p')).toBeTruthy()
+    await act(async () => key(author, 'Escape'))
+    await act(async () => key(author, 'Escape'))
+    expect(author.value).toBe('Grace Hopper')
+
+    // Opening another entry asks before dropping unsaved changes.
+    const openGrace = () => container.querySelector<HTMLButtonElement>('button[aria-label="Open Grace Hopper"]')!.click()
+    await act(async () => openGrace())
+    expect(confirmations).toEqual(['Leave this document? Your unsaved changes are lost.'])
+    expect(container.querySelector('input[id="author"]')).toBe(author)
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('articles/one.yml')).toBe('title: One\nauthor: grace\nrelated: []\n')
+
+    await act(async () => openGrace())
+    expect(confirmations).toHaveLength(1)
+    const name = await waitFor(() => container.querySelector<HTMLInputElement>('input[name="name"]'))
+    expect(name.value).toBe('Grace Hopper')
+  })
+
+  it('warns about missing entries without blocking saves', async () => {
+    const { remote } = setupArticles()
+    const author = await open('Three')
+    const warning = await waitFor(() => container.querySelector('.gcms-warning'))
+    expect(warning.textContent).toContain('Authors has no entry “alan”.')
+    expect(author.getAttribute('aria-describedby')).toBe(warning.id)
+    expect(author.value).toBe('alan')
+    expect(container.querySelector('.gcms-ref-item--missing .gcms-ref-item-label')?.textContent).toBe('gone')
+    expect(byText('One picked entry no longer exists. They may have been renamed or deleted: remove them or pick others.', 'p')).toBeTruthy()
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('articles/three.yml')).toBe('title: Three\nauthor: alan\nrelated:\n  - one\n  - gone\n')
+
+    await act(async () => byText('Clear')!.click())
+    expect(author.value).toBe('')
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => byText('Required', 'p'))
+    expect(remote.commits).toHaveLength(1)
+  })
+
+  it('adds, reorders and removes entries of a list', async () => {
+    const { remote } = setupArticles()
+    await open('Two')
+    const related = container.querySelector<HTMLInputElement>('input[id="related"]')!
+    const listed = () => [...container.querySelectorAll('.gcms-ref-item-label')].map((el) => el.textContent)
+
+    await act(async () => related.focus())
+    await act(async () => key(related, 'ArrowDown'))
+    const relatedOptions = () => [...container.querySelectorAll('#related ~ .gcms-ref-popup [role="option"]')]
+    await waitFor(() => relatedOptions().length === 3)
+    await act(async () => (relatedOptions()[1] as HTMLElement).click()) // Three (sorted by label)
+    await act(async () => key(related, 'ArrowDown'))
+    // Entries already in the list are not offered again.
+    expect(relatedOptions().map((el) => el.firstChild?.textContent)).toEqual(['One', 'Two'])
+    await act(async () => key(related, 'Enter'))
+    expect(listed()).toEqual(['Three', 'One'])
+
+    // The maximum is two.
+    await act(async () => key(related, 'ArrowDown'))
+    expect(byText('The maximum of 2 is reached; remove one to add another.', 'p')).toBeTruthy()
+    expect(relatedOptions()).toHaveLength(0)
+
+    const up = container.querySelector<HTMLButtonElement>('button[aria-label="Move One up"]')!
+    await act(async () => up.click())
+    expect(listed()).toEqual(['One', 'Three'])
+    // Focus stays with the moved item; at the top, on its other move button.
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Move One down')
+    expect(container.querySelector('[aria-live="polite"]')?.textContent).toBe('Moved One to position 1 of 2.')
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('articles/two.yml')).toBe('title: Two\nauthor: grace\nrelated:\n  - one\n  - three\n')
+
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Remove One"]')!.click())
+    expect(listed()).toEqual(['Three'])
+    expect(document.activeElement?.getAttribute('aria-label')).toBe('Remove Three')
+  })
+
+  it('names the entries that reference an entry before deleting it', async () => {
+    setupArticles()
+    await act(async () => (await waitFor(() => byText('Authors'))).click())
+    await act(async () => (await waitFor(() => byText('Ada Lovelaceada'))).click())
+    await waitFor(() => container.querySelector('input[name="name"]'))
+    await act(async () => byText('Delete')!.click())
+    await waitFor(() => confirmations.length === 1)
+    expect(confirmations[0]).toBe('Delete authors/ada.json? This creates a commit.\n\nReferenced by 1 entry: “One”. Their references will point at a missing entry.')
+
+    // Renaming breaks references too.
+    const slug = container.querySelector<HTMLInputElement>('input[id$="-slug"]')!
+    await act(async () => typeInto(slug, 'ada-lovelace'))
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => confirmations.length === 2)
+    expect(confirmations[1]).toBe('Referenced by 1 entry: “One”. Renaming “ada” to “ada-lovelace” breaks those references. Rename anyway?')
+  })
+
+  it('picks entries of several collections as { collection, slug }', async () => {
+    const home = defineSingleton({
+      name: 'home',
+      label: 'Homepage',
+      path: 'home.yml',
+      schema: z.object({ highlight: reference({ collection: ['articles', 'authors'], label: 'Highlight' }).optional() }),
+    })
+    const remote = new MemoryRepository({ ...files, 'home.yml': 'highlight:\n  collection: authors\n  slug: grace\n' })
+    const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [articles, authors], singletons: [home] })
+    act(() => root.render(<CmsApp cms={cms} view={{ type: 'singleton', name: 'home' }} />))
+
+    const highlight = await waitFor(() => container.querySelector<HTMLInputElement>('input[id="highlight"]'))
+    await waitFor(() => highlight.value === 'Grace Hopper')
+    expect(byText('Authors · grace', 'p')).toBeTruthy()
+    await act(async () => highlight.focus())
+    await act(async () => typeInto(highlight, 'o'))
+    const listed = [...container.querySelectorAll('[role="option"]')].map((el) => el.lastChild?.textContent)
+    expect(listed).toEqual(['Articles · one', 'Articles · two', 'Authors · ada', 'Authors · grace'])
+    await act(async () => key(highlight, 'Enter'))
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('home.yml')).toBe('highlight:\n  collection: articles\n  slug: one\n')
+  })
+
+  it('works without CmsApp, without links to other entries', async () => {
+    const remote = new MemoryRepository(files)
+    const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [articles, authors] })
+    act(() =>
+      root.render(
+        <CmsProvider cms={cms}>
+          <DocumentEditor contentType={articles} slug="one" />
+        </CmsProvider>,
+      ),
+    )
+    const author = await waitFor(() => container.querySelector<HTMLInputElement>('input[id="author"]'))
+    await waitFor(() => author.value === 'Ada Lovelace')
+    expect(byText('Open')).toBeUndefined()
+    expect(byText('Clear')).toBeTruthy()
+  })
+
+  it('edits references in a change: marks, reverts, saves on the branch and warns from it', async () => {
+    const remote = new MemoryRepository(files)
+    const cms = createCms({
+      fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }),
+      collections: [articles, authors],
+      changes: true,
+    })
+    await act(async () => {
+      await cms.startChange('New authors')
+    })
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    const author = await open('One')
+    await waitFor(() => author.value === 'Ada Lovelace')
+    expect(container.querySelector('.gcms-change')).toBeNull()
+
+    await act(async () => byText('Clear')!.click())
+    const marker = await waitFor(() => container.querySelector<HTMLElement>('.gcms-change'))
+    expect(marker.title).toBe('On main: “ada”')
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Revert author to main"]')!.click())
+    await waitFor(() => author.value === 'Ada Lovelace' && !container.querySelector('.gcms-change'))
+
+    await act(async () => author.focus())
+    await act(async () => typeInto(author, 'grace'))
+    await act(async () => key(author, 'Enter'))
+    await waitFor(() => container.querySelector('.gcms-change'))
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.text('articles/one.yml', 'cms/new-authors') === 'title: One\nauthor: grace\nrelated: []\n')
+    expect(remote.text('articles/one.yml')).toBe('title: One\nauthor: ada\n')
+
+    // References are looked up on the change's branch: Grace is now used by One and Two there.
+    await act(async () => byText('Authors')!.click())
+    await act(async () => (await waitFor(() => byText('Grace Hoppergrace'))).click())
+    await waitFor(() => container.querySelector('input[name="name"]'))
+    await act(async () => byText('Delete')!.click())
+    await waitFor(() => confirmations.length === 1)
+    expect(confirmations[0]).toContain('Referenced by 2 entries: “One” and “Two”.')
   })
 })
 

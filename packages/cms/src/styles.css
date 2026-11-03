@@ -1428,6 +1428,406 @@ a.gcms-button {
   text-align: center;
 }
 
+/* Basic inputs: datetime, time, slider, money, duration, phone */
+.gcms-app {
+  /* Native date and time pickers follow the theme. */
+  color-scheme: light dark;
+}
+
+.gcms-datetime,
+.gcms-phone,
+.gcms-money-field,
+.gcms-duration-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+}
+
+.gcms-description a {
+  color: var(--gcms-accent);
+}
+
+.gcms-description code {
+  font: 0.75rem var(--gcms-mono);
+  overflow-wrap: anywhere;
+}
+
+.gcms-slider {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+.gcms-slider-range {
+  flex: 1;
+  min-width: 0;
+  accent-color: var(--gcms-accent);
+}
+
+.gcms-slider-range--empty {
+  opacity: 0.45;
+}
+
+.gcms-slider-value {
+  display: flex;
+  flex: 0 0 auto;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gcms-slider-value .gcms-input {
+  width: 6.5rem;
+}
+
+.gcms-unit {
+  color: var(--gcms-muted);
+}
+
+.gcms-money {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.gcms-money > .gcms-input {
+  flex: 1;
+  min-width: 0;
+}
+
+.gcms-money-select {
+  flex: 0 1 15rem;
+  width: auto;
+  min-width: 6rem;
+}
+
+.gcms-money-currency {
+  display: grid;
+  place-items: center;
+  padding: 0 0.7rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-surface);
+  color: var(--gcms-muted);
+  font-weight: 600;
+}
+
+.gcms-duration {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.5rem 1rem;
+}
+
+.gcms-duration-part {
+  display: flex;
+  align-items: center;
+  gap: 0.4rem;
+  color: var(--gcms-muted);
+}
+
+.gcms-duration-part .gcms-input {
+  width: 5rem;
+}
+
+/* Read-only fields: field({ readOnly: true }) */
+.gcms-readonly {
+  min-width: 0;
+  margin: 0;
+  padding: 0;
+  border: 0;
+}
+
+.gcms-readonly > .gcms-field > .gcms-label::after,
+.gcms-readonly > .gcms-field > .gcms-field-row > .gcms-label::after,
+.gcms-readonly > .gcms-field > .gcms-group > .gcms-legend::after {
+  content: 'Read-only';
+  margin-left: 0.5rem;
+  padding: 0.05rem 0.4rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 999px;
+  color: var(--gcms-muted);
+  font-size: 0.7rem;
+  font-weight: 400;
+}
+
+.gcms-readonly .gcms-input:disabled {
+  border-style: dashed;
+  background: var(--gcms-surface);
+  color: var(--gcms-text);
+  -webkit-text-fill-color: currentColor;
+  opacity: 1;
+}
+
+.gcms-readonly .gcms-button:disabled,
+.gcms-readonly .gcms-map-draggable {
+  cursor: default;
+}
+
+
+/* Address search and numbered markers of map fields */
+.gcms-map-search {
+  position: relative;
+}
+
+.gcms-map-search-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.gcms-map-search-popup {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  overflow: auto;
+  max-height: 16rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-bg);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.gcms-map-search-results {
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+}
+
+.gcms-map-search-results li {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.gcms-map-search-results li[aria-selected='true'] {
+  background: color-mix(in srgb, var(--gcms-accent) 16%, transparent);
+}
+
+.gcms-map-search-status,
+.gcms-map-search-credit {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+}
+
+.gcms-map-search-credit {
+  border-top: 1px solid var(--gcms-border);
+  font-size: 0.7rem;
+}
+
+.gcms-map-search-live {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.gcms-map-marker-badge {
+  fill: #ffffff;
+  font: 700 11px/1 var(--gcms-font);
+}
+
+.gcms-map-marker-caption {
+  fill: var(--gcms-text);
+  font: 600 12px/1 var(--gcms-font);
+  paint-order: stroke;
+  stroke: var(--gcms-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.gcms-map-label {
+  flex: 2 1 9rem;
+}
+
+
+/* Reference fields (reference, references) */
+.gcms-app {
+  --gcms-warning: #9a5b00;
+}
+
+@media (prefers-color-scheme: dark) {
+  .gcms-app {
+    --gcms-warning: #f0b45a;
+  }
+}
+
+.gcms-ref {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+}
+
+.gcms-ref-row {
+  display: flex;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gcms-ref-combobox {
+  position: relative;
+  flex: 1;
+  min-width: 0;
+}
+
+.gcms-ref-popup {
+  position: absolute;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  z-index: 10;
+  overflow: hidden;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-bg);
+  box-shadow: 0 8px 24px rgb(0 0 0 / 0.16);
+}
+
+.gcms-ref-popup[hidden] {
+  display: none;
+}
+
+.gcms-ref-listbox {
+  max-height: 16rem;
+  margin: 0;
+  padding: 4px;
+  overflow-y: auto;
+  list-style: none;
+}
+
+.gcms-ref-listbox:empty {
+  display: none;
+}
+
+.gcms-ref-option {
+  display: flex;
+  flex-direction: column;
+  padding: 0.35rem 0.5rem;
+  border-radius: 4px;
+  cursor: pointer;
+}
+
+.gcms-ref-option--active {
+  background: color-mix(in srgb, var(--gcms-accent) 14%, transparent);
+}
+
+.gcms-ref-option-label,
+.gcms-ref-item-label {
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcms-ref-current {
+  color: var(--gcms-muted);
+  font-size: 0.78rem;
+}
+
+.gcms-ref-meta {
+  margin: 0;
+  overflow: hidden;
+  color: var(--gcms-muted);
+  font: 0.75rem var(--gcms-mono);
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+
+.gcms-ref-status {
+  margin: 0;
+  padding: 0.4rem 0.75rem;
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+}
+
+.gcms-ref-listbox:not(:empty) + .gcms-ref-status {
+  border-top: 1px solid var(--gcms-border);
+}
+
+.gcms-ref-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.25rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  counter-reset: gcms-ref;
+}
+
+.gcms-ref-item {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.3rem 0.35rem 0.3rem 0.6rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-surface);
+  counter-increment: gcms-ref;
+}
+
+/* The order is what the list stores, so number the items. */
+.gcms-ref-item::before {
+  min-width: 1.1rem;
+  color: var(--gcms-muted);
+  font-size: 0.78rem;
+  content: counter(gcms-ref) '.';
+}
+
+.gcms-ref-item--missing {
+  border-color: color-mix(in srgb, var(--gcms-warning) 55%, transparent);
+}
+
+.gcms-ref-item--missing .gcms-ref-meta {
+  color: var(--gcms-warning);
+}
+
+.gcms-ref-item-text {
+  display: flex;
+  flex: 1;
+  flex-direction: column;
+  min-width: 0;
+}
+
+.gcms-ref-item-actions {
+  display: flex;
+  align-items: center;
+  gap: 2px;
+}
+
+.gcms-ref-icon {
+  width: 1.75rem;
+  height: 1.75rem;
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: 4px;
+  background: transparent;
+  color: inherit;
+  font: 600 0.95rem/1 var(--gcms-font);
+  cursor: pointer;
+}
+
+.gcms-ref-icon:hover:not(:disabled) {
+  border-color: var(--gcms-border);
+  background: var(--gcms-bg);
+}
+
+.gcms-ref-icon:disabled {
+  opacity: 0.35;
+  cursor: default;
+}
+
+.gcms-ref-icon:focus-visible {
+  outline: 2px solid var(--gcms-accent);
+  outline-offset: 1px;
+}
+
+.gcms-warning {
+  margin: 0;
+  color: var(--gcms-warning);
+  font-size: 0.8rem;
+}
+
 /* Graph field (graph) */
 .gcms-graph {
   position: relative;

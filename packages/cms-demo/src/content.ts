@@ -1,5 +1,27 @@
 import { z } from 'zod'
-import { defineCollection, defineSingleton, field, geoCircle, geoLine, geoPoint, geoPolygon, graph, markdown, table, textarea, tree } from 'gitvfs-cms'
+import {
+  datetime,
+  defineCollection,
+  defineSingleton,
+  duration,
+  field,
+  geoCircle,
+  geoLine,
+  geoPoint,
+  geoPoints,
+  geoPolygon,
+  graph,
+  markdown,
+  money,
+  phone,
+  reference,
+  references,
+  slider,
+  table,
+  textarea,
+  time,
+  tree,
+} from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
 // and singletons, custom fields and previews, and files the schema does not fully describe.
@@ -19,12 +41,15 @@ export const posts = defineCollection({
     readingTime: z.number().int().min(1).max(120).optional().check(field({ label: 'Reading time (minutes)' })),
     featured: z.boolean().default(false).check(field({ label: 'Featured on the homepage' })),
     draft: z.boolean().default(false).check(field({ label: 'Draft', description: 'Hidden from the site' })),
-    author: z
-      .object({
-        name: z.string().min(1).check(field({ label: 'Name' })),
-        url: z.url().optional().check(field({ label: 'Website' })),
-      })
-      .check(field({ label: 'Author' })),
+    // References store the slug of an entry of another collection: `author: ada-lovelace`.
+    author: reference({ collection: 'authors', label: 'Author', display: ['role'] }),
+    relatedPosts: references({
+      collection: 'posts',
+      label: 'Related posts',
+      description: 'Up to three, in the order they are shown',
+      max: 3,
+      display: ['category', 'date'],
+    }).default([]),
     body: z.string().check(markdown({ label: 'Content' })).default(''),
   }),
   // Newest first; the default sorts by label.
@@ -124,7 +149,41 @@ export const places = defineCollection({
     }).optional(),
     serviceArea: geoPolygon({ label: 'Service area', center: amsterdam, zoom: 11 }).optional(),
     route: geoLine({ label: 'Walking route from the station', center: amsterdam, zoom: 14, maxPoints: 20 }).optional(),
+    branches: geoPoints({
+      label: 'Branches',
+      description: 'Pickup points: click the map or search to add one, and name it in the list',
+      labels: true,
+      center: amsterdam,
+      zoom: 12,
+      maxPoints: 10,
+    }).optional(),
   }),
+})
+
+export const shows = defineCollection({
+  name: 'shows',
+  label: 'Shows',
+  folder: 'data/shows',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    // Read-only fields cannot be filled in, so new shows get a generated id.
+    id: z
+      .string()
+      .default(() => `tm-${crypto.randomUUID().slice(0, 5)}`)
+      .check(field({ label: 'Ticketing ID', description: 'Set by the ticketing system', readOnly: true })),
+    // Import metadata: not shown in the editor, kept on save (see the Source tab).
+    importedAt: datetime({ timeZone: 'UTC', hidden: true }).optional(),
+    starts: datetime({ label: 'Starts', timeZone: 'Europe/Amsterdam', description: 'Amsterdam time, wherever you edit from' }),
+    doors: time({ label: 'Doors open', step: 900 }).optional(),
+    runtime: duration({ label: 'Running time' }),
+    intermission: duration({ label: 'Intermission', units: ['minutes'] }).optional(),
+    price: money({ label: 'Ticket price', currencies: ['EUR', 'GBP', 'USD'] }),
+    onSale: z.number().int().min(0).max(100).check(slider({ label: 'Seats on sale', unit: '%' })),
+    onSaleFrom: datetime({ label: 'Tickets on sale from', description: 'In your own time zone' }).optional(),
+    boxOffice: phone({ label: 'Box office', description: 'Try 020 123 4567', defaultCountryCode: '31' }).optional(),
+  }),
+  sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
 })
 
 export const flows = defineCollection({
@@ -181,6 +240,8 @@ export const homepage = defineSingleton({
     title: z.string().min(1),
     subtitle: z.string().check(textarea()).optional(),
     cta: z.object({ label: z.string().min(1), href: z.string().min(1) }).check(field({ label: 'Call to action' })),
+    // A reference to one of several collections stores `{ collection, slug }`.
+    highlight: reference({ collection: ['posts', 'docs'], label: 'Highlighted entry' }).optional(),
     body: z.string().check(markdown()).default(''),
   }),
 })
@@ -191,8 +252,8 @@ export const theme = defineSingleton({
   path: 'data/theme.yml',
   schema: z.object({
     mode: z.enum(['light', 'dark', 'system']).default('system'),
-    fontSize: z.number().int().min(12).max(24).check(field({ label: 'Base font size (px)' })),
-    radius: z.number().min(0).max(24).check(field({ label: 'Corner radius (px)' })),
+    fontSize: z.number().int().min(12).max(24).check(slider({ label: 'Base font size', unit: 'px' })),
+    radius: z.number().min(0).max(24).multipleOf(0.5).check(slider({ label: 'Corner radius', unit: 'px' })),
   }),
 })
 
@@ -239,7 +300,7 @@ export const navigation = defineSingleton({
   }),
 })
 
-export const collections = [posts, docs, authors, events, places, flows]
+export const collections = [posts, docs, authors, events, places, shows, flows]
 export const singletons = [site, homepage, theme, pricing, navigation]
 
 /** The repository visitors start with, and go back to on reset. */
@@ -256,9 +317,10 @@ tags:
 readingTime: 3
 featured: true
 draft: false
-author:
-  name: Ada Lovelace
-  url: https://example.com/ada
+author: ada-lovelace
+relatedPosts:
+  - editing-frontmatter
+  - release-notes-0-2
 ---
 
 Every entry in this demo is a file in a Git repository. The editor on the left is generated from a
@@ -281,8 +343,7 @@ tags:
   - frontmatter
 layout: wide
 canonical: https://example.com/original
-author:
-  name: Grace Hopper
+author: grace-hopper
 ---
 
 This file has \`layout\` and \`canonical\` keys that the schema does not describe. Edit and save the
@@ -294,12 +355,14 @@ title: A post that needs fixing
 date: 2026-09-01
 category: tutorials
 tags: []
-author:
-  name: Alan Turing
+author: alan-turing
 ---
 
 The stored category, \`tutorials\`, is not one of the allowed options. The editor still opens the
 file and lists what does not match the schema; pick a valid category and save to fix it.
+
+The author, \`alan-turing\`, is not in the Authors collection either. That is a warning rather than
+an error, since the author may simply not be committed yet.
 `,
   'content/posts/release-notes-0-2.md': `---
 title: Release notes 0.2
@@ -309,8 +372,7 @@ tags:
   - release
 readingTime: 1
 draft: true
-author:
-  name: Ada Lovelace
+author: ada-lovelace
 ---
 
 ### Added
@@ -407,6 +469,16 @@ route:
     lng: 4.8921
   - lat: 52.374
     lng: 4.8897
+branches:
+  - lat: 52.3791
+    lng: 4.9003
+    label: Central Station
+  - lat: 52.3579
+    lng: 4.8813
+    label: Museumplein
+  - lat: 52.3843
+    lng: 4.9025
+    label: Ferry pier Noord
 `,
   'data/places/warehouse-west.yml': `title: Warehouse west
 kind: warehouse
@@ -520,6 +592,30 @@ flow:
       label: Update
       role: writer
 `,
+  'data/shows/late-night-jazz.yml': `title: Late night jazz
+id: tm-48213
+importedAt: 2026-10-01T08:00:00Z
+starts: 2026-11-20T21:30:00+01:00
+doors: "20:45"
+runtime: PT1H45M
+intermission: PT15M
+price:
+  amount: 24.5
+  currency: EUR
+onSale: 80
+boxOffice: "+31201234567"
+`,
+  'data/shows/the-tempest-matinee.yml': `title: The Tempest (matinee)
+id: tm-48377
+importedAt: 2026-10-01T08:00:00Z
+starts: 2026-12-06T14:00:00+01:00
+runtime: PT2H30M
+price:
+  amount: 18
+  currency: GBP
+onSale: 45
+onSaleFrom: 2026-11-01T10:00:00+01:00
+`,
   'data/site.json': `${JSON.stringify(
     {
       title: 'Acme',
@@ -541,6 +637,9 @@ subtitle: Edit this homepage, a markdown singleton with frontmatter.
 cta:
   label: Read the blog
   href: /blog
+highlight:
+  collection: posts
+  slug: welcome-to-gitvfs-cms
 ---
 
 Welcome! This body is markdown too.
@@ -617,8 +716,7 @@ category: news
 tags:
   - labs
 featured: true
-author:
-  name: Grace Hopper
+author: grace-hopper
 ---
 
 This post lives in a different repository, **acme/labs**. You opened it with the repository
