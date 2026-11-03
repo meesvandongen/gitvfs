@@ -11,7 +11,7 @@ async function start() {
   // The visitor's own copies of the repositories, kept in localStorage. Bump a key when its seed
   // changes in incompatible ways.
   const site = await persistentRepository({
-    key: 'gitvfs-cms-demo:v1',
+    key: 'gitvfs-cms-demo:v2',
     seed: () => MockRepository.create({ files: seedFiles, message: 'Set up the demo site' }),
   })
   const labs = await persistentRepository({

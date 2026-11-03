@@ -15,10 +15,13 @@ with helpers that attach editor metadata through `.check()`:
 | `z.string().check(markdown())` | markdown editor with toolbar and live preview |
 | `z.number()` | number input |
 | `z.boolean()` | checkbox |
-| `z.coerce.date()` | date picker |
+| `z.coerce.date()` | date picker (date only; see `datetime()` for a time) |
 | `z.enum([...])` | select |
 | `z.array(...)` | repeatable list |
 | `z.object({...})` | group of fields |
+| `z.array(z.object({...})).check(table())` | spreadsheet-like table, see [Table fields](#table-fields) |
+| `tree({ fields })` | nested list edited as an outline, see [Tree fields](#tree-fields) |
+| `reference({ collection })` | an entry of another collection, see [Reference fields](#reference-fields) |
 
 `field({ label, description, order, inputProps, fieldType })` sets the other options:
 
@@ -26,8 +29,723 @@ with helpers that attach editor metadata through `.check()`:
 title: z.string().min(1).check(field({ label: 'Title', description: 'Shown in the browser tab' })),
 ```
 
+Optional groups (`z.object({...}).optional()`) that the user leaves blank are saved as absent, so
+their required parts only apply once something is filled in.
+
 Use `.default('')` on optional text such as the body: AutoForm treats empty inputs as missing, so a
 plain required string rejects an empty body.
+
+## Map fields
+
+Five helpers return ready-made schemas edited on a map. Values are plain `{ lat, lng }` objects in
+WGS 84 degrees, which read well in frontmatter, JSON and YAML (and avoid GeoJSON's
+`[longitude, latitude]` order):
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `geoPoint()` | `{ lat, lng }` | click to place, drag the marker |
+| `geoCircle()` | `{ lat, lng, radius }`, radius in meters | a point with a range: drag the edge handle or use the slider |
+| `geoLine()` | `[{ lat, lng }, ...]` | click to add points, for routes |
+| `geoPolygon()` | `[{ lat, lng }, ...]` | click to add corners, for areas; shows the area |
+| `geoPoints()` | `[{ lat, lng }, ...]`, or `[{ lat, lng, label? }, ...]` with `labels: true` | several numbered markers, such as branches or stops |
+
+```ts
+import { geoCircle, geoPoint, geoPoints, geoPolygon } from 'gitvfs-cms'
+
+const shops = defineCollection({
+  name: 'shops',
+  folder: 'data/shops',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string(),
+    location: geoPoint({ label: 'Location', center: { lat: 52.37, lng: 4.9 }, zoom: 11 }),
+    delivery: geoCircle({ label: 'Delivery range', minRadius: 250, maxRadius: 15_000 }).optional(),
+    area: geoPolygon({ label: 'Service area', maxPoints: 50 }).optional(),
+    branches: geoPoints({ label: 'Branches', labels: true }).optional(),
+  }),
+})
+```
+
+```yaml
+location:
+  lat: 52.374
+  lng: 4.8897
+delivery:
+  lat: 52.374
+  lng: 4.8897
+  radius: 3000
+branches:
+  - lat: 52.3791
+    lng: 4.9003
+    label: Central Station
+  - lat: 52.3579
+    lng: 4.8813
+```
+
+Every map field also has latitude and longitude inputs that accept a pasted pair such as
+`52.3731, 4.8922` (the format Google Maps copies), a **Use my location** button, and keyboard
+controls (arrow keys pan, `+` and `-` zoom). Scrolling over the map scrolls the form; hold Ctrl or
+⌘ to zoom with the wheel.
+
+| Option | Default | |
+| --- | --- | --- |
+| `center`, `zoom` | `{ lat: 20, lng: 0 }`, `2` | Where an empty field opens. |
+| `pointZoom` | `15` | Zoom used to show a single point. |
+| `decimals` | `6` | Precision of picked coordinates (about 10 cm). |
+| `height` | `320` | Map height in pixels. |
+| `tiles` | `OSM_TILES` | Tile layer: `{ url, attribution, attributionUrl?, maxZoom?, subdomains? }`. |
+| `defaultRadius`, `minRadius`, `maxRadius` | `1000`, `0`, none | `geoCircle` only; `maxRadius` adds a slider. |
+| `minPoints`, `maxPoints` | `2`, `3` or `1`, none | `geoLine`, `geoPolygon` and `geoPoints`. |
+| `labels` | `false` | `geoPoints` only: a label input per marker; blank labels are left out of the file. |
+| `geocoder` | none | Address search above the map, see below. |
+
+Lists (`geoLine`, `geoPolygon`, `geoPoints`) that are cleared are saved as absent, so make them
+`.optional()` when they may be empty. **Show all** fits the map to every point of the list.
+
+The map is built in, without a map library. Tiles come from OpenStreetMap by default; for heavy
+use, read their [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) and point
+`tiles` at another provider, per field or for all of them with `mapDefaults` (below):
+
+```ts
+const tiles = { url: 'https://tiles.example.com/{z}/{x}/{y}.png', attribution: '© Example' }
+```
+
+### Address search
+
+Set `geocoder` to show a search box above the map. Search runs when the user presses Enter or the
+**Search** button, and the results open in a list (arrow keys and Enter, or the mouse). Choosing one
+moves the map to it (to its whole extent, such as a city, when the service reports one) and, for
+`geoPoint` and `geoCircle`, sets the value; `geoPoints` adds a marker without a label; `geoLine` and
+`geoPolygon` only move the map. Stored values stay plain coordinates: the address is not saved.
+
+`nominatimGeocoder()` searches OpenStreetMap's [Nominatim](https://nominatim.org):
+
+```ts
+import { nominatimGeocoder } from 'gitvfs-cms'
+
+const geocoder = nominatimGeocoder({ email: 'webmaster@example.com', countryCodes: ['nl', 'be'], language: 'nl' })
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `endpoint` | `https://nominatim.openstreetmap.org/search` | Your own instance or a compatible service. |
+| `email` | none | Contact address sent with requests, so the operator can reach you. |
+| `countryCodes` | all | Only places in these countries. |
+| `language` | the browser's | Language of the result labels. |
+| `limit` | `5` | Number of results. |
+| `interval` | `1000` | Minimum milliseconds between requests to `endpoint`, across all fields. |
+| `cacheSize` | `100` | Searches remembered, so repeating one sends no request. |
+
+The public instance is free to use within its
+[usage policy](https://operations.osmfoundation.org/policies/nominatim/), which applies to your
+whole app: at most one request per second, an identified application, no search as you type,
+cached results and visible attribution, and no bulk or systematic queries. The geocoder spaces
+requests one second apart per endpoint, caches results, sends your site's origin as `Referer`
+(and `email` when set), and the editor shows the OpenStreetMap credit under the results and never
+searches while typing. For more than an occasional editor, run your own Nominatim or use a
+commercial service.
+
+Any other service fits behind the `Geocoder` type: an async function of the query and
+`{ signal, near }` (an `AbortSignal`, and the map's center once it is zoomed in on a region) that
+returns `{ label, lat, lng, bounds? }[]`, with `bounds` as `{ south, west, north, east }`. Pass
+`signal` on to `fetch`, as a newer search aborts the previous one. Set `geocoder.attribution` to
+show a credit under the results.
+
+### Options for every map field
+
+Instead of repeating `tiles` or `geocoder` per field, give them to `CmsApp` once. A field's own
+options win:
+
+```tsx
+<CmsApp cms={cms} mapDefaults={{ tiles, geocoder: nominatimGeocoder({ email: 'webmaster@example.com' }) }} />
+```
+
+When you assemble your own editor, wrap it in `<MapDefaultsProvider value={{ tiles, geocoder }}>`
+instead.
+
+For your site, `toGeoJSON(value)` converts a value to a GeoJSON geometry (a circle becomes its center,
+or a ring of points with `{ polygon: true }`; `geoPoints` markers become a MultiPoint with
+`{ multiPoint: true }`), and `distance`, `pathLength` and `polygonArea` measure
+in meters.
+
+## Table fields
+
+`table()` edits a list of objects as a spreadsheet-like grid instead of a stack of groups. It is a
+check on an ordinary `z.array(z.object({...}))`, so the stored value is the same list of objects the
+default list editor writes, and adding or removing `table()` never changes a file.
+
+```ts
+import { field, table } from 'gitvfs-cms'
+
+plans: z
+  .array(
+    z.object({
+      name: z.string().min(1).check(field({ label: 'Plan' })),
+      tier: z.enum(['starter', 'team', 'enterprise']),
+      monthly: z.number().min(0).check(field({ label: 'Per month' })),
+      highlighted: z.boolean().default(false),
+      availableFrom: z.coerce.date().optional(),
+      features: z.array(z.string()).default([]),
+    }),
+  )
+  .min(1)
+  .check(table({ label: 'Plans' })),
+```
+
+```yaml
+plans:
+  - name: Team
+    tier: team
+    monthly: 12
+    highlighted: true
+    features:
+      - Preview deployments
+```
+
+- One column per key, in schema order (or `field({ order })`), headed by its `field()` label.
+  Strings, numbers, booleans, dates and enums are edited in the cell. Other columns (objects,
+  lists, `markdown()`, custom field types) are shown read-only and their values are kept; give them
+  a `.default()` or make them optional so new rows validate.
+- **Keyboard:** arrow keys move between cells (left and right from the edge of the text; selects
+  and date inputs keep their own arrow keys), Enter moves down and adds a row from the last one,
+  Shift+Enter moves up, Tab moves on as usual, Alt+↑ and Alt+↓ move the row.
+- **Paste** cells copied from a spreadsheet (tab-separated) or CSV text: the block lands at the
+  focused cell, overwriting cells and adding rows past the end. When its first line names the
+  columns (by key or label) it is used as a header and columns are matched by name. Numbers,
+  booleans (`yes`, `x`, `1`, …), enum labels and dates are converted; text that does not fit is
+  kept so validation points at it.
+- **Copy as CSV** copies the rows with a header of column keys; **Copy for spreadsheets** copies
+  tab-separated text, which spreadsheets split into cells.
+- Errors appear in the cell they belong to (`plans.2.monthly`). Wide tables scroll sideways.
+
+The CSV helpers are exported for your own imports and exports: `parseDelimited(text, delimiter?)`
+(RFC 4180 quotes, detects tab, semicolon or comma), `serializeDelimited(rows, delimiter?)`,
+`rowsToCsv(rows, columns)` and `pasteCells(...)`.
+
+## Tree fields
+
+`tree()` returns a schema for nested lists such as navigation menus and page hierarchies, edited as
+an outline. Each node has your fields and, when it has any, a `children` list of nodes. Leaves have
+no `children` key: empty child lists are dropped when saving, so files stay short and adding a
+level does not touch the siblings.
+
+```ts
+import { field, tree } from 'gitvfs-cms'
+
+const navigation = defineSingleton({
+  name: 'navigation',
+  path: 'data/navigation.yml',
+  schema: z.object({
+    main: tree({
+      label: 'Main menu',
+      maxDepth: 3,
+      fields: {
+        label: z.string().min(1),
+        href: z.string().min(1).optional().check(field({ label: 'Link' })),
+        external: z.boolean().optional(),
+      },
+    }).default([]),
+  }),
+})
+```
+
+```yaml
+main:
+  - label: Home
+    href: /
+  - label: Docs
+    href: /docs
+    children:
+      - label: Getting started
+        href: /docs/getting-started
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `fields` | | The zod shape of every node. |
+| `childrenKey` | `'children'` | Key of the child list, such as `'pages'`. |
+| `maxDepth` | unlimited | Most levels; deeper nodes fail validation and the editor will not create them. |
+| `labelField` | `label`, `title` or `name` | Field shown as the item's title in the outline. |
+| `label`, `description`, … | | As for `field()`. |
+
+The editor follows the [ARIA tree pattern](https://www.w3.org/WAI/ARIA/apg/patterns/treeview/):
+arrow keys move between items and expand or collapse them, Home and End jump, Enter (or the
+**Edit** button) opens an item's fields inline, Enter or Escape closes them, Alt+↑ and Alt+↓ move an
+item among its siblings, Alt+→ indents it under the item above and Alt+← moves it out of its parent,
+and Delete removes it (asking first when it has nested items). The selected item has buttons for the
+same actions, plus **Add item after** and **Add child**. Rows can be dragged: the top or bottom
+edge of a row places the item before or after it, the middle nests it inside. Items with errors are
+marked and listed below the tree, with a link that opens them.
+
+The children are a `z.lazy()` schema, because AutoForm walks object shapes eagerly and would
+recurse forever into a zod 4 getter. The values type as `TreeNode<...>`, and `z.toJSONSchema`
+produces a recursive `$ref`. For your site, `flattenTree(nodes)` lists nodes with their depth, and
+`moveNode`, `indentNode`, `outdentNode`, `insertNode`, `removeNode` and `remapPath` are the pure
+helpers the editor uses.
+
+## Date and time fields
+
+`z.coerce.date()` picks a date only and stores `2026-11-20`. For a moment in time, or a time of day,
+use the helpers below. Both store strings, so a value reads back exactly as written from
+frontmatter, YAML and JSON (the `yaml` parser keeps timestamps as strings).
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `datetime()` | ISO 8601 string, `2026-11-20T19:30:00+01:00` | date and time picker, with the time zone named below it |
+| `time()` | `HH:MM` (`19:30`), or `HH:MM:SS` when `step` is under a minute | time picker |
+
+```ts
+import { datetime, time } from 'gitvfs-cms'
+
+schema: z.object({
+  starts: datetime({ label: 'Starts', timeZone: 'Europe/Amsterdam' }),
+  doors: time({ label: 'Doors open', step: 900, min: '12:00' }).optional(),
+  publishAt: datetime({ label: 'Publish at', timeZone: 'UTC' }).optional(),
+})
+```
+
+```yaml
+starts: 2026-11-20T19:30:00+01:00
+doors: "18:45"
+publishAt: 2026-11-20T08:00:00Z
+```
+
+`timeZone` decides how a picked date and time is stored:
+
+| `timeZone` | Stored as | Use for |
+| --- | --- | --- |
+| `'local'` (default) | `2026-11-20T19:30:00+01:00`, with the editor's offset on that date | a moment, written as the editor's clock time |
+| `'UTC'` | `2026-11-20T18:30:00Z` | timestamps such as publish times |
+| an IANA zone, `'Europe/Amsterdam'` | `2026-11-20T19:30:00+01:00`, with that zone's offset on that date (`+02:00` in summer) | events at a place: everyone enters the venue's clock time |
+| `'floating'` | `2026-11-20T19:30:00`, no offset | clock time that means the same everywhere |
+
+The schema accepts only values in that form (with an offset, or without one for `'floating'`), and
+seconds are always written. Values are shown converted to the field's zone and stored with it on
+edit; untouched values are saved as they are. Options: `timeZone`, and `step` (picker granularity
+in seconds, default 60). `time()` takes `step`, `min` and `max`.
+
+YAML 1.1 loaders (PyYAML, Ruby, gray-matter's js-yaml 3) read an unquoted `19:30` as the number
+1170, so times are written quoted. Loaders with timestamp support (js-yaml, gray-matter) turn
+`2026-11-20T19:30:00+01:00` into a `Date`, which keeps the moment; a `'floating'` value is read as
+UTC there. Helpers for your site: `parseDateTime`, `formatDateTime`, `toWallClock`, `fromWallClock`
+and `timeZoneOffset`.
+
+## Sliders
+
+`slider()` edits a bounded number with a range input and a number box for the exact value. The
+range comes from the schema: `.min()` and `.max()`, and the step from `.multipleOf()` (1 for
+`.int()`, otherwise a hundredth of the range). Values are plain numbers.
+
+```ts
+import { slider } from 'gitvfs-cms'
+
+fontSize: z.number().int().min(12).max(24).check(slider({ label: 'Font size', unit: 'px' })),
+opacity: z.number().min(0).max(1).multipleOf(0.05).check(slider({ label: 'Opacity' })),
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `step` | from the schema | Step between values. |
+| `unit` | none | Shown after the number box, such as `%` or `px`. |
+
+Without both bounds only the number box is shown. Call `slider()` once per field: it remembers the
+schema it is attached to.
+
+## Money
+
+`money()` stores `{ amount, currency }`: the amount as a number in major units, the currency as an
+ISO 4217 code.
+
+```ts
+import { money } from 'gitvfs-cms'
+
+price: money({ label: 'Price', currencies: ['EUR', 'USD', 'GBP'] }),
+fee: money({ label: 'Booking fee', currency: 'EUR' }).optional(),
+```
+
+```yaml
+price:
+  amount: 19.99
+  currency: EUR
+```
+
+Stripe and commercetools store integer minor units (`1999`) and Shopify decimal strings
+(`"19.99"`), both to avoid floating point errors. In a content file `amount: 19.99` is what people
+expect to read and type, and the number is exact as text: parsers return the nearest double, which
+prints back as `19.99`. Errors only appear in arithmetic, so the schema allows no more decimals
+than the currency has (2 for EUR, 0 for JPY, 3 for BHD), and `toMinorUnits(price)` gives exact
+integers to calculate with (`fromMinorUnits` goes back). `formatMoney(price, locale)` formats with
+`Intl.NumberFormat`: `€19.99`.
+
+The amount box accepts `19,99`, `1.299,50` and `1,299.50`, and the formatted amount is shown below
+it.
+
+| Option | Default | |
+| --- | --- | --- |
+| `currency` | none | Fix the currency: no picker, other currencies are rejected. |
+| `currencies` | every code `Intl` knows | Currencies to choose from; the first is preselected. |
+| `min`, `max` | `0`, none | Allowed amounts. |
+| `locale` | the browser's | Locale of the formatted amount and currency names. |
+
+## Durations
+
+`duration()` stores an ISO 8601 duration such as `PT1H30M`, the format of schema.org
+(`cookTime`, `duration`), YouTube and `Temporal.Duration`. It reads better in a file than a number
+of seconds, and keeps what was entered: `PT90M` stays 90 minutes. Years and months have no fixed
+length, so only weeks (read as days), days, hours, minutes and seconds are accepted.
+
+```ts
+import { duration } from 'gitvfs-cms'
+
+runtime: duration({ label: 'Running time' }),
+prepTime: duration({ label: 'Preparation', units: ['minutes'] }),
+```
+
+```yaml
+runtime: PT1H45M
+prepTime: PT20M
+```
+
+The editor shows a box per unit and the duration written out ("1 hour, 45 minutes"). Options:
+`units` (default `['hours', 'minutes']`, any of `days`, `hours`, `minutes`, `seconds`) and
+`locale`. Helpers: `parseDuration`, `formatDuration`, `durationToSeconds`, `splitDuration` and
+`describeDuration`.
+
+## Phone numbers
+
+`phone()` stores numbers in E.164, `+31201234567`: one form that `tel:` links and SMS services
+accept and that compares equal however it was typed. Input is lenient: spaces, dashes, dots and
+parentheses, `0031…` and `+31 (0)20…` are all fine, and with `defaultCountryCode` a national number
+like `020 123 4567` gets the country code (its leading 0 is dropped, except for Italy). The editor
+shows the number it will save, and saving normalizes it.
+
+```ts
+import { phone, phoneHref } from 'gitvfs-cms'
+
+boxOffice: phone({ label: 'Box office', defaultCountryCode: '31' }).optional(),
+// on your site: <a href={phoneHref(show.boxOffice)}>
+```
+
+```yaml
+boxOffice: "+31201234567"
+```
+
+There is no libphonenumber behind it, so only the shape is checked (a `+` and 7 to 15 digits), not
+whether a number exists or has the right length for its country, and extensions are not supported.
+
+## Read-only and hidden fields
+
+Every field helper takes `readOnly` and `hidden`, with any field type:
+
+```ts
+id: z.string().check(field({ label: 'ID', readOnly: true })),
+importedAt: datetime({ timeZone: 'UTC', hidden: true }).optional(),
+location: geoPoint({ label: 'Location', readOnly: true }),
+```
+
+A read-only field shows its value in a disabled fieldset, which disables every input and button in
+it (a map still pans and zooms). A hidden field is not rendered. Both keep their value on save, so
+they suit ids, computed values and import metadata. New entries cannot fill them in, so give them a
+`.default()` or make them optional. Custom field components can call `useReadOnly()` to ignore
+pointer gestures that native inputs do not cover.
+
+## Reference fields
+
+`reference()` points at an entry of another collection, and `references()` at an ordered list of
+them. The editor is a searchable list of that collection's entries.
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `reference({ collection: 'authors' })` | the entry's slug: `ada-lovelace` | search box with **Open** and **Clear** |
+| `references({ collection: 'posts' })` | a list of slugs | search box to add, buttons to reorder and remove |
+| `reference({ collection: ['posts', 'docs'] })` | `{ collection, slug }` | entries of all listed collections |
+| `references({ collection: ['posts', 'docs'] })` | a list of `{ collection, slug }` | |
+
+```ts
+import { reference, references } from 'gitvfs-cms'
+
+const posts = defineCollection({
+  name: 'posts',
+  folder: 'content/posts',
+  schema: z.object({
+    title: z.string(),
+    author: reference({ collection: 'authors', label: 'Author', display: ['role'] }),
+    relatedPosts: references({ collection: 'posts', max: 3 }).default([]),
+    body: z.string().check(markdown()).default(''),
+  }),
+})
+```
+
+```yaml
+---
+title: Welcome
+author: ada-lovelace
+relatedPosts:
+  - editing-frontmatter
+  - release-notes-0-2
+---
+```
+
+The slug is the entry's file name, so a reference reads well in a diff and keeps working when the
+collection moves to another folder or format. Load the referenced entry with
+`cms.readEntry('authors', post.author)`.
+
+| Option | Default | |
+| --- | --- | --- |
+| `collection` | | Collection name; a list of names stores `{ collection, slug }`. |
+| `display` | none | Text shown next to each entry's label: field names (`['role']`) or `(entry) => string`. |
+| `min`, `max` | none | `references` only: how many entries to pick. |
+
+Validation checks that values are valid slugs (and that a list has no duplicates); it does not read
+the repository. Whether the entry exists is checked in the editor instead: a slug that matches no
+entry shows a warning, not an error, so content that refers to an entry that is not committed yet
+still saves.
+
+Picking works from the keyboard: type to filter (by label, slug and `display` text), arrow keys
+move through the options, Enter picks one and Escape closes the list. In a list, each entry has
+buttons to move it up or down and to remove it. **Open** shows the referenced entry; it is there
+inside `CmsApp`, or wherever you provide navigation with `CmsNavigationProvider`.
+
+References break when the entry they point at is renamed or deleted. Before either, the editor
+looks for entries that still point at it with `cms.findReferences(collection, slug)` and names them
+in the confirmation ("Referenced by 2 entries: …"). It does not rewrite those references: open the
+listed entries and pick the new one.
+
+## Graph fields
+
+`graph()` returns a schema for a diagram of nodes and edges, such as a support decision tree, a
+content workflow or a site map, edited on a canvas. The value is the nodes-and-edges model of React
+Flow, Cytoscape and the JSON Graph Format, kept flat for files people read:
+
+```ts
+import { graph } from 'gitvfs-cms'
+
+const flows = defineCollection({
+  name: 'flows',
+  folder: 'data/flows',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string(),
+    flow: graph({
+      label: 'Flow',
+      nodeKinds: { question: { label: 'Question', shape: 'diamond' }, answer: { label: 'Answer' } },
+      nodeFields: { details: z.string().check(textarea({ label: 'Details' })).optional() },
+      edgeFields: { role: z.enum(['agent', 'lead']).optional() },
+      minNodes: 1,
+    }),
+  }),
+})
+```
+
+```yaml
+flow:
+  nodes:
+    - id: email-arrived
+      label: Did the reset email arrive?
+      x: 220
+      y: 160
+      kind: question
+    - id: use-reset-link
+      label: Use the link in the email
+      x: 100
+      y: 300
+      kind: answer
+      details: The link works for one hour.
+  edges:
+    - from: email-arrived
+      to: use-reset-link
+      label: "Yes"
+```
+
+- **Ids** are readable slugs of the label (`use-reset-link`, then `use-reset-link-2`). A node added
+  in the editor takes its id from its label while it is new; ids of stored nodes never change when
+  the label does, and the id of a deleted node is not handed to a new node in the same session.
+- **Edges** point at node ids with `from` and `to` and have no ids of their own. An edge to a node
+  that does not exist, a repeated node id, an edge from a node to itself and a second edge between
+  the same nodes are validation errors (the last two unless allowed by options).
+- **Positions** are whole numbers, the center of the node, so moving a node changes two short lines.
+  When you write a graph by hand you can leave out `x` and `y`; the editor lays the graph out when it
+  opens, and saving stores the positions.
+- Nodes and edges keep keys the schema does not declare, such as a color added by hand.
+
+The editor has a **Canvas** view: double-click (or **Add node**) to add a node, drag nodes (snapped
+to the grid), drag from a node's dot to another node to connect them, click a node or edge to edit it
+in the panel below, and press Delete or Backspace to remove it. Drag the background to pan; zoom with
+the buttons, `+` and `-`, or Ctrl/⌘ and the wheel. **Fit to view** shows the whole graph and **Auto
+layout** arranges it in layers. With the keyboard, Tab moves through the nodes, arrow keys move the
+focused node (Shift for bigger steps), and Enter edits its label. The **List** view does everything
+with ordinary inputs: labels, edges chosen with selects, adding and removing. The panel renders the
+declared `nodeFields` and `edgeFields` with the regular field inputs.
+
+| Option | Default | |
+| --- | --- | --- |
+| `directed` | `true` | Arrowheads, and `a → b` differs from `b → a`. |
+| `nodeKinds` | none | Adds a required `kind` select. A list of names, or names mapped to `{ label?, shape? }`, shape `'rounded'`, `'rect'`, `'diamond'` or `'ellipse'`. |
+| `nodeFields`, `edgeFields` | none | Extra zod fields for nodes and edges. Every edge has an optional `label`. |
+| `minNodes`, `maxNodes` | none | |
+| `allowSelfLoops`, `allowMultiEdges` | `false` | Allow edges from a node to itself, and repeated edges between two nodes. |
+| `grid` | `20` | Snap grid in pixels; `0` turns snapping off. |
+| `direction` | `'TB'` | Auto layout from top to bottom, or `'LR'` left to right. |
+| `height` | `420` | Canvas height in pixels. |
+
+For your site, `toMermaid(value, { nodeKinds })` turns a graph into a Mermaid flowchart, which many
+docs sites render, and `autoLayout`, `graphBounds`, `graphIssues` and `uniqueId` work without React.
+
+```ts
+toMermaid(entry.flow, { nodeKinds })
+// flowchart TB
+//   email_arrived{"Did the reset email arrive?"}
+//   use_reset_link("Use the link in the email")
+//   email_arrived -->|"Yes"| use_reset_link
+```
+
+## Scheduling fields
+
+Three helpers store dates and times as readable text. Times are local wall-clock times ("19:30 at
+the venue"): no time zone or offset is stored, so a value reads the same everywhere and daylight
+saving time never shifts it. Convert to an instant on your site with `wallClockToDate(value,
+'Europe/Amsterdam')`.
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `dateRange()` | `{ start, end }`, `YYYY-MM-DD` (or `YYYY-MM-DDTHH:mm` with `time: true`) | start and end inputs, the range in words |
+| `openingHours()` | a week of `{ opens, closes }` intervals per day, plus `exceptions` | a row per day, special dates |
+| `recurrence()` | `{ start, rule }`, `rule` an RFC 5545 RRULE | frequency, interval, weekdays, monthly pattern, end, next dates |
+
+```ts
+import { dateRange, openingHours, recurrence } from 'gitvfs-cms'
+
+const events = defineCollection({
+  name: 'events',
+  folder: 'data/events',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string(),
+    dates: dateRange({ label: 'Dates', maxLength: 14 }).optional(),
+    repeats: recurrence({ label: 'Repeats', time: true }).optional(),
+    hours: openingHours({ label: 'Opening hours' }).optional(),
+  }),
+})
+```
+
+### Date range
+
+```yaml
+dates:
+  start: 2026-11-20
+  end: 2026-11-22
+```
+
+Both ends are inclusive and `end` may not be before `start` (the error is reported on `end`). The
+editor shows the range as `20–22 Nov 2026 · 3 days`, and moving the start moves the end with it, so
+the length stays the same.
+
+| Option | Default | |
+| --- | --- | --- |
+| `time` | `false` | Store local date-times (`2026-11-20T19:30`) instead of dates. |
+| `unit` | `'days'` | Count `days` (20–22 Nov is 3) or `nights` (2), for the limits and the summary. |
+| `minLength`, `maxLength` | none | Shortest and longest range, in `unit`. |
+| `locale` | the browser's | Locale of the summary. |
+
+`formatDateRange`, `describeRangeLength` and `rangeLength` give the same summary on your site.
+
+### Opening hours
+
+```yaml
+hours:
+  mon: []                    # closed
+  tue:
+    - opens: "09:00"
+      closes: "12:30"
+    - opens: "13:30"           # after a lunch break
+      closes: "17:30"
+  fri:
+    - opens: "18:00"
+      closes: "02:00"          # past midnight: closes on Saturday
+  # wed, thu, sat, sun ...
+  exceptions:
+    - date: 2026-12-25
+      until: 2026-12-26      # optional, for a range of days
+      label: Christmas
+      hours: []              # closed
+    - date: 2026-12-31
+      hours:
+        - opens: "10:00"
+          closes: "16:00"
+```
+
+The format follows [schema.org's `OpeningHoursSpecification`](https://schema.org/OpeningHoursSpecification)
+and Google Business Profile hours, keyed by day so a week reads top to bottom:
+
+- Times are 24-hour `HH:mm`. An interval belongs to the day it opens; a closing time at or before
+  the opening time is on the next day (`18:00`–`02:00`), `24:00` is the end of the day, and
+  `00:00`–`00:00` is open around the clock. A missing or empty day is closed.
+- `exceptions` replace the weekly hours on a date, or from `date` through `until`.
+- Validation rejects malformed times, overlapping intervals (also a night running into the next
+  day's hours) and overlapping special dates. With `overnight: false`, hours past midnight are an
+  error.
+
+The editor has one row per day with **Closed**, **Add hours** (for a second interval) and **Copy to
+all days**, and a list of special dates.
+
+| Option | Default | |
+| --- | --- | --- |
+| `overnight` | `true` | Allow closing times past midnight. |
+| `exceptions` | `true` | Show the special dates editor. |
+| `defaultInterval` | `{ opens: '09:00', closes: '17:00' }` | Hours a day gets when it is opened. |
+
+On your site:
+
+- `isOpenAt(hours, new Date(), { timeZone: 'Europe/Amsterdam' })` says whether the place is open.
+  Hours are read as local times in that zone, so a bar open until 04:00 closes at 04:00 also on the
+  night the clocks change. Without `timeZone`, the runtime's zone is used.
+- `hoursOn(hours, '2026-12-24')` gives the hours of a date, special dates included.
+- `toOpeningHoursSpecification(hours, { from: today })` returns schema.org
+  `OpeningHoursSpecification` objects for JSON-LD, in the form Google's local business guidelines
+  describe (`23:59` for the end of the day, `00:00`–`00:00` with `validFrom` / `validThrough` for a
+  closed special date).
+- `toOsmOpeningHours(hours)` writes the OpenStreetMap
+  [`opening_hours`](https://wiki.openstreetmap.org/wiki/Key:opening_hours) syntax:
+  `Tu 09:00-12:30,13:30-17:30; Fr 18:00-02:00; 2026 Dec 25-26 off`.
+
+### Recurrence
+
+```yaml
+repeats:
+  start: 2026-12-04T16:00
+  rule: FREQ=WEEKLY;INTERVAL=2;BYDAY=FR;UNTIL=20270625T235959
+```
+
+`start` is the first occurrence (the iCalendar `DTSTART`) as a local date or date-time, and `rule`
+is an [RFC 5545](https://www.rfc-editor.org/rfc/rfc5545#section-3.3.10) RRULE, the text calendar
+apps use, so rules can be copied in and out. `toICalendar(value, { timeZone })` writes the
+`DTSTART` and `RRULE` lines for an `.ics` file.
+
+The editor sets the frequency (daily, weekly, monthly, yearly), the interval, the weekdays of a
+weekly rule, a monthly day ("day 20", "last day") or weekday ("the 2nd Tuesday", "the last
+Friday"), and the end (never, on a date, after a number of times). It shows the series in words,
+such as _Every 2 weeks on Friday, until 25 Jun 2027_, and the next dates. The rule is also editable
+as text.
+
+The rules are read, written and expanded by a small built-in implementation that supports
+`FREQ=DAILY|WEEKLY|MONTHLY|YEARLY`, `INTERVAL`, `COUNT`, `UNTIL`, `BYDAY` (with ordinals such as
+`2TU` and `-1FR` in monthly and yearly rules), `BYMONTHDAY` (negative values count from the end of
+the month), `BYMONTH`, `BYSETPOS` and `WKST`. Other parts (`BYHOUR`, `BYWEEKNO`, `BYYEARDAY`,
+`X-…`) are kept unchanged when a rule is edited, and the order of hand-written parts is preserved.
+Months without the chosen day are skipped, as RFC 5545 says (use `BYMONTHDAY=-1` for the last day
+of every month).
+
+| Option | Default | |
+| --- | --- | --- |
+| `time` | `false` | The start has a time of day. |
+| `preview` | `5` | How many upcoming dates the editor lists. |
+| `locale` | the browser's | Locale of dates in the summary and the list. |
+
+On your site, `expandRecurrence(value, { from, to, limit })` lists occurrences as local dates or
+date-times (a start that does not match the rule is skipped, as in rrule.js and python-dateutil),
+`describeRecurrence(value)` says the series in words, and `parseRule` / `formatRule` read and write
+rules. `expandRecurrence` throws for rules with parts it does not support rather than return wrong
+dates.
 
 ## Preview
 
@@ -81,6 +799,8 @@ The [CMS demo](https://demo.cms.gitvfs.mvd.im) does this with **Switch repositor
 `CmsApp` is assembled from exported parts, so you can embed only what you need:
 
 - `CmsProvider` and `useCms()` share a `GitCms` instance.
+- `CmsNavigationProvider` lets fields open other documents (a reference's **Open** button); pass it
+  a function that shows a `CmsView` in your UI.
 - `DocumentEditor` loads, edits, previews and commits one entry or singleton.
 - `ContentForm` is the AutoForm for a content type, with the CMS field components.
 - `DocumentPreview`, `MarkdownPreview` and `PreviewFrame` render previews.

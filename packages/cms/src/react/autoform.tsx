@@ -11,8 +11,23 @@ import type {
   ObjectWrapperProps,
 } from '@autoform/react'
 import { ZodProvider } from '@autoform/zod'
+import { z } from 'zod'
 import type { ContentType } from '../config.js'
+import { GeoCircleField, GeoLineField, GeoPointField, GeoPointsField, GeoPolygonField } from './map.js'
+import { GraphField } from './graph.js'
+import { DateTimeField, TimeField } from './datetime.js'
+import { DurationField } from './duration.js'
+import { withFieldState } from './field-utils.js'
+import { MoneyField } from './money.js'
+import { PhoneField } from './phone.js'
+import { SliderField } from './slider.js'
+import { TableField } from './table.js'
+import { TreeField } from './tree.js'
+import { ReferenceField, ReferencesField } from './references.js'
 import { FieldChange } from './field-changes.js'
+import { DateRangeField } from './date-range.js'
+import { OpeningHoursField } from './opening-hours.js'
+import { RecurrenceField } from './recurrence.js'
 
 /**
  * The form binding (`value`, `onChange`, `onBlur`, `name`, `ref`) for a field, for custom field
@@ -362,9 +377,28 @@ export const formComponents: AutoFormFieldComponents = {
   number: NumberField,
   boolean: BooleanField,
   date: DateField,
+  graph: GraphField,
   select: SelectField,
   textarea: TextareaField,
   markdown: MarkdownField,
+  geopoint: GeoPointField,
+  geocircle: GeoCircleField,
+  geoline: GeoLineField,
+  geopolygon: GeoPolygonField,
+  geopoints: GeoPointsField,
+  daterange: DateRangeField,
+  openinghours: OpeningHoursField,
+  recurrence: RecurrenceField,
+  datetime: DateTimeField,
+  time: TimeField,
+  slider: SliderField,
+  money: MoneyField,
+  duration: DurationField,
+  phone: PhoneField,
+  table: TableField,
+  tree: TreeField,
+  reference: ReferenceField,
+  references: ReferencesField,
   fallback: StringField,
 }
 
@@ -395,16 +429,96 @@ export interface ContentFormProps {
   children?: ReactNode
 }
 
+interface ZodNode {
+  _zod: { def: { type: string; innerType?: ZodNode; shape?: Record<string, ZodNode> } }
+}
+
+function isOptional(schema: ZodNode): boolean {
+  const { def } = schema._zod
+  return def.type === 'optional' || (def.innerType !== undefined && isOptional(def.innerType))
+}
+
+function objectShape(schema: ZodNode): Record<string, ZodNode> | undefined {
+  const { def } = schema._zod
+  if (def.type === 'object') return def.shape
+  return def.innerType ? objectShape(def.innerType) : undefined
+}
+
+/**
+ * AutoForm fills every object in the schema with `{}`, even optional ones, so an optional group the
+ * user never touched (a location, a map field) fails validation for its required parts. Mark optional
+ * keys that the document does not have as explicitly `undefined`, which wins over those defaults.
+ */
+export function unsetMissingOptionals(schema: ZodNode, data: Record<string, unknown> = {}): Record<string, unknown> {
+  const shape = objectShape(schema)
+  if (!shape) return data
+  const result: Record<string, unknown> = { ...data }
+  for (const [key, child] of Object.entries(shape)) {
+    const value = data[key]
+    if (value === undefined) {
+      if (isOptional(child)) result[key] = undefined
+    } else if (value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)) {
+      result[key] = unsetMissingOptionals(child, value as Record<string, unknown>)
+    }
+  }
+  return result
+}
+
+const isPlainObject = (value: unknown): value is Record<string, unknown> =>
+  value !== null && typeof value === 'object' && !Array.isArray(value) && !(value instanceof Date)
+
+/** Nothing filled in: undefined, null, '' or an object of only those. An empty list is a value. */
+function isBlank(value: unknown): boolean {
+  if (value === undefined || value === null || value === '') return true
+  return isPlainObject(value) && Object.values(value).every(isBlank)
+}
+
+/**
+ * Drop optional groups the user left blank. AutoForm's inputs recreate `{ venue: undefined, ... }`
+ * for every group they render, which would otherwise fail validation of an optional `z.object`.
+ */
+export function pruneBlankOptionals(schema: ZodNode, data: unknown): unknown {
+  const shape = objectShape(schema)
+  if (!shape || !isPlainObject(data)) return data
+  const result: Record<string, unknown> = { ...data }
+  for (const [key, child] of Object.entries(shape)) {
+    const value = result[key]
+    if (!isPlainObject(value)) continue
+    result[key] = isOptional(child) && isBlank(value) ? undefined : pruneBlankOptionals(child, value)
+  }
+  return result
+}
+
+/** Validates with blank optional groups removed; parses the form from the schema as is. */
+class CmsZodProvider<T extends ContentType['schema']> extends ZodProvider<T> {
+  private validation: T | undefined
+
+  getSchema(): T {
+    const schema = super.getSchema()
+    this.validation ??= z.preprocess((values) => pruneBlankOptionals(schema as unknown as ZodNode, values), schema) as unknown as T
+    return this.validation
+  }
+}
+
 /** AutoForm for a collection or singleton schema, rendered with the CMS field components. */
 export function ContentForm(props: ContentFormProps) {
-  const schema = useMemo(() => new ZodProvider(props.contentType.schema), [props.contentType.schema])
+  const schema = useMemo(() => new CmsZodProvider(props.contentType.schema), [props.contentType.schema])
+  const defaultValues = useMemo(
+    () => unsetMissingOptionals(props.contentType.schema as unknown as ZodNode, props.defaultValues),
+    [props.contentType.schema, props.defaultValues],
+  )
 
   return (
     <AutoForm
       schema={schema}
-      defaultValues={props.defaultValues}
+      defaultValues={defaultValues}
       onSubmit={props.onSubmit}
-      uiComponents={{ ...uiComponents, ...props.uiComponents }}
+      uiComponents={{
+        ...uiComponents,
+        ...props.uiComponents,
+        // `readOnly` and `hidden` work with any field wrapper, including a custom one.
+        FieldWrapper: withFieldState(props.uiComponents?.FieldWrapper ?? uiComponents.FieldWrapper),
+      }}
       formComponents={{ ...formComponents, ...props.formComponents } as AutoFormFieldComponents}
       formProps={{ id: props.formId }}
     >
