@@ -6,7 +6,7 @@ import { CmsApp, RepositoryPicker } from 'gitvfs-cms/react'
 import type { MockRepository } from 'gitvfs-github-msw'
 import { ColorField } from './ColorField'
 import { collections, singletons } from './content'
-import { AuthorPreview, EventPreview } from './previews'
+import { AuthorPreview, EventPreview, ShowPreview } from './previews'
 
 const DOCS_URL = 'https://docs.gitvfs.mvd.im/docs/cms'
 
@@ -113,7 +113,7 @@ export function App({ repositories, subscribe, reset }: AppProps) {
             title="Acme content"
             formComponents={{ color: ColorField }}
             mapDefaults={mapDefaults}
-            previews={{ authors: AuthorPreview, events: EventPreview }}
+            previews={{ authors: AuthorPreview, events: EventPreview, shows: ShowPreview }}
             sidebarFooter={
               <div className="demo-history">
                 <div className="demo-repository">

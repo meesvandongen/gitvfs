@@ -1,6 +1,7 @@
 import { createContext, useContext } from 'react'
 import { useFormContext, useWatch } from 'react-hook-form'
 import { valueAt, valuesEqual } from '../changes.js'
+import { useReadOnly } from './field-utils.js'
 
 export interface BaseValues {
   /** The document's form values on the base branch. */
@@ -26,8 +27,10 @@ function describe(value: unknown): string | null {
 export function FieldChange({ name, revertable = true }: { name: string; revertable?: boolean }) {
   const base = useContext(BaseValuesContext)
   const form = useFormContext() as ReturnType<typeof useFormContext> | null
+  // A read-only field shows that it changed, but cannot be reverted from the form either.
+  const readOnly = useReadOnly()
   if (!base || !form) return null
-  return <FieldChangeMarker name={name} base={base} revertable={revertable} />
+  return <FieldChangeMarker name={name} base={base} revertable={revertable && !readOnly} />
 }
 
 function FieldChangeMarker({ name, base, revertable }: { name: string; base: BaseValues; revertable: boolean }) {

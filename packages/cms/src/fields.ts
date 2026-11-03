@@ -15,10 +15,21 @@ export type CmsFieldType =
   | 'geoline'
   | 'geopolygon'
   | 'geopoints'
+  | 'datetime'
+  | 'time'
+  | 'slider'
+  | 'money'
+  | 'duration'
+  | 'phone'
   | 'table'
   | 'tree'
 
-export type CmsFieldConfig = FieldConfig<null, CmsFieldType | (string & {})>
+export type CmsFieldConfig = FieldConfig<null, CmsFieldType | (string & {})> & {
+  /** Show the value without letting it be edited, such as an id or a computed value. */
+  readOnly?: boolean
+  /** Do not render the field; its value is kept on save, such as import metadata. */
+  hidden?: boolean
+}
 
 /** A zod check carrying editor metadata; pass it to `.check()`. */
 export type FieldConfigCheck = ReturnType<typeof autoFormFieldConfig>
@@ -27,7 +38,9 @@ export type FieldConfigCheck = ReturnType<typeof autoFormFieldConfig>
  * Attach editor metadata (label, description, field type, order, ...) to a zod schema:
  * `z.string().check(field({ label: 'Title' }))`.
  */
-export function field(config: CmsFieldConfig): FieldConfigCheck {
+export function field({ readOnly, hidden, ...config }: CmsFieldConfig): FieldConfigCheck {
+  // AutoForm has no such flags; the editor's field wrapper reads them from `customData`.
+  if (readOnly || hidden) config.customData = { ...config.customData, readOnly, hidden }
   return autoFormFieldConfig(config) as FieldConfigCheck
 }
 

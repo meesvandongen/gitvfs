@@ -15,7 +15,7 @@ with helpers that attach editor metadata through `.check()`:
 | `z.string().check(markdown())` | markdown editor with toolbar and live preview |
 | `z.number()` | number input |
 | `z.boolean()` | checkbox |
-| `z.coerce.date()` | date picker |
+| `z.coerce.date()` | date picker (date only; see `datetime()` for a time) |
 | `z.enum([...])` | select |
 | `z.array(...)` | repeatable list |
 | `z.object({...})` | group of fields |
@@ -281,6 +281,172 @@ recurse forever into a zod 4 getter. The values type as `TreeNode<...>`, and `z.
 produces a recursive `$ref`. For your site, `flattenTree(nodes)` lists nodes with their depth, and
 `moveNode`, `indentNode`, `outdentNode`, `insertNode`, `removeNode` and `remapPath` are the pure
 helpers the editor uses.
+
+## Date and time fields
+
+`z.coerce.date()` picks a date only and stores `2026-11-20`. For a moment in time, or a time of day,
+use the helpers below. Both store strings, so a value reads back exactly as written from
+frontmatter, YAML and JSON (the `yaml` parser keeps timestamps as strings).
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `datetime()` | ISO 8601 string, `2026-11-20T19:30:00+01:00` | date and time picker, with the time zone named below it |
+| `time()` | `HH:MM` (`19:30`), or `HH:MM:SS` when `step` is under a minute | time picker |
+
+```ts
+import { datetime, time } from 'gitvfs-cms'
+
+schema: z.object({
+  starts: datetime({ label: 'Starts', timeZone: 'Europe/Amsterdam' }),
+  doors: time({ label: 'Doors open', step: 900, min: '12:00' }).optional(),
+  publishAt: datetime({ label: 'Publish at', timeZone: 'UTC' }).optional(),
+})
+```
+
+```yaml
+starts: 2026-11-20T19:30:00+01:00
+doors: "18:45"
+publishAt: 2026-11-20T08:00:00Z
+```
+
+`timeZone` decides how a picked date and time is stored:
+
+| `timeZone` | Stored as | Use for |
+| --- | --- | --- |
+| `'local'` (default) | `2026-11-20T19:30:00+01:00`, with the editor's offset on that date | a moment, written as the editor's clock time |
+| `'UTC'` | `2026-11-20T18:30:00Z` | timestamps such as publish times |
+| an IANA zone, `'Europe/Amsterdam'` | `2026-11-20T19:30:00+01:00`, with that zone's offset on that date (`+02:00` in summer) | events at a place: everyone enters the venue's clock time |
+| `'floating'` | `2026-11-20T19:30:00`, no offset | clock time that means the same everywhere |
+
+The schema accepts only values in that form (with an offset, or without one for `'floating'`), and
+seconds are always written. Values are shown converted to the field's zone and stored with it on
+edit; untouched values are saved as they are. Options: `timeZone`, and `step` (picker granularity
+in seconds, default 60). `time()` takes `step`, `min` and `max`.
+
+YAML 1.1 loaders (PyYAML, Ruby, gray-matter's js-yaml 3) read an unquoted `19:30` as the number
+1170, so times are written quoted. Loaders with timestamp support (js-yaml, gray-matter) turn
+`2026-11-20T19:30:00+01:00` into a `Date`, which keeps the moment; a `'floating'` value is read as
+UTC there. Helpers for your site: `parseDateTime`, `formatDateTime`, `toWallClock`, `fromWallClock`
+and `timeZoneOffset`.
+
+## Sliders
+
+`slider()` edits a bounded number with a range input and a number box for the exact value. The
+range comes from the schema: `.min()` and `.max()`, and the step from `.multipleOf()` (1 for
+`.int()`, otherwise a hundredth of the range). Values are plain numbers.
+
+```ts
+import { slider } from 'gitvfs-cms'
+
+fontSize: z.number().int().min(12).max(24).check(slider({ label: 'Font size', unit: 'px' })),
+opacity: z.number().min(0).max(1).multipleOf(0.05).check(slider({ label: 'Opacity' })),
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `step` | from the schema | Step between values. |
+| `unit` | none | Shown after the number box, such as `%` or `px`. |
+
+Without both bounds only the number box is shown. Call `slider()` once per field: it remembers the
+schema it is attached to.
+
+## Money
+
+`money()` stores `{ amount, currency }`: the amount as a number in major units, the currency as an
+ISO 4217 code.
+
+```ts
+import { money } from 'gitvfs-cms'
+
+price: money({ label: 'Price', currencies: ['EUR', 'USD', 'GBP'] }),
+fee: money({ label: 'Booking fee', currency: 'EUR' }).optional(),
+```
+
+```yaml
+price:
+  amount: 19.99
+  currency: EUR
+```
+
+Stripe and commercetools store integer minor units (`1999`) and Shopify decimal strings
+(`"19.99"`), both to avoid floating point errors. In a content file `amount: 19.99` is what people
+expect to read and type, and the number is exact as text: parsers return the nearest double, which
+prints back as `19.99`. Errors only appear in arithmetic, so the schema allows no more decimals
+than the currency has (2 for EUR, 0 for JPY, 3 for BHD), and `toMinorUnits(price)` gives exact
+integers to calculate with (`fromMinorUnits` goes back). `formatMoney(price, locale)` formats with
+`Intl.NumberFormat`: `€19.99`.
+
+The amount box accepts `19,99`, `1.299,50` and `1,299.50`, and the formatted amount is shown below
+it.
+
+| Option | Default | |
+| --- | --- | --- |
+| `currency` | none | Fix the currency: no picker, other currencies are rejected. |
+| `currencies` | every code `Intl` knows | Currencies to choose from; the first is preselected. |
+| `min`, `max` | `0`, none | Allowed amounts. |
+| `locale` | the browser's | Locale of the formatted amount and currency names. |
+
+## Durations
+
+`duration()` stores an ISO 8601 duration such as `PT1H30M`, the format of schema.org
+(`cookTime`, `duration`), YouTube and `Temporal.Duration`. It reads better in a file than a number
+of seconds, and keeps what was entered: `PT90M` stays 90 minutes. Years and months have no fixed
+length, so only weeks (read as days), days, hours, minutes and seconds are accepted.
+
+```ts
+import { duration } from 'gitvfs-cms'
+
+runtime: duration({ label: 'Running time' }),
+prepTime: duration({ label: 'Preparation', units: ['minutes'] }),
+```
+
+```yaml
+runtime: PT1H45M
+prepTime: PT20M
+```
+
+The editor shows a box per unit and the duration written out ("1 hour, 45 minutes"). Options:
+`units` (default `['hours', 'minutes']`, any of `days`, `hours`, `minutes`, `seconds`) and
+`locale`. Helpers: `parseDuration`, `formatDuration`, `durationToSeconds`, `splitDuration` and
+`describeDuration`.
+
+## Phone numbers
+
+`phone()` stores numbers in E.164, `+31201234567`: one form that `tel:` links and SMS services
+accept and that compares equal however it was typed. Input is lenient: spaces, dashes, dots and
+parentheses, `0031…` and `+31 (0)20…` are all fine, and with `defaultCountryCode` a national number
+like `020 123 4567` gets the country code (its leading 0 is dropped, except for Italy). The editor
+shows the number it will save, and saving normalizes it.
+
+```ts
+import { phone, phoneHref } from 'gitvfs-cms'
+
+boxOffice: phone({ label: 'Box office', defaultCountryCode: '31' }).optional(),
+// on your site: <a href={phoneHref(show.boxOffice)}>
+```
+
+```yaml
+boxOffice: "+31201234567"
+```
+
+There is no libphonenumber behind it, so only the shape is checked (a `+` and 7 to 15 digits), not
+whether a number exists or has the right length for its country, and extensions are not supported.
+
+## Read-only and hidden fields
+
+Every field helper takes `readOnly` and `hidden`, with any field type:
+
+```ts
+id: z.string().check(field({ label: 'ID', readOnly: true })),
+importedAt: datetime({ timeZone: 'UTC', hidden: true }).optional(),
+location: geoPoint({ label: 'Location', readOnly: true }),
+```
+
+A read-only field shows its value in a disabled fieldset, which disables every input and button in
+it (a map still pans and zooms). A hidden field is not rendered. Both keep their value on save, so
+they suit ids, computed values and import metadata. New entries cannot fill them in, so give them a
+`.default()` or make them optional. Custom field components can call `useReadOnly()` to ignore
+pointer gestures that native inputs do not cover.
 
 ## Preview
 
