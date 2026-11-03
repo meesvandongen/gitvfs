@@ -14,6 +14,7 @@ import { ZodProvider } from '@autoform/zod'
 import { z } from 'zod'
 import type { ContentType } from '../config.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPointsField, GeoPolygonField } from './map.js'
+import { GraphField } from './graph.js'
 import { DateTimeField, TimeField } from './datetime.js'
 import { DurationField } from './duration.js'
 import { withFieldState } from './field-utils.js'
@@ -373,6 +374,7 @@ export const formComponents: AutoFormFieldComponents = {
   number: NumberField,
   boolean: BooleanField,
   date: DateField,
+  graph: GraphField,
   select: SelectField,
   textarea: TextareaField,
   markdown: MarkdownField,

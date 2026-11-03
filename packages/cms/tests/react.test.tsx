@@ -10,6 +10,7 @@ import {
   geoPoint,
   geoPoints,
   geoPolygon,
+  graph,
   markdown,
   reference,
   references,
@@ -949,5 +950,215 @@ describe('reference fields', () => {
     await act(async () => byText('Delete')!.click())
     await waitFor(() => confirmations.length === 1)
     expect(confirmations[0]).toContain('Referenced by 2 entries: “One” and “Two”.')
+  })
+})
+
+describe('graph fields', () => {
+  const flows = defineCollection({
+    name: 'flows',
+    label: 'Flows',
+    folder: 'flows',
+    format: 'yaml',
+    schema: z.object({
+      title: z.string().min(1),
+      flow: graph({ label: 'Flow', nodeFields: { note: z.string().optional() }, edgeFields: { role: z.enum(['agent', 'lead']).optional() } }),
+    }),
+  })
+
+  const file = `title: Help
+flow:
+  nodes:
+    - id: start
+      label: Start
+      x: 0
+      y: 0
+    - id: done
+      label: Done
+      x: 0
+      y: 120
+  edges:
+    - from: start
+      to: done
+`
+
+  async function openHelp(source = file, beforeOpening?: () => Promise<void>) {
+    const remote = new MemoryRepository({ 'flows/help.yml': source })
+    const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [flows], changes: beforeOpening !== undefined })
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    await beforeOpening?.()
+    const entry = await waitFor(() => byText('Helphelp'))
+    await act(async () => entry.click())
+    await waitFor(() => container.querySelector('.gcms-graph'))
+    return remote
+  }
+
+  const nodeElement = (id: string) => container.querySelector<SVGGElement>(`[data-node="${id}"]`)!
+
+  /** Screen position of a node's center, from the canvas and node transforms. */
+  function screenOf(id: string) {
+    const [ox, oy, zoom] = container.querySelector('.gcms-graph-svg > g')!.getAttribute('transform')!.match(/-?[\d.]+/g)!.map(Number)
+    const [x, y] = nodeElement(id).getAttribute('transform')!.match(/-?[\d.]+/g)!.map(Number)
+    return { x: ox + x * zoom, y: oy + y * zoom }
+  }
+
+  function pointer(target: Element, type: string, at: { x: number; y: number }) {
+    target.dispatchEvent(new PointerEvent(type, { bubbles: true, button: 0, pointerId: 1, clientX: at.x, clientY: at.y }))
+  }
+
+  function key(target: Element, name: string) {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true }))
+  }
+
+  function choose(select: HTMLSelectElement, value: string) {
+    select.value = value
+    select.dispatchEvent(new Event('change', { bubbles: true }))
+  }
+
+  it('adds, connects, moves and deletes nodes on the canvas', async () => {
+    const remote = await openHelp()
+    expect(container.querySelectorAll('[data-node]')).toHaveLength(2)
+    expect(container.querySelectorAll('[data-edge]')).toHaveLength(1)
+    expect(container.querySelector('.gcms-graph-arrow')).toBeTruthy()
+
+    // A new node gets its label input focused; its id follows the label while it is new.
+    await act(async () => byText('Add node')!.click())
+    const label = container.querySelector<HTMLInputElement>('.gcms-graph-panel input')!
+    expect(document.activeElement).toBe(label)
+    expect(label.value).toBe('New node')
+    await act(async () => typeInto(label, 'Escalate'))
+    expect(nodeElement('escalate')).toBeTruthy()
+
+    // Drag from the handle of "Done" and drop on "Escalate".
+    const viewport = container.querySelector('.gcms-graph-viewport')!
+    await act(async () => {
+      pointer(container.querySelector('[data-handle="done"]')!, 'pointerdown', screenOf('done'))
+      pointer(viewport, 'pointermove', screenOf('escalate'))
+      pointer(viewport, 'pointerup', screenOf('escalate'))
+    })
+    expect(container.querySelectorAll('[data-edge]')).toHaveLength(2)
+    expect(byText('From', 'span')).toBeTruthy()
+
+    // Arrow keys move the focused node by one grid step; Delete removes it with its edges.
+    await act(async () => key(nodeElement('done'), 'ArrowRight'))
+    expect(nodeElement('done').getAttribute('transform')).toBe('translate(20 120)')
+    await act(async () => key(nodeElement('start'), 'Delete'))
+    expect(nodeElement('start')).toBeNull()
+    expect(container.querySelectorAll('[data-edge]')).toHaveLength(1)
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('flows/help.yml')).toBe(`title: Help
+flow:
+  nodes:
+    - id: done
+      label: Done
+      x: 20
+      y: 120
+    - id: escalate
+      label: Escalate
+      x: 0
+      y: 60
+  edges:
+    - from: done
+      to: escalate
+`)
+  })
+
+  it('edits labels, edges and node fields in the list view', async () => {
+    const remote = await openHelp()
+    await act(async () => byText('List')!.click())
+    expect(container.querySelector('.gcms-graph-viewport')).toBeNull()
+
+    // Existing nodes keep their id when the label changes.
+    const first = container.querySelector<HTMLInputElement>('input[aria-label="Label of node 1"]')!
+    await act(async () => typeInto(first, 'Begin'))
+    expect(byText('start', 'code')).toBeTruthy()
+
+    await act(async () => choose(container.querySelector<HTMLSelectElement>('select[aria-label="New edge from"]')!, 'done'))
+    await act(async () => choose(container.querySelector<HTMLSelectElement>('select[aria-label="New edge to"]')!, 'start'))
+    await act(async () => byText('Add edge')!.click())
+    await act(async () => typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Label of edge 2"]')!, 'retry'))
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Remove edge 1"]')!.click())
+
+    // Declared node fields are edited with the regular inputs in the panel.
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Edit Done"]')!.click())
+    const note = await waitFor(() => container.querySelector<HTMLInputElement>('.gcms-graph-panel input[name$=".note"]'))
+    await act(async () => typeInto(note, 'Close the ticket'))
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Edit edge 1"]')!.click())
+    const role = await waitFor(() => container.querySelector<HTMLSelectElement>('.gcms-graph-panel select[name$=".role"]'))
+    await act(async () => choose(role, 'agent'))
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('flows/help.yml')).toBe(`title: Help
+flow:
+  nodes:
+    - id: start
+      label: Begin
+      x: 0
+      y: 0
+    - id: done
+      label: Done
+      x: 0
+      y: 120
+      note: Close the ticket
+  edges:
+    - from: done
+      to: start
+      label: retry
+      role: agent
+`)
+
+    // Clearing an optional field removes its key, and the input stays empty.
+    await act(async () => choose(container.querySelector<HTMLSelectElement>('.gcms-graph-panel select[name$=".role"]')!, ''))
+    expect(container.querySelector<HTMLSelectElement>('.gcms-graph-panel select[name$=".role"]')!.value).toBe('')
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 2)
+    expect(remote.text('flows/help.yml')).toMatch(/label: retry\n$/)
+  })
+
+  it('marks a changed graph as a whole and saves it to the change branch', async () => {
+    const withNote = file.replace('      label: Done\n', '      label: Done\n      note: Close it\n')
+    const remote = await openHelp(withNote, async () => {
+      await act(async () => (await waitFor(() => byText('New change'))).click())
+      await act(async () => typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Name of the change"]')!, 'Flow update'))
+      await act(async () => byText('Start')!.click())
+      await waitFor(() => byText('Review & publish'))
+    })
+    await act(async () => byText('List')!.click())
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Edit Done"]')!.click())
+    const note = await waitFor(() => container.querySelector<HTMLInputElement>('.gcms-graph-panel input[name$=".note"]'))
+    expect(note.value).toBe('Close it')
+    // The node's own fields are not compared with the base branch one by one.
+    expect(container.querySelector('.gcms-change')).toBeNull()
+
+    const first = container.querySelector<HTMLInputElement>('input[aria-label="Label of node 1"]')!
+    await act(async () => typeInto(first, 'Begin'))
+    await waitFor(() => container.querySelectorAll('.gcms-change').length === 1)
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Revert flow to main"]')!.click())
+    await waitFor(() => container.querySelector<HTMLInputElement>('input[aria-label="Label of node 1"]')!.value === 'Start')
+
+    await act(async () => typeInto(container.querySelector<HTMLInputElement>('input[aria-label="Label of node 1"]')!, 'Begin'))
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.text('flows/help.yml', 'cms/flow-update')?.includes('label: Begin'))
+    expect(remote.text('flows/help.yml')).toBe(withNote)
+  })
+
+  it('shows broken references and lays out nodes without positions', async () => {
+    const remote = await openHelp('title: Help\nflow:\n  nodes:\n    - id: a\n      label: A\n    - id: b\n      label: B\n  edges:\n    - from: a\n      to: ghost\n')
+    // Missing positions are filled in by auto layout.
+    expect(nodeElement('a').getAttribute('transform')).toBe('translate(40 20)')
+    expect(nodeElement('b').getAttribute('transform')).toBe('translate(160 20)')
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => byText('Edge a → ghost: No node has the id “ghost”', 'li'))
+    expect(remote.commits).toHaveLength(0)
+
+    await act(async () => byText('List')!.click())
+    expect(byText('ghost (missing)', 'option')).toBeTruthy()
+    await act(async () => container.querySelector<HTMLButtonElement>('button[aria-label="Remove edge 1"]')!.click())
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('flows/help.yml')).toContain('    - id: b\n      label: B\n      x: 160\n      y: 20\n  edges: []\n')
   })
 })

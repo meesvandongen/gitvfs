@@ -11,6 +11,7 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
 | Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon, a route line and labelled branch markers (`geoPoints`); address search on every map field through `mapDefaults={{ geocoder: nominatimGeocoder() }}` |
+| Flows | YAML | a graph field: a support decision tree and a publishing workflow, with node kinds (shapes), node and edge fields, canvas and list views |
 | Shows | YAML | date and time in a fixed time zone and in the editor's own, time, durations, money, a phone number, a slider, a read-only id and hidden import metadata, a custom preview using the formatting helpers |
 | Blog posts, Homepage | markdown | references: each post's author (one post points at an author that does not exist), up to three related posts in order, and a homepage highlight that can be a post or a doc (`{ collection, slug }`); deleting a referenced author lists the posts that use it |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons; the theme uses sliders |

@@ -27,6 +27,7 @@ export {
   fitView,
 } from './map.js'
 export type { MapOverlayHelpers, MapView, SlippyMapProps } from './map.js'
+export { GraphField } from './graph.js'
 export { TableField } from './table.js'
 export { TreeField } from './tree.js'
 export { ChangeReviewContext, CmsProvider, useChangeReview, useCms, useCmsState } from './context.js'

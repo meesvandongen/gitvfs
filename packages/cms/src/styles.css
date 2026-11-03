@@ -1827,3 +1827,403 @@ a.gcms-button {
   color: var(--gcms-warning);
   font-size: 0.8rem;
 }
+
+/* Graph field (graph) */
+.gcms-graph {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  outline: none;
+  --gcms-graph-tone: var(--gcms-muted);
+  --gcms-graph-line: color-mix(in srgb, var(--gcms-text) 55%, transparent);
+}
+
+.gcms-graph-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.35rem;
+}
+
+.gcms-graph-views {
+  display: inline-flex;
+  margin-right: 0.25rem;
+  overflow: hidden;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+}
+
+.gcms-graph-view-button {
+  padding: 0.25rem 0.6rem;
+  border: 0;
+  background: var(--gcms-bg);
+  color: var(--gcms-text);
+  font: 0.78rem var(--gcms-font);
+  cursor: pointer;
+}
+
+.gcms-graph-view-button + .gcms-graph-view-button {
+  border-left: 1px solid var(--gcms-border);
+}
+
+.gcms-graph-view-button[aria-pressed='true'] {
+  background: var(--gcms-accent);
+  color: var(--gcms-accent-text);
+}
+
+.gcms-graph-view-button:focus-visible,
+.gcms-graph-zoom-button:focus-visible {
+  outline: 2px solid var(--gcms-accent);
+  outline-offset: -2px;
+}
+
+.gcms-graph-snap {
+  display: inline-flex;
+  align-items: center;
+  gap: 0.3rem;
+  margin-left: 0.25rem;
+  color: var(--gcms-muted);
+  font-size: 0.78rem;
+}
+
+.gcms-graph-canvas {
+  position: relative;
+  overflow: hidden;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-surface);
+}
+
+.gcms-graph-viewport {
+  position: absolute;
+  inset: 0;
+  overflow: hidden;
+  background-image: radial-gradient(circle, color-mix(in srgb, var(--gcms-muted) 45%, transparent) 1px, transparent 1.2px);
+  cursor: grab;
+  touch-action: none;
+  user-select: none;
+}
+
+.gcms-graph-viewport:active {
+  cursor: grabbing;
+}
+
+.gcms-graph-viewport:focus-visible {
+  outline: 2px solid var(--gcms-accent);
+  outline-offset: -2px;
+}
+
+.gcms-graph-svg {
+  display: block;
+  overflow: visible;
+}
+
+.gcms-graph-node {
+  cursor: move;
+  outline: none;
+}
+
+.gcms-graph-node[data-tone='0'] {
+  --gcms-graph-tone: #2f6feb;
+}
+
+.gcms-graph-node[data-tone='1'] {
+  --gcms-graph-tone: #c2410c;
+}
+
+.gcms-graph-node[data-tone='2'] {
+  --gcms-graph-tone: #0f766e;
+}
+
+.gcms-graph-node[data-tone='3'] {
+  --gcms-graph-tone: #9333ea;
+}
+
+.gcms-graph-node[data-tone='4'] {
+  --gcms-graph-tone: #b45309;
+}
+
+.gcms-graph-node[data-tone='5'] {
+  --gcms-graph-tone: #be185d;
+}
+
+.gcms-graph-shape {
+  fill: color-mix(in srgb, var(--gcms-graph-tone) 14%, var(--gcms-bg));
+  stroke: var(--gcms-graph-tone);
+  stroke-width: 1.5;
+}
+
+.gcms-graph-node-label {
+  fill: var(--gcms-text);
+  font: 13px var(--gcms-font);
+  text-anchor: middle;
+  dominant-baseline: central;
+  pointer-events: none;
+}
+
+.gcms-graph-node--selected .gcms-graph-shape,
+.gcms-graph-node:focus-visible .gcms-graph-shape {
+  stroke: var(--gcms-accent);
+  stroke-width: 3;
+}
+
+.gcms-graph-node--target .gcms-graph-shape {
+  stroke: var(--gcms-ok);
+  stroke-width: 3;
+  stroke-dasharray: 5 3;
+}
+
+.gcms-graph-node--invalid .gcms-graph-shape {
+  stroke: var(--gcms-danger);
+  stroke-dasharray: 4 3;
+}
+
+.gcms-graph-handle {
+  fill: var(--gcms-bg);
+  stroke: var(--gcms-accent);
+  stroke-width: 2;
+  cursor: crosshair;
+  opacity: 0;
+  transition: opacity 0.1s;
+}
+
+.gcms-graph-node:hover .gcms-graph-handle,
+.gcms-graph-node--selected .gcms-graph-handle,
+.gcms-graph-node:focus-visible .gcms-graph-handle {
+  opacity: 1;
+}
+
+@media (hover: none) {
+  .gcms-graph-handle {
+    opacity: 1;
+  }
+}
+
+.gcms-graph-edge {
+  cursor: pointer;
+}
+
+.gcms-graph-edge-hit {
+  fill: none;
+  stroke: transparent;
+  stroke-width: 14;
+}
+
+.gcms-graph-edge-line {
+  fill: none;
+  stroke: var(--gcms-graph-line);
+  stroke-width: 1.6;
+}
+
+.gcms-graph-arrow {
+  fill: var(--gcms-graph-line);
+}
+
+.gcms-graph-edge-label {
+  fill: var(--gcms-text);
+  font: 12px var(--gcms-font);
+  dominant-baseline: central;
+  paint-order: stroke;
+  stroke: var(--gcms-surface);
+  stroke-width: 5px;
+  stroke-linejoin: round;
+}
+
+.gcms-graph-edge:hover .gcms-graph-edge-line {
+  stroke: var(--gcms-text);
+}
+
+.gcms-graph-edge--selected .gcms-graph-edge-line {
+  stroke: var(--gcms-accent);
+  stroke-width: 2.5;
+}
+
+.gcms-graph-edge--selected .gcms-graph-arrow {
+  fill: var(--gcms-accent);
+}
+
+.gcms-graph-edge--invalid .gcms-graph-edge-line {
+  stroke: var(--gcms-danger);
+  stroke-dasharray: 4 3;
+}
+
+.gcms-graph-connect {
+  stroke: var(--gcms-accent);
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.gcms-graph-empty,
+.gcms-graph-hint {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  margin: 0;
+  place-items: center;
+  pointer-events: none;
+}
+
+.gcms-graph-empty {
+  color: var(--gcms-muted);
+}
+
+.gcms-graph-hint {
+  background: rgb(0 0 0 / 0.35);
+  color: #ffffff;
+  font-weight: 600;
+}
+
+.gcms-graph-zoom {
+  position: absolute;
+  top: 8px;
+  right: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+}
+
+.gcms-graph-zoom-button {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  background: var(--gcms-bg);
+  color: var(--gcms-text);
+  font: 600 1rem/1 var(--gcms-font);
+  cursor: pointer;
+}
+
+.gcms-graph-zoom-button + .gcms-graph-zoom-button {
+  border-top: 1px solid var(--gcms-border);
+}
+
+.gcms-graph-help {
+  margin: 0;
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+}
+
+.gcms-graph-details {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.gcms-graph-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+  margin: 0;
+  padding: 0.75rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: var(--gcms-radius);
+  background: var(--gcms-surface);
+}
+
+.gcms-graph-panel-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.2rem;
+  min-width: 0;
+}
+
+.gcms-graph-edge-inputs > .gcms-graph-panel-field {
+  flex: 1 1 9rem;
+}
+
+.gcms-graph-panel code,
+.gcms-graph-id {
+  font: 0.78rem var(--gcms-mono);
+}
+
+.gcms-graph-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 0.6rem;
+}
+
+.gcms-graph-edge-inputs,
+.gcms-graph-connect-form,
+.gcms-graph-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: flex-end;
+  gap: 0.5rem;
+}
+
+.gcms-graph-connect-form .gcms-input {
+  flex: 1 1 9rem;
+  width: auto;
+}
+
+.gcms-graph-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.gcms-graph-list-heading {
+  margin: 0.25rem 0 0;
+  font-size: 0.85rem;
+}
+
+.gcms-graph-rows {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+/* A node: label input and buttons on one line, the id under the input. */
+.gcms-graph-rows--nodes li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  align-items: center;
+  gap: 0.15rem 0.4rem;
+}
+
+.gcms-graph-rows--nodes li > .gcms-graph-id {
+  grid-row: 2;
+  grid-column: 1 / -1;
+  overflow: hidden;
+  color: var(--gcms-muted);
+  text-overflow: ellipsis;
+}
+
+/* An edge: its inputs, then its buttons on the right. */
+.gcms-graph-rows--edges li {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 0.4rem;
+  padding-bottom: 0.5rem;
+  border-bottom: 1px solid var(--gcms-border);
+}
+
+.gcms-graph-rows--edges li > .gcms-graph-edge-inputs {
+  flex: 1 1 100%;
+}
+
+.gcms-graph-row--selected > .gcms-input,
+.gcms-graph-row--selected .gcms-graph-edge-inputs .gcms-input {
+  border-color: var(--gcms-accent);
+}
+
+.gcms-graph-errors {
+  margin: 0;
+  padding-left: 1.25rem;
+}
+
+.gcms-graph-status {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}

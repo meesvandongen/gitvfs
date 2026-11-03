@@ -10,6 +10,7 @@ import {
   geoPoint,
   geoPoints,
   geoPolygon,
+  graph,
   markdown,
   money,
   phone,
@@ -185,6 +186,35 @@ export const shows = defineCollection({
   sort: (a, b) => String(a.data.starts ?? '').localeCompare(String(b.data.starts ?? '')),
 })
 
+export const flows = defineCollection({
+  name: 'flows',
+  label: 'Flows',
+  folder: 'data/flows',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    description: z.string().check(textarea({ label: 'Description' })).optional(),
+    flow: graph({
+      label: 'Flow',
+      description: 'Double-click to add a step, drag from its dot to connect it; or use the List view',
+      nodeKinds: {
+        start: { label: 'Start', shape: 'ellipse' },
+        question: { label: 'Question', shape: 'diamond' },
+        step: { label: 'Step', shape: 'rounded' },
+        handoff: { label: 'Hand off', shape: 'rect' },
+      },
+      nodeFields: {
+        details: z.string().check(textarea({ label: 'Details', description: 'What to say or do at this step' })).optional(),
+        article: z.url().optional().check(field({ label: 'Help article' })),
+      },
+      edgeFields: {
+        role: z.enum(['anyone', 'writer', 'editor', 'support']).optional().check(field({ label: 'Who takes this path' })),
+      },
+      minNodes: 1,
+    }),
+  }),
+})
+
 export const site = defineSingleton({
   name: 'site',
   label: 'Site settings',
@@ -270,7 +300,7 @@ export const navigation = defineSingleton({
   }),
 })
 
-export const collections = [posts, docs, authors, events, places, shows]
+export const collections = [posts, docs, authors, events, places, shows, flows]
 export const singletons = [site, homepage, theme, pricing, navigation]
 
 /** The repository visitors start with, and go back to on reset. */
@@ -460,6 +490,107 @@ location:
 starts: 2026-12-04
 online: true
 tickets: []
+`,
+  'data/flows/login-trouble.yml': `title: Login trouble
+description: Support decision tree for customers who cannot sign in.
+flow:
+  nodes:
+    - id: cannot-sign-in
+      label: Customer cannot sign in
+      x: 220
+      y: 20
+      kind: start
+    - id: reset-email-arrived
+      label: Did the reset email arrive?
+      x: 220
+      y: 160
+      kind: question
+    - id: use-reset-link
+      label: Use the link in the email
+      x: -80
+      y: 300
+      kind: step
+      details: The link works for one hour. Ask them to open it on the same device.
+      article: https://example.com/help/reset-password
+    - id: in-spam
+      label: Is it in the spam folder?
+      x: 220
+      y: 300
+      kind: question
+    - id: check-address
+      label: Check the address on file
+      x: 360
+      y: 440
+      kind: step
+    - id: escalate
+      label: Escalate to tier 2
+      x: 360
+      y: 560
+      kind: handoff
+  edges:
+    - from: cannot-sign-in
+      to: reset-email-arrived
+    - from: reset-email-arrived
+      to: use-reset-link
+      label: "Yes"
+    - from: reset-email-arrived
+      to: in-spam
+      label: "No"
+    - from: in-spam
+      to: use-reset-link
+      label: "Yes"
+    - from: in-spam
+      to: check-address
+      label: "No"
+    - from: check-address
+      to: escalate
+      label: Still nothing
+      role: support
+`,
+  'data/flows/publishing-workflow.yml': `title: Publishing workflow
+description: How a post moves from draft to the site. Edges in both directions bend apart.
+flow:
+  nodes:
+    - id: draft
+      label: Draft
+      x: 100
+      y: 20
+      kind: start
+    - id: in-review
+      label: In review
+      x: 100
+      y: 160
+      kind: step
+    - id: scheduled
+      label: Scheduled
+      x: 100
+      y: 300
+      kind: step
+    - id: published
+      label: Published
+      x: 340
+      y: 300
+      kind: handoff
+  edges:
+    - from: draft
+      to: in-review
+      label: Submit
+      role: writer
+    - from: in-review
+      to: draft
+      label: Changes requested
+      role: editor
+    - from: in-review
+      to: scheduled
+      label: Approve
+      role: editor
+    - from: scheduled
+      to: published
+      label: Publish date reached
+    - from: published
+      to: draft
+      label: Update
+      role: writer
 `,
   'data/shows/late-night-jazz.yml': `title: Late night jazz
 id: tm-48213
