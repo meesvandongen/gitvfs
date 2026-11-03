@@ -1560,3 +1560,84 @@ a.gcms-button {
 .gcms-readonly .gcms-map-draggable {
   cursor: default;
 }
+
+
+/* Address search and numbered markers of map fields */
+.gcms-map-search {
+  position: relative;
+}
+
+.gcms-map-search-row {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.gcms-map-search-popup {
+  position: absolute;
+  z-index: 10;
+  top: calc(100% + 4px);
+  right: 0;
+  left: 0;
+  overflow: auto;
+  max-height: 16rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-bg);
+  box-shadow: 0 6px 20px rgb(0 0 0 / 0.18);
+}
+
+.gcms-map-search-results {
+  margin: 0;
+  padding: 0.25rem 0;
+  list-style: none;
+}
+
+.gcms-map-search-results li {
+  padding: 0.4rem 0.6rem;
+  font-size: 0.85rem;
+  cursor: pointer;
+}
+
+.gcms-map-search-results li[aria-selected='true'] {
+  background: color-mix(in srgb, var(--gcms-accent) 16%, transparent);
+}
+
+.gcms-map-search-status,
+.gcms-map-search-credit {
+  margin: 0;
+  padding: 0.4rem 0.6rem;
+  color: var(--gcms-muted);
+  font-size: 0.8rem;
+}
+
+.gcms-map-search-credit {
+  border-top: 1px solid var(--gcms-border);
+  font-size: 0.7rem;
+}
+
+.gcms-map-search-live {
+  position: absolute;
+  overflow: hidden;
+  width: 1px;
+  height: 1px;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.gcms-map-marker-badge {
+  fill: #ffffff;
+  font: 700 11px/1 var(--gcms-font);
+}
+
+.gcms-map-marker-caption {
+  fill: var(--gcms-text);
+  font: 600 12px/1 var(--gcms-font);
+  paint-order: stroke;
+  stroke: var(--gcms-bg);
+  stroke-width: 3px;
+  stroke-linejoin: round;
+}
+
+.gcms-map-label {
+  flex: 2 1 9rem;
+}

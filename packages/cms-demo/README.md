@@ -10,7 +10,7 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Documentation | MDX | the site's own stylesheet in the preview (`previewStylesheets`) |
 | Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
 | Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
-| Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon and a route line |
+| Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon, a route line and labelled branch markers (`geoPoints`); address search on every map field through `mapDefaults={{ geocoder: nominatimGeocoder() }}` |
 | Shows | YAML | date and time in a fixed time zone and in the editor's own, time, durations, money, a phone number, a slider, a read-only id and hidden import metadata, a custom preview using the formatting helpers |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons; the theme uses sliders |
 | Pricing, Navigation | YAML | a table of plans (spreadsheet-like grid with paste and CSV copy, a read-only list column) and a nested menu edited as an outline (`tree()`); event tickets use the table too |

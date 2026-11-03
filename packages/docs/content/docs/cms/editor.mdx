@@ -36,7 +36,7 @@ plain required string rejects an empty body.
 
 ## Map fields
 
-Four helpers return ready-made schemas edited on a map. Values are plain `{ lat, lng }` objects in
+Five helpers return ready-made schemas edited on a map. Values are plain `{ lat, lng }` objects in
 WGS 84 degrees, which read well in frontmatter, JSON and YAML (and avoid GeoJSON's
 `[longitude, latitude]` order):
 
@@ -46,9 +46,10 @@ WGS 84 degrees, which read well in frontmatter, JSON and YAML (and avoid GeoJSON
 | `geoCircle()` | `{ lat, lng, radius }`, radius in meters | a point with a range: drag the edge handle or use the slider |
 | `geoLine()` | `[{ lat, lng }, ...]` | click to add points, for routes |
 | `geoPolygon()` | `[{ lat, lng }, ...]` | click to add corners, for areas; shows the area |
+| `geoPoints()` | `[{ lat, lng }, ...]`, or `[{ lat, lng, label? }, ...]` with `labels: true` | several numbered markers, such as branches or stops |
 
 ```ts
-import { geoCircle, geoPoint, geoPolygon } from 'gitvfs-cms'
+import { geoCircle, geoPoint, geoPoints, geoPolygon } from 'gitvfs-cms'
 
 const shops = defineCollection({
   name: 'shops',
@@ -59,6 +60,7 @@ const shops = defineCollection({
     location: geoPoint({ label: 'Location', center: { lat: 52.37, lng: 4.9 }, zoom: 11 }),
     delivery: geoCircle({ label: 'Delivery range', minRadius: 250, maxRadius: 15_000 }).optional(),
     area: geoPolygon({ label: 'Service area', maxPoints: 50 }).optional(),
+    branches: geoPoints({ label: 'Branches', labels: true }).optional(),
   }),
 })
 ```
@@ -71,6 +73,12 @@ delivery:
   lat: 52.374
   lng: 4.8897
   radius: 3000
+branches:
+  - lat: 52.3791
+    lng: 4.9003
+    label: Central Station
+  - lat: 52.3579
+    lng: 4.8813
 ```
 
 Every map field also has latitude and longitude inputs that accept a pasted pair such as
@@ -86,19 +94,77 @@ controls (arrow keys pan, `+` and `-` zoom). Scrolling over the map scrolls the 
 | `height` | `320` | Map height in pixels. |
 | `tiles` | `OSM_TILES` | Tile layer: `{ url, attribution, attributionUrl?, maxZoom?, subdomains? }`. |
 | `defaultRadius`, `minRadius`, `maxRadius` | `1000`, `0`, none | `geoCircle` only; `maxRadius` adds a slider. |
-| `minPoints`, `maxPoints` | `2` or `3`, none | `geoLine` and `geoPolygon`. |
+| `minPoints`, `maxPoints` | `2`, `3` or `1`, none | `geoLine`, `geoPolygon` and `geoPoints`. |
+| `labels` | `false` | `geoPoints` only: a label input per marker; blank labels are left out of the file. |
+| `geocoder` | none | Address search above the map, see below. |
+
+Lists (`geoLine`, `geoPolygon`, `geoPoints`) that are cleared are saved as absent, so make them
+`.optional()` when they may be empty. **Show all** fits the map to every point of the list.
 
 The map is built in, without a map library. Tiles come from OpenStreetMap by default; for heavy
 use, read their [tile usage policy](https://operations.osmfoundation.org/policies/tiles/) and point
-`tiles` at another provider, for example with your own helper:
+`tiles` at another provider, per field or for all of them with `mapDefaults` (below):
 
 ```ts
 const tiles = { url: 'https://tiles.example.com/{z}/{x}/{y}.png', attribution: '© Example' }
-const place = (config = {}) => geoPoint({ tiles, ...config })
 ```
 
+### Address search
+
+Set `geocoder` to show a search box above the map. Search runs when the user presses Enter or the
+**Search** button, and the results open in a list (arrow keys and Enter, or the mouse). Choosing one
+moves the map to it (to its whole extent, such as a city, when the service reports one) and, for
+`geoPoint` and `geoCircle`, sets the value; `geoPoints` adds a marker without a label; `geoLine` and
+`geoPolygon` only move the map. Stored values stay plain coordinates: the address is not saved.
+
+`nominatimGeocoder()` searches OpenStreetMap's [Nominatim](https://nominatim.org):
+
+```ts
+import { nominatimGeocoder } from 'gitvfs-cms'
+
+const geocoder = nominatimGeocoder({ email: 'webmaster@example.com', countryCodes: ['nl', 'be'], language: 'nl' })
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `endpoint` | `https://nominatim.openstreetmap.org/search` | Your own instance or a compatible service. |
+| `email` | none | Contact address sent with requests, so the operator can reach you. |
+| `countryCodes` | all | Only places in these countries. |
+| `language` | the browser's | Language of the result labels. |
+| `limit` | `5` | Number of results. |
+| `interval` | `1000` | Minimum milliseconds between requests to `endpoint`, across all fields. |
+| `cacheSize` | `100` | Searches remembered, so repeating one sends no request. |
+
+The public instance is free to use within its
+[usage policy](https://operations.osmfoundation.org/policies/nominatim/), which applies to your
+whole app: at most one request per second, an identified application, no search as you type,
+cached results and visible attribution, and no bulk or systematic queries. The geocoder spaces
+requests one second apart per endpoint, caches results, sends your site's origin as `Referer`
+(and `email` when set), and the editor shows the OpenStreetMap credit under the results and never
+searches while typing. For more than an occasional editor, run your own Nominatim or use a
+commercial service.
+
+Any other service fits behind the `Geocoder` type: an async function of the query and
+`{ signal, near }` (an `AbortSignal`, and the map's center once it is zoomed in on a region) that
+returns `{ label, lat, lng, bounds? }[]`, with `bounds` as `{ south, west, north, east }`. Pass
+`signal` on to `fetch`, as a newer search aborts the previous one. Set `geocoder.attribution` to
+show a credit under the results.
+
+### Options for every map field
+
+Instead of repeating `tiles` or `geocoder` per field, give them to `CmsApp` once. A field's own
+options win:
+
+```tsx
+<CmsApp cms={cms} mapDefaults={{ tiles, geocoder: nominatimGeocoder({ email: 'webmaster@example.com' }) }} />
+```
+
+When you assemble your own editor, wrap it in `<MapDefaultsProvider value={{ tiles, geocoder }}>`
+instead.
+
 For your site, `toGeoJSON(value)` converts a value to a GeoJSON geometry (a circle becomes its center,
-or a ring of points with `{ polygon: true }`), and `distance`, `pathLength` and `polygonArea` measure
+or a ring of points with `{ polygon: true }`; `geoPoints` markers become a MultiPoint with
+`{ multiPoint: true }`), and `distance`, `pathLength` and `polygonArea` measure
 in meters.
 
 ## Table fields

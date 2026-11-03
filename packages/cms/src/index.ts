@@ -42,6 +42,7 @@ export {
   geoCircle,
   geoLine,
   geoPoint,
+  geoPoints,
   geoPolygon,
   isGeoPoint,
   metersPerPixel,
@@ -59,11 +60,15 @@ export type {
   GeoCircleOptions,
   GeoCustomData,
   GeoFieldConfig,
+  GeoMarker,
   GeoPoint,
+  GeoPointsOptions,
   GeoShapeOptions,
   MapOptions,
   MapTiles,
 } from './geo.js'
+export { NOMINATIM_ENDPOINT, nominatimGeocoder } from './geocode.js'
+export type { GeoBounds, GeocodeOptions, GeocodeResult, Geocoder, NominatimOptions } from './geocode.js'
 export { isValidSlug, slugify } from './slug.js'
 export {
   datetime,

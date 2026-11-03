@@ -16,7 +16,16 @@ export {
 } from './autoform.js'
 export type { ContentFormProps } from './autoform.js'
 export type { AutoFormFieldProps as FieldProps } from '@autoform/react'
-export { GeoCircleField, GeoLineField, GeoPointField, GeoPolygonField, SlippyMap, fitView } from './map.js'
+export {
+  GeoCircleField,
+  GeoLineField,
+  GeoPointField,
+  GeoPointsField,
+  GeoPolygonField,
+  MapDefaultsProvider,
+  SlippyMap,
+  fitView,
+} from './map.js'
 export type { MapOverlayHelpers, MapView, SlippyMapProps } from './map.js'
 export { TableField } from './table.js'
 export { TreeField } from './tree.js'

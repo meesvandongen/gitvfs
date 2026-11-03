@@ -14,6 +14,7 @@ export type CmsFieldType =
   | 'geocircle'
   | 'geoline'
   | 'geopolygon'
+  | 'geopoints'
   | 'datetime'
   | 'time'
   | 'slider'

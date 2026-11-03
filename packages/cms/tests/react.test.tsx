@@ -2,7 +2,7 @@ import { act } from 'react'
 import { createRoot, type Root } from 'react-dom/client'
 import { GitVFS, type GitProvider, type RepositoryInfo } from 'gitvfs'
 import { z } from 'zod'
-import { createCms, defineCollection, defineSingleton, geoCircle, geoPoint, geoPolygon, markdown } from '../src'
+import { createCms, defineCollection, defineSingleton, geoCircle, geoPoint, geoPoints, geoPolygon, markdown, type Geocoder, type MapOptions } from '../src'
 import {
   CmsApp,
   RepositoryPicker,
@@ -160,16 +160,31 @@ describe('map fields', () => {
       location: geoPoint({ label: 'Location' }),
       delivery: geoCircle({ label: 'Delivery range', maxRadius: 5000 }).optional(),
       area: geoPolygon({ label: 'Area' }).optional(),
+      branches: geoPoints({ label: 'Branches', labels: true, maxPoints: 3 }).optional(),
       // An ordinary optional group: left blank, it must not block saving.
       contact: z.object({ phone: z.string().min(1) }).optional(),
     }),
   })
 
-  function setupPlaces(file: string) {
+  function setupPlaces(file: string, mapDefaults?: MapOptions) {
     const remote = new MemoryRepository({ 'places/shop.yml': file })
     const cms = createCms({ fs: new GitVFS({ repository: remote, branch: 'main', cache: 'none' }), collections: [places] })
-    act(() => root.render(<CmsApp cms={cms} title="Test CMS" />))
+    act(() => root.render(<CmsApp cms={cms} title="Test CMS" mapDefaults={mapDefaults} />))
     return remote
+  }
+
+  /** The map field labelled `label`. */
+  function geoField(label: string): HTMLElement {
+    const wrapper = [...container.querySelectorAll('.gcms-field')].find((el) => el.querySelector('label')?.textContent?.startsWith(label))
+    return wrapper!.querySelector<HTMLElement>('.gcms-geo')!
+  }
+
+  function inField(field: HTMLElement, text: string, selector = 'button') {
+    return [...field.querySelectorAll<HTMLElement>(selector)].find((el) => el.textContent?.trim() === text)
+  }
+
+  function key(target: Element, name: string) {
+    target.dispatchEvent(new KeyboardEvent('keydown', { key: name, bubbles: true, cancelable: true }))
   }
 
   async function openShop() {
@@ -250,6 +265,127 @@ describe('map fields', () => {
     const saved = remote.text('places/shop.yml')!
     expect(saved).toContain('delivery:\n  lat: 20\n  lng: 0\n  radius: 1000\n')
     expect(saved.match(/- lat: /g)).toHaveLength(3)
+  })
+
+  it('searches places and picks a result with the keyboard or the mouse', async () => {
+    const queries: Array<{ query: string; signal: AbortSignal }> = []
+    const geocoder: Geocoder = async (query, options) => {
+      queries.push({ query, signal: options.signal })
+      return [
+        { label: 'Dam, Amsterdam', lat: 52.3731, lng: 4.8926, bounds: { south: 52.372, north: 52.374, west: 4.891, east: 4.894 } },
+        { label: 'Utrecht Centraal', lat: 52.0894, lng: 5.1101 },
+      ]
+    }
+    geocoder.attribution = 'Search by Test'
+    const remote = setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n', { geocoder })
+    const lat = await openShop()
+
+    const search = container.querySelector<HTMLInputElement>('input[id="location-search"]')!
+    expect(search.getAttribute('role')).toBe('combobox')
+    // Typing alone does not search.
+    await act(async () => typeInto(search, 'station'))
+    expect(queries).toHaveLength(0)
+    await act(async () => key(search, 'Enter'))
+    const options = await waitFor(() => {
+      const found = container.querySelectorAll('[role="option"]')
+      return found.length === 2 ? found : undefined
+    })
+    expect(queries[0].query).toBe('station')
+    expect(queries[0].signal).toBeInstanceOf(AbortSignal)
+    expect(search.getAttribute('aria-expanded')).toBe('true')
+    expect(byText('Search by Test', 'p')).toBeTruthy()
+
+    await act(async () => key(search, 'ArrowDown'))
+    await act(async () => key(search, 'ArrowDown'))
+    expect(options[1].getAttribute('aria-selected')).toBe('true')
+    expect(search.getAttribute('aria-activedescendant')).toBe(options[1].id)
+    await act(async () => key(search, 'Enter'))
+    expect(container.querySelector('[role="listbox"]')).toBeNull()
+    expect(lat.value).toBe('52.0894')
+    expect(container.querySelector<HTMLInputElement>('input[id="location-lng"]')!.value).toBe('5.1101')
+    // Enter searched and chose; it did not submit the form.
+    expect(remote.commits).toHaveLength(0)
+
+    // A polygon only moves its map to the place.
+    const areaSearch = container.querySelector<HTMLInputElement>('input[id="area-search"]')!
+    await act(async () => typeInto(areaSearch, 'dam'))
+    await act(async () => inField(geoField('Area'), 'Search')!.click())
+    const dam = await waitFor(() => byText('Dam, Amsterdam', 'li'))
+    await act(async () => dam.click())
+    expect(container.querySelector('polygon')).toBeNull()
+    expect(inField(geoField('Area'), '0 corners', 'summary')).toBeTruthy()
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('places/shop.yml')).toBe('title: Shop\nlocation:\n  lat: 52.0894\n  lng: 5.1101\n')
+  })
+
+  it('shows search failures', async () => {
+    const geocoder: Geocoder = async () => {
+      throw new Error('Address search failed (HTTP 503)')
+    }
+    setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n', { geocoder })
+    await openShop()
+    const search = container.querySelector<HTMLInputElement>('input[id="location-search"]')!
+    await act(async () => typeInto(search, 'nowhere'))
+    await act(async () => key(search, 'Enter'))
+    await waitFor(() => byText('Address search failed (HTTP 503)', 'p'))
+  })
+
+  it('edits several numbered, labelled markers', async () => {
+    const remote = setupPlaces('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\nbranches:\n  - lat: 52.3731\n    lng: 4.8922\n    label: Centre\n')
+    await openShop()
+    const branches = geoField('Branches')
+    const viewport = branches.querySelector('.gcms-map-viewport')!
+    expect(branches.querySelector('.gcms-map-marker-badge')?.textContent).toBe('1')
+    expect(branches.querySelector('.gcms-map-marker-caption')?.textContent).toBe('Centre')
+
+    for (const [x, y] of [[200, 100], [400, 220]]) {
+      await act(async () => {
+        pointer(viewport, 'pointerdown', x, y)
+        pointer(viewport, 'pointerup', x, y)
+      })
+    }
+    expect([...branches.querySelectorAll('.gcms-map-marker-badge')].map((el) => el.textContent)).toEqual(['1', '2', '3'])
+    expect(branches.textContent).toContain('The maximum of 3 markers is reached.')
+    // Full: clicking the map adds nothing.
+    await act(async () => {
+      pointer(viewport, 'pointerdown', 300, 300)
+      pointer(viewport, 'pointerup', 300, 300)
+    })
+    expect(branches.querySelectorAll('.gcms-map-marker')).toHaveLength(3)
+
+    const labels = [...branches.querySelectorAll<HTMLInputElement>('.gcms-map-label input')]
+    await act(async () => typeInto(labels[1], 'North'))
+    expect(branches.querySelectorAll('.gcms-map-marker-caption')[1]?.textContent).toBe('North')
+    await act(async () => branches.querySelector<HTMLButtonElement>('button[aria-label="Remove marker 3"]')!.click())
+
+    // Drag the first marker to the east; its label stays.
+    const [first] = branches.querySelectorAll('.gcms-map-marker')
+    await act(async () => {
+      pointer(first, 'pointerdown', 300, 160)
+      pointer(first, 'pointermove', 340, 160)
+      pointer(first, 'pointerup', 340, 160)
+    })
+    const lngs = [...branches.querySelectorAll<HTMLInputElement>('.gcms-map-points input')].filter((_, index) => index % 3 === 2)
+    expect(Number(lngs[0].value)).toBeGreaterThan(4.8922)
+
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    const saved = remote.text('places/shop.yml')!
+    expect(saved).toMatch(/branches:\n  - lat: 52\.3731\n    lng: 4\.89\d+\n    label: Centre\n  - lat: [\d.]+\n    lng: [\d.]+\n    label: North\n$/)
+  })
+
+  it('saves cleared optional lists as absent', async () => {
+    const remote = setupPlaces(
+      'title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\narea:\n  - lat: 52.37\n    lng: 4.89\n  - lat: 52.38\n    lng: 4.9\n  - lat: 52.36\n    lng: 4.91\nbranches:\n  - lat: 52.3731\n    lng: 4.8922\n',
+    )
+    await openShop()
+    await act(async () => inField(geoField('Area'), 'Clear')!.click())
+    await act(async () => inField(geoField('Branches'), 'Remove last marker')!.click())
+    await act(async () => byText('Save')!.click())
+    await waitFor(() => remote.commits.length === 1)
+    expect(remote.text('places/shop.yml')).toBe('title: Shop\nlocation:\n  lat: 52.3731\n  lng: 4.8922\n')
   })
 
   it('clears a stored point and a stored circle', async () => {
