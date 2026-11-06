@@ -2,6 +2,7 @@ import {
   useEffect,
   useRef,
   useState,
+  type CSSProperties,
   type DragEvent,
   type KeyboardEvent,
   type MouseEvent,
@@ -167,17 +168,25 @@ function Thumbnail({ store, src, alt, focus, className, onSize }: {
 }) {
   const path = store.resolve(src)
   const { url, error } = useAssetUrl(path)
+  // The image's own aspect ratio lets the stylesheet scale small images up without distorting
+  // them, so a focal point picked on the preview maps exactly onto the image.
+  const [aspect, setAspect] = useState<number>()
   if (error) return <span className={`${className ?? ''} gcms-media-missing`}>Not found</span>
   const shown = path ? url : src
   if (!shown) return <span className={`${className ?? ''} gcms-media-loading`} aria-label="Loading" />
+  const style = { objectPosition: focusToObjectPosition(focus), '--gcms-aspect': aspect } as CSSProperties
   return (
     <img
       className={className}
       src={shown}
       alt={alt ?? ''}
       draggable={false}
-      style={{ objectPosition: focusToObjectPosition(focus) }}
-      onLoad={(event) => onSize?.([event.currentTarget.naturalWidth, event.currentTarget.naturalHeight])}
+      style={style}
+      onLoad={(event) => {
+        const { naturalWidth, naturalHeight } = event.currentTarget
+        if (naturalWidth > 0 && naturalHeight > 0) setAspect(naturalWidth / naturalHeight)
+        onSize?.([naturalWidth, naturalHeight])
+      }}
     />
   )
 }

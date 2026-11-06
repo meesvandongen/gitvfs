@@ -54,6 +54,7 @@
   padding: 1rem 0.75rem;
   border-right: 1px solid var(--gcms-border);
   background: var(--gcms-surface);
+  position: relative;
   overflow-y: auto;
 }
 
@@ -141,6 +142,7 @@
 }
 
 .gcms-main {
+  position: relative;
   min-width: 0;
   overflow: auto;
 }
@@ -194,7 +196,10 @@
   min-height: 0;
 }
 
+/* Scroll areas are positioned, so absolutely positioned content inside them (visually hidden
+   labels, hidden file inputs) scrolls with them instead of stretching the whole page. */
 .gcms-pane {
+  position: relative;
   min-width: 0;
   overflow: auto;
 }
@@ -2780,8 +2785,11 @@ a.gcms-button {
 
 .gcms-media-image {
   display: block;
+  /* Up to 16rem tall at the image's own aspect ratio (set once it loads), so even a small image
+     is large enough to pick a focal point on. */
+  width: calc(16rem * var(--gcms-aspect));
   max-width: 100%;
-  max-height: 16rem;
+  height: auto;
   border-radius: 4px;
   background: repeating-conic-gradient(var(--gcms-surface) 0 25%, var(--gcms-border) 0 50%) 0 0 / 16px 16px;
 }
