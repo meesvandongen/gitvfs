@@ -15,6 +15,17 @@ import type {
   Singleton,
 } from './config.js'
 import { parseDocument, serializeDocument } from './document.js'
+import { isSafeAssetPath, toPublicPath, uniqueAssetPath, uploadError } from './media.js'
+import {
+  findMediaUsage,
+  mediaFolderOf,
+  mediaLibraryFolders,
+  type MediaFile,
+  type MediaFolderOptions,
+  type MediaLibraryFolder,
+  type MediaUpload,
+  type MediaUsage,
+} from './media-library.js'
 import { findReferences, type ReferenceSource } from './references.js'
 import { isValidSlug } from './slug.js'
 
@@ -28,6 +39,11 @@ export interface CmsOptions {
    * usually through a pull request. `true` uses the defaults.
    */
   changes?: boolean | ChangesOptions
+  /**
+   * Media folders for the media library besides those of the media fields: folders no field uses
+   * yet, or a label for one that a field does: `[{ folder: 'public/downloads', label: 'Downloads' }]`.
+   */
+  media?: MediaFolderOptions[]
 }
 
 export interface ChangesOptions {
@@ -74,8 +90,10 @@ export interface ContentChange {
   contentType?: ContentType
   /** The entry's slug, for collection entries. */
   slug?: string
-  /** The entry's label, the singleton's label, or the path. */
+  /** The entry's label, the singleton's label, the file name of a media file, or the path. */
   label: string
+  /** For a file directly in a media folder (see `GitCms.mediaFolders()`): that folder. */
+  mediaFolder?: string
 }
 
 export interface ValidationIssue {
@@ -100,16 +118,34 @@ export interface LoadedDocument {
   issues: ValidationIssue[]
 }
 
-export interface SaveEntryOptions {
+/** A file to commit along with a document, such as an uploaded image. */
+export interface PendingAsset {
+  /** Repository path, e.g. `public/images/team.jpg`. Saving fails when a file already exists there. */
+  path: string
+  content: Uint8Array
+}
+
+export interface SaveSingletonOptions {
+  message?: string
+  /** Files committed in the same commit as the document, such as uploads its fields refer to. */
+  assets?: PendingAsset[]
+}
+
+export interface SaveEntryOptions extends SaveSingletonOptions {
   slug: string
   data: Record<string, unknown>
   /** Slug the entry had before; renames the file when it differs. Omit for new entries. */
   previousSlug?: string
-  message?: string
 }
 
 export interface SaveResult {
   path: string
+  commit: CommitResult
+}
+
+export interface UploadMediaResult {
+  /** Repository paths the files were committed at, in the order given. */
+  paths: string[]
   commit: CommitResult
 }
 
@@ -155,6 +191,8 @@ export class GitCms {
   private readonly baseBranch: string
   private state: CmsState
   private listeners = new Set<() => void>()
+  private readonly mediaOptions: MediaFolderOptions[]
+  private mediaLibrary?: MediaLibraryFolder[]
 
   constructor(options: CmsOptions) {
     this.fs = options.fs
@@ -167,6 +205,7 @@ export class GitCms {
         ...(options.changes === true ? {} : options.changes),
       }
       : null
+    this.mediaOptions = options.media ?? []
     const { base, write } = this.fs.branches()
     this.baseBranch = base
     this.state = { base, branch: write, inChange: write !== base, version: 0 }
@@ -277,12 +316,16 @@ export class GitCms {
 
       const original = previousPath === undefined ? undefined : await this.readText(previousPath)
       const action = previousPath === undefined ? 'create' : renamed ? 'rename' : 'update'
-
-      if (renamed) this.fs.rm(previousPath)
-      this.fs.writeFile(path, this.serialize(collection, data, original))
+      const source = this.serialize(collection, data, original)
+      const assets = await this.checkAssets(options.assets, [path, previousPath])
 
       const commit = await this.commit(
         options.message ?? this.commitMessage(collection, { action, name, path, previousPath }),
+        () => {
+          this.stageAssets(assets)
+          if (renamed) this.fs.rm(previousPath)
+          this.fs.writeFile(path, source)
+        },
       )
       return { path, commit }
     })
@@ -293,9 +336,9 @@ export class GitCms {
     const path = this.entryPath(collection, slug)
 
     return this.exclusive(async () => {
-      this.fs.rm(path)
       const commit = await this.commit(
         options.message ?? this.commitMessage(collection, { action: 'delete', name, path }),
+        () => this.fs.rm(path),
       )
       return { path, commit }
     })
@@ -327,7 +370,7 @@ export class GitCms {
   async saveSingleton(
     name: string,
     values: Record<string, unknown>,
-    options: { message?: string } = {},
+    options: SaveSingletonOptions = {},
   ): Promise<SaveResult> {
     const singleton = this.getSingleton(name)
     const path = singleton.path
@@ -336,14 +379,140 @@ export class GitCms {
       const data = this.validate(singleton, values)
       const exists = await this.fs.exists(path)
       const original = exists ? await this.readText(path) : undefined
+      const source = this.serialize(singleton, data, original)
+      const assets = await this.checkAssets(options.assets, [path])
 
-      this.fs.writeFile(path, this.serialize(singleton, data, original))
       const commit = await this.commit(
         options.message
           ?? this.commitMessage(singleton, { action: exists ? 'update' : 'create', name, path }),
+        () => {
+          this.stageAssets(assets)
+          this.fs.writeFile(path, source)
+        },
       )
       return { path, commit }
     })
+  }
+
+  /** Read a file of the repository as bytes, such as an image a field refers to. */
+  async readAsset(path: string): Promise<Uint8Array> {
+    const content = await this.fs.readFile(path)
+    return typeof content === 'string' ? new TextEncoder().encode(content) : content
+  }
+
+  /**
+   * A free path for an upload named `name` in `folder`: the name made safe (`Team Photo.JPG` →
+   * `team-photo.jpg`), with `-2`, `-3`, ... added while the repository or `reserved` (other pending
+   * uploads) already has it.
+   */
+  async availableAssetPath(folder: string, name: string, reserved: Iterable<string> = []): Promise<string> {
+    const taken = new Set(reserved)
+    return uniqueAssetPath(folder, name, async (path) => taken.has(path) || (await this.fs.exists(path)))
+  }
+
+  /** Validate uploads before anything is staged; uploads never overwrite files. */
+  private async checkAssets(assets: PendingAsset[] = [], documentPaths: Array<string | undefined>): Promise<PendingAsset[]> {
+    const seen = new Set(documentPaths.filter((path) => path !== undefined))
+    for (const asset of assets) {
+      if (!isSafeAssetPath(asset.path)) throw new Error(`Invalid file path: "${asset.path}"`)
+      if (seen.has(asset.path)) throw new Error(`Two files would be written to ${asset.path}`)
+      seen.add(asset.path)
+      if (await this.fs.exists(asset.path)) {
+        throw new Error(`A file already exists at ${asset.path}; remove the upload and add it again`)
+      }
+    }
+    return assets
+  }
+
+  // Media library ---------------------------------------------------------------------------------
+
+  /**
+   * The media library's folders: every folder the media fields of the collections and singletons
+   * upload to (markdown `media` included), each once, then the `media` option's other folders.
+   */
+  mediaFolders(): MediaLibraryFolder[] {
+    this.mediaLibrary ??= mediaLibraryFolders([...this.collections, ...this.singletons], this.mediaOptions)
+    return this.mediaLibrary
+  }
+
+  private getMediaFolder(folder: string): MediaLibraryFolder {
+    const found = this.mediaFolders().find((entry) => entry.folder === folder)
+    if (!found) throw new Error(`Unknown media folder: ${folder}`)
+    return found
+  }
+
+  /**
+   * The files in a media folder, by name, with their size when the listing has it (GitHub's and
+   * GitLab's trees do, so no file is downloaded). Subfolders are left out: like the fields' library,
+   * one folder shows one level, and nested folders are media folders of their own.
+   */
+  async listMedia(folder: string): Promise<MediaFile[]> {
+    const media = this.getMediaFolder(folder)
+    const prefix = media.folder ? `${media.folder}/` : ''
+    let entries: Awaited<ReturnType<GitVFS['readdir']>>
+    try {
+      entries = await this.fs.readdir(media.folder)
+    } catch (error) {
+      if (error instanceof NotFoundError) return []
+      throw error
+    }
+    return entries
+      .filter((entry) => entry.type === 'blob')
+      .map((entry) => ({
+        path: `${prefix}${entry.name}`,
+        name: entry.name,
+        publicPath: toPublicPath(media, `${prefix}${entry.name}`)!,
+        ...(entry.size === undefined ? {} : { size: entry.size }),
+      }))
+      .sort((a, b) => a.name.localeCompare(b.name))
+  }
+
+  /**
+   * Upload files into a media folder, without an entry, as one commit. Each gets a safe, free name
+   * (never overwriting a file) and must pass the folder's `accept` and `maxSize`.
+   */
+  async uploadMedia(folder: string, files: MediaUpload[], options: { message?: string } = {}): Promise<UploadMediaResult> {
+    const media = this.getMediaFolder(folder)
+    if (files.length === 0) throw new Error('Choose at least one file to upload')
+    for (const file of files) {
+      const problem = uploadError(media, { name: file.name, size: file.content.length })
+      if (problem) throw new Error(problem)
+    }
+    return this.exclusive(async () => {
+      const paths: string[] = []
+      for (const file of files) paths.push(await this.availableAssetPath(media.folder, file.name, paths))
+      const assets = await this.checkAssets(paths.map((path, index) => ({ path, content: files[index].content })), [])
+      const commit = await this.commit(
+        options.message ?? (paths.length === 1 ? `Upload ${paths[0]}` : `Upload ${paths.length} files to ${media.folder || 'the repository root'}`),
+        () => this.stageAssets(assets),
+      )
+      return { paths, commit }
+    })
+  }
+
+  /**
+   * Delete a file of a media folder, as one commit. Content that uses it is left as it is; check
+   * `findMediaUsage()` first to warn about it.
+   */
+  async deleteMedia(path: string, options: { message?: string } = {}): Promise<SaveResult> {
+    if (!mediaFolderOf(this.mediaFolders(), path)) throw new Error(`${path} is not in a media folder`)
+    return this.exclusive(async () => {
+      if (!(await this.fs.exists(path))) throw new NotFoundError(`File not found: ${path}`)
+      const commit = await this.commit(options.message ?? `Delete ${path}`, () => this.fs.rm(path))
+      return { path, commit }
+    })
+  }
+
+  /**
+   * Entries and singletons that use a media file, by its public URL or repository path, in any
+   * field or markdown body. Reads every document.
+   */
+  findMediaUsage(path: string): Promise<MediaUsage[]> {
+    return findMediaUsage(this, path)
+  }
+
+  private stageAssets(assets: PendingAsset[]): void {
+    for (const asset of assets) this.fs.writeFile(asset.path, asset.content)
   }
 
   private async readText(path: string): Promise<string> {
@@ -407,13 +576,18 @@ export class GitCms {
     return (contentType.commitMessage ?? defaultCommitMessage)(context)
   }
 
-  private async commit(message: string): Promise<CommitResult> {
+  /**
+   * Stage changes and commit them as one commit, to the branch being edited: the base branch, or
+   * the open change's branch.
+   */
+  private async commit(message: string, stage: () => void): Promise<CommitResult> {
     let result: CommitResult
     try {
       if (!this.canEdit()) throw new Error('Start a change to edit content')
+      stage()
       result = await this.fs.commit(message)
     } catch (error) {
-      // Leave nothing staged, so a failed save does not leak into the next commit.
+      // Leave nothing staged, uploads included, so a failed save does not leak into the next commit.
       this.fs.discard()
       throw error
     }
@@ -493,7 +667,7 @@ export class GitCms {
     })
   }
 
-  /** What the current change changed, as content: entries and singletons first, other files after. */
+  /** What the current change changed, as content: entries and singletons first, then media files, then other files. */
   async changedContent(): Promise<ContentChange[]> {
     return (await this.compareChange()).changes
   }
@@ -515,6 +689,8 @@ export class GitCms {
         ...(file.previousPath ? { previousPath: file.previousPath } : {}),
         label: file.path,
       }
+      const media = owner ? undefined : mediaFolderOf(this.mediaFolders(), file.path)
+      if (media) return { ...change, label: file.path.slice(file.path.lastIndexOf('/') + 1), mediaFolder: media.folder }
       if (!owner) return change
       change.contentType = owner.contentType
       if (owner.contentType.kind === 'singleton') return { ...change, label: owner.contentType.label }
@@ -531,7 +707,7 @@ export class GitCms {
       }
       return change
     })
-    const rank = (change: ContentChange) => (change.contentType ? 0 : 1)
+    const rank = (change: ContentChange) => (change.contentType ? 0 : change.mediaFolder !== undefined ? 1 : 2)
     return {
       ahead: comparison.ahead,
       behind: comparison.behind,

@@ -11,7 +11,7 @@ afterEach(() => {
 })
 afterAll(() => server.close())
 
-async function setup(files: Record<string, string> = {}) {
+async function setup(files: Record<string, string | Uint8Array> = {}) {
   const repository = await MockRepository.create({
     files: {
       'README.md': '# Demo\n',
@@ -45,6 +45,19 @@ describe('gitvfs against the GitHub mock', () => {
     expect((await fs.readdir('content/posts')).map((entry) => entry.name).sort()).toEqual(['hello.md', 'second.md'])
     expect(await fs.readFile('content/posts/hello.md', { encoding: 'utf-8' })).toBe('---\ntitle: Hello\n---\n\nHi\n')
     expect(await fs.exists('content/posts/missing.md')).toBe(false)
+  })
+
+  it('reads and commits binary files, such as images, through the real provider', async () => {
+    // Not valid UTF-8, so GitHub's GraphQL API has no text for it.
+    const image = new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0xff, 0xfe, 0x00, 0x01])
+    const { fs, repository } = await setup({ 'public/logo.png': image })
+    expect([...(await fs.readFile('public/logo.png') as Uint8Array)]).toEqual([...image])
+
+    const upload = new Uint8Array([0xff, 0xd8, 0xff, 0xe0, 0x00])
+    fs.writeFile('public/photo.jpg', upload)
+    fs.writeFile('content/posts/photo.md', '---\nimage: /photo.jpg\n---\n')
+    await fs.commit('Add a photo')
+    expect([...repository.readFile('main', 'public/photo.jpg')!.content]).toEqual([...upload])
   })
 
   it('reads the whole tree recursively', async () => {

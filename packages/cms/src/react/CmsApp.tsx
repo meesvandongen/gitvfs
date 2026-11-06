@@ -7,6 +7,7 @@ import { DocumentEditor, type DocumentEditorProps } from './DocumentEditor.js'
 import { CmsNavigationProvider } from './navigation.js'
 import type { MapOptions } from '../geo.js'
 import { MapDefaultsProvider } from './map.js'
+import { MediaLibraryView } from './media-library.js'
 import { errorMessage, useAsync, type AsyncState } from './use-async.js'
 
 export type CmsView =
@@ -14,6 +15,11 @@ export type CmsView =
   | { type: 'singleton'; name: string }
   /** Review and publish the current change (with `changes` enabled). */
   | { type: 'changes' }
+  /**
+   * The media library: a media folder (default: the first) and the file whose details are open.
+   * Shown when the CMS has media folders (`cms.mediaFolders()`).
+   */
+  | { type: 'media'; folder?: string; path?: string }
 
 export interface CmsAppProps {
   cms: GitCms
@@ -46,8 +52,11 @@ export function CmsApp(props: CmsAppProps) {
   const [ownView, setOwnView] = useState<CmsView | undefined>(() => firstView(cms))
   const state = useSyncExternalStore(cms.subscribe, cms.getState, cms.getState)
   const requested = props.view ?? ownView
-  // The review only exists inside a change, e.g. not after publishing it.
-  const view = requested?.type === 'changes' && !state.inChange ? firstView(cms) : requested
+  // The review only exists inside a change, e.g. not after publishing it; the library only with
+  // media folders.
+  const view = (requested?.type === 'changes' && !state.inChange) || (requested?.type === 'media' && cms.mediaFolders().length === 0)
+    ? firstView(cms)
+    : requested
   const navigate = (next: CmsView) => {
     setOwnView(next)
     props.onViewChange?.(next)
@@ -60,6 +69,7 @@ export function CmsApp(props: CmsAppProps) {
   const open = (change: ContentChange) => {
     if (change.contentType?.kind === 'singleton') navigate({ type: 'singleton', name: change.contentType.name })
     else if (change.contentType && change.slug) navigate({ type: 'collection', name: change.contentType.name, slug: change.slug })
+    else if (change.mediaFolder !== undefined) navigate({ type: 'media', folder: change.mediaFolder, path: change.path })
   }
 
   return (
@@ -74,6 +84,10 @@ export function CmsApp(props: CmsAppProps) {
               ) : view.type === 'changes' ? (
                 <main className="gcms-main">
                   <ChangesView onOpen={open} />
+                </main>
+              ) : view.type === 'media' ? (
+                <main className="gcms-main">
+                  <MediaLibraryView view={view} onNavigate={navigate} />
                 </main>
               ) : view.type === 'collection' ? (
                 <CollectionView {...props} view={view} onNavigate={navigate} />
@@ -99,11 +113,13 @@ export function CmsApp(props: CmsAppProps) {
 function useChangedContent() {
   const changes = useChangeReview()?.data?.changes ?? []
   const byType = new Map<string, ContentChange[]>()
+  let media = 0
   for (const change of changes) {
+    if (change.mediaFolder !== undefined) media++
     if (!change.contentType) continue
     byType.set(change.contentType.name, [...(byType.get(change.contentType.name) ?? []), change])
   }
-  return { total: changes.length, byType }
+  return { total: changes.length, byType, media }
 }
 
 function CountBadge({ count }: { count: number | undefined }) {
@@ -173,6 +189,20 @@ function Sidebar(props: {
               <CountBadge count={changed.byType.get(singleton.name)?.length} />
             </button>
           ))}
+        </div>
+      )}
+      {cms.mediaFolders().length > 0 && (
+        <div className="gcms-nav-group">
+          <p className="gcms-nav-heading">Assets</p>
+          <button
+            type="button"
+            className="gcms-nav-item"
+            aria-current={props.view?.type === 'media' ? 'page' : undefined}
+            onClick={() => props.onNavigate({ type: 'media' })}
+          >
+            Media
+            <CountBadge count={changed.media} />
+          </button>
         </div>
       )}
       {props.footer ? <div className="gcms-sidebar-footer">{props.footer}</div> : null}

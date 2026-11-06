@@ -1,4 +1,4 @@
-import { useEffect, useMemo, useRef, type ReactNode, type Ref } from 'react'
+import { useEffect, useMemo, useRef, useState, type ReactNode, type Ref } from 'react'
 import { useFormContext } from 'react-hook-form'
 import { AutoForm, useFieldRHF } from '@autoform/react/react-hook-form'
 import type {
@@ -13,10 +13,13 @@ import type {
 import { ZodProvider } from '@autoform/zod'
 import { z } from 'zod'
 import type { ContentType } from '../config.js'
+import { mediaConfig, type UploadOptions } from '../media.js'
+import { EmbedField } from './embed.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPointsField, GeoPolygonField } from './map.js'
 import { CodeField } from './code.js'
 import { MermaidField } from './mermaid.js'
 import { GraphField } from './graph.js'
+import { FileField, GalleryField, ImageField, MarkdownMediaPanel } from './media.js'
 import { DateTimeField, TimeField } from './datetime.js'
 import { DurationField } from './duration.js'
 import { withFieldState } from './field-utils.js'
@@ -206,11 +209,14 @@ function mergeRefs<T>(...refs: Array<Ref<T> | undefined>) {
   }
 }
 
-function MarkdownField({ id, inputProps }: AutoFormFieldProps) {
+function MarkdownField({ id, inputProps, parsedField }: AutoFormFieldProps) {
   const field = useField(id)
   const textareaRef = useRef<HTMLTextAreaElement | null>(null)
   const pendingSelection = useRef<[number, number] | null>(null)
   const value: string = field.value ?? ''
+  const mediaOptions = (parsedField.fieldConfig?.customData as { media?: UploadOptions } | undefined)?.media
+  const media = useMemo(() => (mediaOptions ? mediaConfig('image', mediaOptions) : undefined), [mediaOptions])
+  const [mediaOpen, setMediaOpen] = useState(false)
 
   useEffect(() => {
     const textarea = textareaRef.current
@@ -244,7 +250,30 @@ function MarkdownField({ id, inputProps }: AutoFormFieldProps) {
             {tool.label}
           </button>
         ))}
+        {media ? (
+          <button
+            type="button"
+            className="gcms-tool"
+            title="Image"
+            aria-label="Image"
+            aria-expanded={mediaOpen}
+            onClick={() => setMediaOpen((open) => !open)}
+          >
+            Image
+          </button>
+        ) : null}
       </div>
+      {media && mediaOpen ? (
+        <MarkdownMediaPanel
+          media={media}
+          onClose={() => setMediaOpen(false)}
+          onInsert={(src, alt) => {
+            setMediaOpen(false)
+            // The selection, if any, becomes the alt text; otherwise a suggestion from the file name.
+            format({ kind: 'wrap', before: '![', after: `](${src})`, placeholder: alt })
+          }}
+        />
+      ) : null}
       <textarea
         className="gcms-input gcms-textarea gcms-markdown-input"
         rows={18}
@@ -390,6 +419,10 @@ export const formComponents: AutoFormFieldComponents = {
   geoline: GeoLineField,
   geopolygon: GeoPolygonField,
   geopoints: GeoPointsField,
+  image: ImageField,
+  gallery: GalleryField,
+  file: FileField,
+  embed: EmbedField,
   daterange: DateRangeField,
   openinghours: OpeningHoursField,
   recurrence: RecurrenceField,

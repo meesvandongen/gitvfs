@@ -80,3 +80,17 @@ export type { AsyncState } from './use-async.js'
 export { DateRangeField } from './date-range.js'
 export { OpeningHoursField } from './opening-hours.js'
 export { RecurrenceField } from './recurrence.js'
+export { FileField, FocalPointPicker, GalleryField, ImageField, MarkdownMediaPanel } from './media.js'
+export {
+  MediaProvider,
+  MediaStore,
+  rewriteImageSources,
+  useAssetSize,
+  useAssetUrl,
+  useMediaStore,
+  useMediaUrl,
+} from './media-store.js'
+export type { AddedAsset } from './media-store.js'
+export { EmbedField } from './embed.js'
+export { MediaLibraryView } from './media-library.js'
+export type { MediaLibraryViewProps, MediaView } from './media-library.js'

@@ -7,13 +7,18 @@ import {
   defineCollection,
   defineSingleton,
   duration,
+  embed,
   field,
+  file,
+  gallery,
   geoCircle,
   geoLine,
   geoPoint,
   geoPoints,
   geoPolygon,
   graph,
+  image,
+  imagePath,
   markdown,
   mermaid,
   money,
@@ -27,10 +32,14 @@ import {
   textarea,
   time,
   tree,
+  type MediaFolderOptions,
 } from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
 // and singletons, custom fields and previews, and files the schema does not fully describe.
+
+// Uploads are committed into public/, which the site serves from its root.
+const postImages = { folder: 'public/images/posts', publicPath: '/images/posts', maxSize: 1024 * 1024 }
 
 const color = (label: string) => field({ label, fieldType: 'color', description: 'A custom field type: see ColorField.tsx' })
 
@@ -40,6 +49,7 @@ export const posts = defineCollection({
   folder: 'content/posts',
   schema: z.object({
     title: z.string().min(3).check(field({ label: 'Title', description: 'The slug of new posts is derived from it' })),
+    cover: image({ label: 'Cover image', description: 'Click the image to set the focal point', ...postImages }).optional(),
     description: z.string().check(textarea({ label: 'Summary' })).optional(),
     date: z.coerce.date().check(field({ label: 'Publish date' })),
     category: z.enum(['news', 'guides', 'releases']).check(field({ label: 'Category' })),
@@ -56,7 +66,7 @@ export const posts = defineCollection({
       max: 3,
       display: ['category', 'date'],
     }).default([]),
-    body: z.string().check(markdown({ label: 'Content' })).default(''),
+    body: z.string().check(markdown({ label: 'Content', media: postImages })).default(''),
   }),
   // Newest first; the default sorts by label.
   sort: (a, b) => String(b.data.date ?? '').localeCompare(String(a.data.date ?? '')),
@@ -89,7 +99,7 @@ export const authors = defineCollection({
     name: z.string().min(1),
     role: z.enum(['editor', 'writer', 'guest']),
     bio: z.string().check(textarea({ label: 'Bio' })).optional(),
-    avatar: z.url().optional().check(field({ label: 'Avatar URL' })),
+    avatar: imagePath({ label: 'Avatar', folder: 'public/images/authors', publicPath: '/images/authors', maxSize: 512 * 1024 }).optional(),
     color: z.string().regex(/^#[0-9a-f]{6}$/i, 'Use a hex color like #2f6feb').check(color('Profile color')),
     socials: z
       .array(
@@ -129,6 +139,9 @@ export const events = defineCollection({
       )
       .default([])
       .check(table({ label: 'Tickets' })),
+    photos: gallery({ label: 'Photos', folder: 'public/images/events', publicPath: '/images/events', max: 8, maxSize: 1024 * 1024 }).optional(),
+    agenda: file({ label: 'Agenda (PDF)', folder: 'public/files', publicPath: '/files', accept: '.pdf,application/pdf', maxSize: 1024 * 1024 }).optional(),
+    video: embed({ label: 'Recording', description: 'A YouTube or Vimeo link', providers: ['youtube', 'vimeo'] }).optional(),
     dates: dateRange({ label: 'Dates', description: 'For events that run over several days', maxLength: 14, locale: 'en-GB' }).optional(),
     repeats: recurrence({ label: 'Repeats', description: 'For a series, such as office hours', time: true, locale: 'en-GB' }).optional(),
   }),
@@ -330,11 +343,55 @@ export const navigation = defineSingleton({
 export const collections = [posts, docs, authors, events, places, shows, flows, snippets]
 export const singletons = [site, homepage, theme, pricing, navigation]
 
+// The media library shows the folders of the media fields above; this adds one no field uses.
+export const media: MediaFolderOptions[] = [{ folder: 'public/downloads', label: 'Downloads' }]
+
+const fromBase64 = (base64: string) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
+
+// Tiny generated images and a one-page PDF, so the media fields have something to show.
+const SUNSET_PNG = fromBase64(
+  'iVBORw0KGgoAAAANSUhEUgAAAGAAAABACAIAAABqVuVZAAAB0UlEQVR42u3QXUsTYBjG8evjdCaEghAEggdCIAlBEHQgSIEgTveWc26u2XS6NUqRiuFbSIXJRFKkZDFipEghIiKihERE9CH0YCeddI89z008T1zwO78u/mjq/00CXO3/RQK0BH6SAK2BHyTAtYHvJMD1wXMSoG3wGwnQHjwjATpCpyTAjdAJCdAZPiYBusJHJMCtyCEJcDt6QALcie6TAHcffCUBuoe+kAA9Q3skwP3YLgnQG/tMAvQNV0mAQPyTdy6O7v2N+haC8YpfhDo1unOIjHz0Rd00f9IaRSxR9kVDgbRGMZLY9kJDdWpUdjGafO8+gzo19tNIJ7fcZxzIfhqZ0U33GQeyn0Y29c59xoHsp5FLrbvPOJD9NAoP19xnHMh+GtPpkvuMA9lPYza96j7jQPbTeD624j7jQPbTKI698YJBHZVdzD965YuG6miNYimz7IuGAmmNYjnz0i910+jO4fX4oneEOupbeDuxQAKUJuZIgPVskQTYyL4gAbYmn5EAV5pvavkwNWvPtT+agcpTM/Zc+6MZqJJ7as+1P5qBqvkn9lz7oxloJ1+w59ofzUB7j/P2XPujGei/xEAMxEAMxEAMxEAMxEDEQAzEQP/eJdhsNa4Ssmp7AAAAAElFTkSuQmCC',
+)
+const CROWD_PNG = fromBase64(
+  'iVBORw0KGgoAAAANSUhEUgAAAGAAAABACAIAAABqVuVZAAABq0lEQVR42u3Nx1KUURiE4b4w1lwEa9beB0lBQTGRRMlxyJkZskpUwQSI4SJ65WbqrzPMVJ/9f7rqWb7f1+C/AxPAv/smgH/2TAB/75oA3u2YAP4qmQDeFk0Ab7ZNAK+3TAB/bpoA/tgwAfy+bgL4bc0E8OuqCeDVigng5bIJ4JclE8DPiyaAnxZMAC/mTQDP50wAzwomgKezJoAnM/fU1T+oVp0l0oPH06GadfmmskykBz9OZURdvgniRHrww2QmfhDEifTg+4lM/CCIE+nBo/FM/CCIE+nBw7FM/CCIE+nBg9FM/CCIE+nB/ZFM/CCIE+nBveGQqivLRHpwd+ie2nVVlkgP7rwzASy9NQEsDpoAbr8xAdwaMAHc7DcB3OgzAVzvjWpobK2WSA+u9Wg1v5c3EujB1deC+F7eyHsPrrwS4gN578Hll0J8IO89uPRCiA/kvQcXnwvxgbz34EK3EB/Iew/OPxPiA3nvwbmnmvqeQA8WuqJqf0+jB2c7TQBnnpgATj82AZzqMAGcbDcBnHhkAjj+0ARwrM0EcLTVBHCkxQRwuNkEcKjJhP/zG6RE7m5xLwAAAABJRU5ErkJggg==',
+)
+const AVATAR_SVG = `<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 64 64" width="64" height="64">
+  <rect width="64" height="64" rx="12" fill="#7c3aed"/>
+  <circle cx="32" cy="25" r="11" fill="#ede9fe"/>
+  <path d="M12 58c2-12 10-18 20-18s18 6 20 18z" fill="#ede9fe"/>
+</svg>
+`
+const AGENDA_PDF = `%PDF-1.4
+1 0 obj << /Type /Catalog /Pages 2 0 R >> endobj
+2 0 obj << /Type /Pages /Kids [3 0 R] /Count 1 >> endobj
+3 0 obj << /Type /Page /Parent 2 0 R /MediaBox [0 0 300 144] /Contents 4 0 R /Resources << /Font << /F1 5 0 R >> >> >> endobj
+4 0 obj << /Length 58 >> stream
+BT /F1 18 Tf 24 90 Td (gitvfs meetup: agenda) Tj ET
+endstream endobj
+5 0 obj << /Type /Font /Subtype /Type1 /BaseFont /Helvetica >> endobj
+trailer << /Root 1 0 R >>
+%%EOF
+`
+
 /** The repository visitors start with, and go back to on reset. */
-export const seedFiles: Record<string, string> = {
+export const seedFiles: Record<string, string | Uint8Array> = {
+  'public/images/posts/sunset.png': SUNSET_PNG,
+  'public/images/authors/ada-lovelace.svg': AVATAR_SVG,
+  'public/images/events/meetup-crowd.png': CROWD_PNG,
+  'public/images/events/meetup-sunset.png': SUNSET_PNG,
+  'public/files/meetup-agenda.pdf': AGENDA_PDF,
+  // Nothing uses these, so deleting them in the media library is a plain confirmation.
+  'public/images/posts/old-banner.png': CROWD_PNG,
+  'public/downloads/brand-guide.txt': 'Acme brand guide\n\nPrimary color: #2f6feb\nTypeface: system UI\n',
   'README.md': '# Acme site\n\nContent for the gitvfs-cms demo.\n',
   'content/posts/welcome-to-gitvfs-cms.md': `---
 title: Welcome to gitvfs-cms
+cover:
+  src: /images/posts/sunset.png
+  alt: A sun setting over dark hills
+  focus:
+    x: 0.67
+    y: 0.47
 description: A tour of the editor you are looking at.
 date: 2026-10-30
 category: news
@@ -359,6 +416,10 @@ Every entry in this demo is a file in a Git repository. The editor on the left i
 - Add a tag, then remove it again.
 - Press **Save**: the change becomes a commit, listed at the bottom of the sidebar.
 - Open the **Source** tab to see the exact file that will be committed.
+- Upload a cover image, or use the **Image** button in the toolbar: the file is committed together
+  with the post, in the same commit.
+
+![The cover image again, from the repository](/images/posts/sunset.png)
 
 > Nothing leaves your browser. The GitHub API is mocked with Mock Service Worker.
 
@@ -449,6 +510,7 @@ Collections are folders of entries. Singletons are single files, like **Site set
       name: 'Ada Lovelace',
       role: 'editor',
       bio: 'Writes about analytical engines.',
+      avatar: '/images/authors/ada-lovelace.svg',
       color: '#7c3aed',
       socials: [{ network: 'website', url: 'https://example.com/ada' }],
     },
@@ -480,6 +542,13 @@ tickets:
     price: 0
   - name: Supporter
     price: 25
+photos:
+  - src: /images/events/meetup-crowd.png
+    alt: People listening to a talk
+  - src: /images/events/meetup-sunset.png
+    alt: The view from the terrace afterwards
+agenda: /files/meetup-agenda.pdf
+video: https://www.youtube.com/watch?v=aircAruvnKk
 `,
   'data/places/canal-shop.yml': `title: Canal shop
 kind: shop

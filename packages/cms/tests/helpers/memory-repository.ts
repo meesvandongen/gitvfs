@@ -46,7 +46,7 @@ export class MemoryRepository implements GitRepository {
   /** The files of every commit. */
   private snapshots = new Map<string, Files>()
 
-  constructor(files: Record<string, string> = {}, branch = 'main') {
+  constructor(files: Record<string, string | Uint8Array> = {}, branch = 'main') {
     const sha = fakeSha()
     const snapshot: Files = new Map(
       Object.entries(files).map(([path, content]) => [path, { sha: fakeSha(), content: toBytes(content) }]),

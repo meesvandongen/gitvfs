@@ -1,16 +1,18 @@
 import {
   describeDuration,
   describeRecurrence,
+  focusToObjectPosition,
   formatDateRange,
   formatMoney,
   isDateRange,
   isDateTime,
   isDuration,
   phoneHref,
+  type ImageValue,
   type Money,
   type Recurrence,
 } from 'gitvfs-cms'
-import type { PreviewProps } from 'gitvfs-cms/react'
+import { useMediaUrl, type PreviewProps } from 'gitvfs-cms/react'
 
 const text = (value: unknown, fallback = ''): string => (typeof value === 'string' && value ? value : fallback)
 
@@ -21,12 +23,18 @@ export function AuthorPreview({ values }: PreviewProps) {
   const name = typeof values.name === 'string' && values.name ? values.name : 'Unnamed author'
   const color = typeof values.color === 'string' ? values.color : '#2f6feb'
   const socials = Array.isArray(values.socials) ? (values.socials as Array<{ network?: string; url?: string }>) : []
+  // Reads the image through the CMS, so it shows before it is committed and in private repositories.
+  const avatar = useMediaUrl(typeof values.avatar === 'string' && values.avatar ? values.avatar : undefined)
   return (
     <div className="demo-preview">
       <article className="demo-author" style={{ borderTopColor: color }}>
-        <div className="demo-avatar" style={{ background: color }} aria-hidden>
-          {name.slice(0, 1)}
-        </div>
+        {avatar ? (
+          <img className="demo-avatar" src={avatar} alt="" />
+        ) : (
+          <div className="demo-avatar" style={{ background: color }} aria-hidden>
+            {name.slice(0, 1)}
+          </div>
+        )}
         <h2>{name}</h2>
         <p className="demo-role">{text(values.role)}</p>
         {typeof values.bio === 'string' && values.bio ? <p>{values.bio}</p> : null}
@@ -42,7 +50,14 @@ export function AuthorPreview({ values }: PreviewProps) {
   )
 }
 
+function EventPhoto({ photo }: { photo: ImageValue }) {
+  const url = useMediaUrl(photo.src)
+  // The focal point keeps the important part in view in the square crop.
+  return url ? <img src={url} alt={photo.alt ?? ''} style={{ objectPosition: focusToObjectPosition(photo.focus) }} /> : null
+}
+
 export function EventPreview({ values }: PreviewProps) {
+  const photos = Array.isArray(values.photos) ? (values.photos as ImageValue[]).filter((photo) => photo?.src) : []
   const tickets = Array.isArray(values.tickets) ? (values.tickets as Array<{ name?: string; price?: number }>) : []
   const location = values.location as { venue?: string; city?: string } | undefined
   const repeats = values.repeats as Recurrence | null | undefined
@@ -52,6 +67,13 @@ export function EventPreview({ values }: PreviewProps) {
       <article className="demo-event">
         <p className="demo-role">{starts && !Number.isNaN(starts.getTime()) ? starts.toDateString() : 'No date yet'}</p>
         <h2>{text(values.title, 'Untitled event')}</h2>
+        {photos.length > 0 ? (
+          <div className="demo-photos">
+            {photos.map((photo, index) => (
+              <EventPhoto key={index} photo={photo} />
+            ))}
+          </div>
+        ) : null}
         <p>{values.online ? 'Online' : [location?.venue, location?.city].filter(Boolean).join(', ') || 'Location to be announced'}</p>
         {isDateRange(values.dates) ? <p>{formatDateRange(values.dates, 'en-GB')}</p> : null}
         {repeats ? <p>{describeRecurrence(repeats, { locale: 'en-GB' })}</p> : null}

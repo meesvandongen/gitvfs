@@ -117,7 +117,7 @@ export function ChangeSwitcher() {
 }
 
 export interface ChangesViewProps {
-  /** Open a changed entry or singleton. */
+  /** Open a changed entry or singleton, or a media file (`change.mediaFolder` is set). */
   onOpen: (change: ContentChange) => void
 }
 
@@ -220,7 +220,7 @@ export function ChangesView(props: ChangesViewProps) {
         ) : null}
         <ul className="gcms-review-list">
           {changes.map((change) => {
-            const openable = change.contentType !== undefined && change.status !== 'removed'
+            const openable = (change.contentType !== undefined || change.mediaFolder !== undefined) && change.status !== 'removed'
             return (
               <li key={change.path}>
                 <button
@@ -234,7 +234,7 @@ export function ChangesView(props: ChangesViewProps) {
                     <span className="gcms-entry-label">{change.label}</span>
                   </span>
                   <span className="gcms-entry-path">
-                    {change.contentType ? `${change.contentType.label} · ` : 'Other file · '}
+                    {change.contentType ? `${change.contentType.label} · ` : change.mediaFolder !== undefined ? 'Media · ' : 'Other file · '}
                     {change.previousPath ? `${change.previousPath} → ` : ''}
                     {change.path}
                   </span>
