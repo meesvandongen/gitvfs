@@ -2515,3 +2515,220 @@ a.gcms-button {
   flex-direction: column;
   gap: 0.35rem;
 }
+
+/* Code and mermaid fields. Token colors are custom properties too, shared with gitvfs-cms/codemirror. */
+.gcms-app {
+  --gcms-code-comment: #6e7781;
+  --gcms-code-string: #0a3069;
+  --gcms-code-number: #0550ae;
+  --gcms-code-keyword: #cf222e;
+  --gcms-code-literal: #0550ae;
+  --gcms-code-property: #8250df;
+  --gcms-code-tag: #116329;
+  --gcms-code-variable: #953800;
+  --gcms-code-punctuation: #57606a;
+  --gcms-code-selection: rgba(47, 111, 235, 0.22);
+  --gcms-code-active-line: rgba(127, 127, 127, 0.07);
+  --gcms-code-error-line: rgba(199, 51, 58, 0.14);
+}
+
+@media (prefers-color-scheme: dark) {
+  .gcms-app {
+    --gcms-code-comment: #8b949e;
+    --gcms-code-string: #a5d6ff;
+    --gcms-code-number: #79c0ff;
+    --gcms-code-keyword: #ff7b72;
+    --gcms-code-literal: #79c0ff;
+    --gcms-code-property: #d2a8ff;
+    --gcms-code-tag: #7ee787;
+    --gcms-code-variable: #ffa657;
+    --gcms-code-punctuation: #a1abb8;
+    --gcms-code-selection: rgba(91, 141, 239, 0.35);
+    --gcms-code-active-line: rgba(255, 255, 255, 0.04);
+    --gcms-code-error-line: rgba(240, 106, 112, 0.18);
+  }
+}
+
+.gcms-tok-comment { color: var(--gcms-code-comment); font-style: italic; }
+.gcms-tok-string { color: var(--gcms-code-string); }
+.gcms-tok-number { color: var(--gcms-code-number); }
+.gcms-tok-keyword { color: var(--gcms-code-keyword); }
+.gcms-tok-literal { color: var(--gcms-code-literal); }
+.gcms-tok-property { color: var(--gcms-code-property); }
+.gcms-tok-tag { color: var(--gcms-code-tag); }
+.gcms-tok-variable { color: var(--gcms-code-variable); }
+.gcms-tok-punctuation { color: var(--gcms-code-punctuation); }
+
+.gcms-code-field {
+  display: flex;
+  flex-direction: column;
+  gap: 0.3rem;
+  min-width: 0;
+}
+
+/* A transparent textarea over a highlighted copy of its text, in one scroll box so they never drift. */
+.gcms-code {
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-bg);
+  font: 0.85rem/1.55 var(--gcms-mono);
+  overflow: hidden;
+}
+
+.gcms-code:focus-within {
+  outline: 2px solid var(--gcms-accent);
+  outline-offset: 1px;
+}
+
+.gcms-code[data-invalid='true'] {
+  border-color: var(--gcms-danger);
+}
+
+.gcms-code-scroll {
+  display: flex;
+  min-height: calc(var(--gcms-code-rows, 8) * 1.55em + 1rem);
+  max-height: calc(24 * 1.55em + 1rem);
+  overflow: auto;
+}
+
+.gcms-code-gutter {
+  position: sticky;
+  left: 0;
+  z-index: 1;
+  display: flex;
+  flex: none;
+  flex-direction: column;
+  min-width: 2.75rem;
+  padding: 0.5rem 0.6rem 0.5rem 0.5rem;
+  border-right: 1px solid var(--gcms-border);
+  background: var(--gcms-surface);
+  color: var(--gcms-muted);
+  text-align: right;
+  user-select: none;
+}
+
+.gcms-code-error-line {
+  color: var(--gcms-danger);
+  font-weight: 700;
+}
+
+.gcms-code-area {
+  position: relative;
+  flex: 1 0 auto;
+}
+
+.gcms-code-highlight,
+.gcms-code-input {
+  margin: 0;
+  padding: 0.5rem 0.75rem;
+  border: 0;
+  font: inherit;
+  letter-spacing: normal;
+  white-space: pre;
+  overflow-wrap: normal;
+  word-break: normal;
+}
+
+.gcms-code-highlight {
+  /* Wider than the text, so the caret at the end of the longest line never scrolls the textarea. */
+  padding-right: calc(0.75rem + 2ch);
+  color: var(--gcms-text);
+}
+
+.gcms-code-input {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: hidden;
+  resize: none;
+  outline: none;
+  background: transparent;
+  color: transparent;
+  -webkit-text-fill-color: transparent;
+  caret-color: var(--gcms-text);
+}
+
+.gcms-code-input::selection {
+  background: var(--gcms-code-selection);
+}
+
+.gcms-code-input::placeholder {
+  color: var(--gcms-muted);
+  -webkit-text-fill-color: var(--gcms-muted);
+}
+
+.gcms-code-bar {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 0.25rem 0.75rem;
+  color: var(--gcms-muted);
+  font-size: 0.75rem;
+}
+
+.gcms-code-language {
+  padding: 0.1rem 0.3rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 4px;
+  background: var(--gcms-bg);
+  color: var(--gcms-text);
+  font: inherit;
+}
+
+.gcms-codemirror {
+  min-width: 0;
+}
+
+.gcms-mermaid {
+  container-type: inline-size;
+}
+
+/* Source and diagram side by side when there is room, else the diagram below. */
+.gcms-mermaid-layout {
+  display: grid;
+  gap: 0.75rem;
+}
+
+@container (min-width: 720px) {
+  .gcms-mermaid-layout {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+    align-items: start;
+  }
+}
+
+.gcms-mermaid-preview {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 0.5rem;
+  min-height: 8rem;
+  padding: 0.75rem;
+  border: 1px solid var(--gcms-border);
+  border-radius: 6px;
+  background: var(--gcms-bg);
+  overflow: auto;
+}
+
+.gcms-mermaid-diagram {
+  max-width: 100%;
+  height: auto;
+}
+
+.gcms-mermaid-diagram[data-stale='true'] {
+  opacity: 0.35;
+}
+
+.gcms-mermaid-error {
+  max-width: 100%;
+  margin: 0;
+  overflow: auto;
+  font: 0.75rem/1.5 var(--gcms-mono);
+  white-space: pre-wrap;
+}
+
+.gcms-mermaid-note code {
+  font-family: var(--gcms-mono);
+}

@@ -14,6 +14,8 @@ import { ZodProvider } from '@autoform/zod'
 import { z } from 'zod'
 import type { ContentType } from '../config.js'
 import { GeoCircleField, GeoLineField, GeoPointField, GeoPointsField, GeoPolygonField } from './map.js'
+import { CodeField } from './code.js'
+import { MermaidField } from './mermaid.js'
 import { GraphField } from './graph.js'
 import { DateTimeField, TimeField } from './datetime.js'
 import { DurationField } from './duration.js'
@@ -373,6 +375,8 @@ export const uiComponents: AutoFormUIComponents = {
 }
 
 export const formComponents: AutoFormFieldComponents = {
+  code: CodeField,
+  mermaid: MermaidField,
   string: StringField,
   number: NumberField,
   boolean: BooleanField,

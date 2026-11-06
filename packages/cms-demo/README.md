@@ -11,6 +11,7 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
 | Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon, a route line and labelled branch markers (`geoPoints`); address search on every map field through `mapDefaults={{ geocoder: nominatimGeocoder() }}` |
+| Code snippets | YAML | code fields: a snippet with a language picker, JSON with live syntax checks, CSS, and a Mermaid diagram with a live preview; code fields use CodeMirror (`gitvfs-cms/codemirror`), the diagram the built-in editor and `gitvfs-cms/mermaid`, which also draws the diagram in the welcome post's preview |
 | Events, Places (scheduling) | YAML | a date range (Git summer camp), a recurring series with an RRULE (CMS office hours), opening hours with a lunch break, hours past midnight and holidays (both places) |
 | Flows | YAML | a graph field: a support decision tree and a publishing workflow, with node kinds (shapes), node and edge fields, canvas and list views |
 | Shows | YAML | date and time in a fixed time zone and in the editor's own, time, durations, money, a phone number, a slider, a read-only id and hidden import metadata, a custom preview using the formatting helpers |

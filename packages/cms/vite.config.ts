@@ -23,6 +23,8 @@ export default defineConfig({
       index: 'src/index.ts',
       'react/index': 'src/react/index.ts',
       'oidc/index': 'src/oidc/index.ts',
+      'codemirror/index': 'src/codemirror/index.tsx',
+      'mermaid/index': 'src/mermaid/index.ts',
     },
     format: ['esm'],
     fixedExtension: false,
