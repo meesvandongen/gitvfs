@@ -16,6 +16,7 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 | Flows | YAML | a graph field: a support decision tree and a publishing workflow, with node kinds (shapes), node and edge fields, canvas and list views |
 | Shows | YAML | date and time in a fixed time zone and in the editor's own, time, durations, money, a phone number, a slider, a read-only id and hidden import metadata, a custom preview using the formatting helpers |
 | Blog posts, Homepage | markdown | references: each post's author (one post points at an author that does not exist), up to three related posts in order, and a homepage highlight that can be a post or a doc (`{ collection, slug }`); deleting a referenced author lists the posts that use it |
+| Media (sidebar) | files | the media library: the folders of all media fields plus `public/downloads` from the `media` option; upload by button or drop, file details with **Used in**, delete (`public/images/posts/old-banner.png` and `public/downloads/brand-guide.txt` are unused, so deleting them is a plain confirmation) |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons; the theme uses sliders |
 | Pricing, Navigation | YAML | a table of plans (spreadsheet-like grid with paste and CSV copy, a read-only list column) and a nested menu edited as an outline (`tree()`); event tickets use the table too |
 

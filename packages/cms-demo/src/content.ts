@@ -32,6 +32,7 @@ import {
   textarea,
   time,
   tree,
+  type MediaFolderOptions,
 } from 'gitvfs-cms'
 
 // One content model that touches every feature: all field types, the three formats, collections
@@ -342,6 +343,9 @@ export const navigation = defineSingleton({
 export const collections = [posts, docs, authors, events, places, shows, flows, snippets]
 export const singletons = [site, homepage, theme, pricing, navigation]
 
+// The media library shows the folders of the media fields above; this adds one no field uses.
+export const media: MediaFolderOptions[] = [{ folder: 'public/downloads', label: 'Downloads' }]
+
 const fromBase64 = (base64: string) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
 
 // Tiny generated images and a one-page PDF, so the media fields have something to show.
@@ -376,6 +380,9 @@ export const seedFiles: Record<string, string | Uint8Array> = {
   'public/images/events/meetup-crowd.png': CROWD_PNG,
   'public/images/events/meetup-sunset.png': SUNSET_PNG,
   'public/files/meetup-agenda.pdf': AGENDA_PDF,
+  // Nothing uses these, so deleting them in the media library is a plain confirmation.
+  'public/images/posts/old-banner.png': CROWD_PNG,
+  'public/downloads/brand-guide.txt': 'Acme brand guide\n\nPrimary color: #2f6feb\nTypeface: system UI\n',
   'README.md': '# Acme site\n\nContent for the gitvfs-cms demo.\n',
   'content/posts/welcome-to-gitvfs-cms.md': `---
 title: Welcome to gitvfs-cms

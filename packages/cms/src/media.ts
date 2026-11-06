@@ -322,9 +322,9 @@ export function file(config: MediaFieldConfig<UploadOptions> = {}) {
   return z.string({ error: 'Choose a file' }).min(1, 'Choose a file').check(splitConfig(config, 'file', media))
 }
 
-/** Media folders a schema's fields upload to, so the editor can show their files. */
-export function mediaFolders(schema: z.ZodObject): MediaConfig[] {
-  const found = new Map<string, MediaConfig>()
+/** The media options of every media field of a schema (markdown `media` included), in order. */
+export function mediaFieldConfigs(schema: z.ZodObject): MediaConfig[] {
+  const found: MediaConfig[] = []
   const visit = (fields: ReturnType<typeof parseSchema>['fields']) => {
     for (const parsed of fields) {
       const customData = parsed.fieldConfig?.customData as Partial<MediaCustomData> | undefined
@@ -333,11 +333,18 @@ export function mediaFolders(schema: z.ZodObject): MediaConfig[] {
           ? mediaConfig('image', customData.media)
           : customData.media
         : undefined
-      if (media) found.set(`${media.folder}\n${media.publicPath}`, media)
+      if (media) found.push(media)
       visit(parsed.schema ?? [])
     }
   }
   visit(parseSchema(schema as never).fields)
+  return found
+}
+
+/** Media folders a schema's fields upload to, so the editor can show their files. */
+export function mediaFolders(schema: z.ZodObject): MediaConfig[] {
+  const found = new Map<string, MediaConfig>()
+  for (const media of mediaFieldConfigs(schema)) found.set(`${media.folder}\n${media.publicPath}`, media)
   return [...found.values()]
 }
 

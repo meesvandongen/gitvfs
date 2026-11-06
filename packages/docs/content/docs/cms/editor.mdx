@@ -962,6 +962,62 @@ site the same way.
 contain scripts that run when the file is opened directly on your site; use `accept` to leave out
 `image/svg+xml` if editors are not fully trusted.
 
+### Media library
+
+`CmsApp` shows **Media** in the sidebar when there is at least one media folder. It lists the files
+of each folder, as they are on the branch being edited, in a grid with thumbnails, names and sizes,
+with a filter box and a button per folder. Upload with **Upload…** or by dropping files on the view;
+the folder's limits apply. Selecting a file opens its details: a large preview, the repository path,
+the public path with a **Copy** button, size and image dimensions, **Used in** (the entries and
+singletons that use the file, with links to open them), **Download** and **Delete**.
+
+The folders are those of the media fields of all collections and singletons (markdown `media`
+included), each once. A folder's uploads accept what any of its fields accepts, up to the largest
+`maxSize`. Add folders no field uses yet, or label one that a field does, with the `media` option:
+
+```ts
+const cms = createCms({
+  fs,
+  collections,
+  media: [
+    { folder: 'public/downloads', label: 'Downloads', accept: '.pdf,.zip' },
+    { folder: 'public/images/posts', label: 'Post images' },
+  ],
+})
+```
+
+Files are plain files in the repository, with no metadata stored next to them: alt text and focal
+points stay in the content that uses an image, as in Decap CMS and TinaCMS. The library shows one
+level of a folder; a subfolder that a field uploads to is a folder of its own.
+
+**Uploads and deletes are commits.** An upload is one commit with only the files (`Upload
+public/images/team.jpg`), with the same safe, collision-free names as field uploads; a file is never
+overwritten. A delete is one commit too. Both go to the branch being edited, so inside a change
+they wait for publishing like any edit, and **Review & publish** lists them as media files (the
+sidebar counts them under **Media**). When changes are required, the published branch is read-only:
+the library browses but does not upload or delete.
+
+**Where a file is used.** Before a delete, the library looks through every entry and singleton for
+the file's public URL (also with `%20` and the like decoded) or its repository path (also inside a
+relative path such as `../../public/images/team.jpg`), in any field and in markdown bodies. Deleting
+an unused file asks for a plain confirmation; deleting a used one names the documents that will
+point at a missing file. Nothing stores usage, so this reads every document: on GitHub that is one
+request per document the first time, then the cache.
+
+Without the React UI:
+
+```ts
+cms.mediaFolders() // [{ folder: 'public/images', publicPath: '/images', label: 'Images', accept: 'image/*', maxSize }]
+await cms.listMedia('public/images') // [{ path, name, publicPath, size }], sizes from the tree listing
+const { paths, commit } = await cms.uploadMedia('public/images', [{ name: 'Team.JPG', content: bytes }])
+await cms.findMediaUsage('public/images/team.jpg') // [{ type, name, slug?, label, path, fields: ['cover.src'] }]
+await cms.deleteMedia('public/images/team.jpg')
+```
+
+`deleteMedia` and `uploadMedia` refuse paths outside the media folders. In your own UI, render
+`<MediaLibraryView view={{ type: 'media', folder, path }} onNavigate={...} />` from
+`gitvfs-cms/react` inside a `CmsProvider`.
+
 ## Preview
 
 The editor shows two tabs next to the form:

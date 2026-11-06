@@ -92,3 +92,5 @@ export {
 } from './media-store.js'
 export type { AddedAsset } from './media-store.js'
 export { EmbedField } from './embed.js'
+export { MediaLibraryView } from './media-library.js'
+export type { MediaLibraryViewProps, MediaView } from './media-library.js'

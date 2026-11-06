@@ -7,7 +7,7 @@ import type { MockRepository } from 'gitvfs-github-msw'
 import { CodeMirrorField } from 'gitvfs-cms/codemirror'
 import { MermaidField } from 'gitvfs-cms/mermaid'
 import { ColorField } from './ColorField'
-import { collections, singletons } from './content'
+import { collections, media, singletons } from './content'
 import { AuthorPreview, EventPreview, ShowPreview } from './previews'
 
 const DOCS_URL = 'https://docs.gitvfs.mvd.im/docs/cms'
@@ -73,6 +73,7 @@ export function App({ repositories, subscribe, reset }: AppProps) {
         fs: new GitVFS({ repository: provider.repository(current), branch: 'main' }),
         collections,
         singletons,
+        media,
         // Edit in changes: branches that are reviewed in a pull request and merged to publish.
         changes: true,
       }),

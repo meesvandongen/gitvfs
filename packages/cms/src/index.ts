@@ -11,6 +11,7 @@ export type {
   SaveEntryOptions,
   SaveSingletonOptions,
   SaveResult,
+  UploadMediaResult,
   ValidationIssue,
 } from './cms.js'
 export { defineCollection, defineSingleton, formatFromPath } from './config.js'
@@ -88,6 +89,7 @@ export {
   isSafeAssetPath,
   matchesAccept,
   mediaConfig,
+  mediaFieldConfigs,
   mediaFolders,
   mimeType,
   parseEmbedUrl,
@@ -316,3 +318,13 @@ export type {
   RecurrenceRule,
   RRuleWeekday,
 } from './recurrence.js'
+export {
+  describeMediaUsage,
+  findMediaUsage,
+  mediaFolderLabel,
+  mediaFolderOf,
+  mediaLibraryFolders,
+  mediaPattern,
+  mediaUsageIn,
+} from './media-library.js'
+export type { MediaFile, MediaFolderOptions, MediaLibraryFolder, MediaUpload, MediaUsage } from './media-library.js'

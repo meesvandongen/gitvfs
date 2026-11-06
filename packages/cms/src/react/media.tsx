@@ -1,20 +1,9 @@
-import {
-  useEffect,
-  useRef,
-  useState,
-  type CSSProperties,
-  type DragEvent,
-  type KeyboardEvent,
-  type MouseEvent,
-  type ReactNode,
-} from 'react'
+import { useEffect, useRef, useState, type KeyboardEvent, type MouseEvent, type ReactNode } from 'react'
 import type { AutoFormFieldProps } from '@autoform/react'
 import { NotFoundError } from 'gitvfs'
 import {
   fileName,
-  focusToObjectPosition,
   formatBytes,
-  isImagePath,
   matchesAccept,
   mediaConfig,
   roundFocus,
@@ -26,7 +15,8 @@ import {
   type MediaCustomData,
 } from '../media.js'
 import { NestedErrors, useField, useReadOnly } from './field-utils.js'
-import { useAssetSize, useAssetUrl, useMediaStore, useMediaVersion, type AddedAsset, type MediaStore } from './media-store.js'
+import { describeLimits, download, FileIcon, MediaTile, Thumbnail, useFileDrop, useFilePicker } from './media-parts.js'
+import { useAssetSize, useMediaStore, useMediaVersion, type AddedAsset, type MediaStore } from './media-store.js'
 import { errorMessage, useAsync } from './use-async.js'
 
 /** A field's media options; a `fieldType: 'image'` set by hand gets the defaults. */
@@ -72,61 +62,6 @@ function useUploader(media: MediaConfig) {
   return { store, upload, error, busy }
 }
 
-/** A hidden file input and a function that opens it. */
-function useFilePicker(media: MediaConfig, multiple: boolean, onFiles: (files: File[]) => void) {
-  const input = useRef<HTMLInputElement | null>(null)
-  const element = (
-    <input
-      ref={input}
-      type="file"
-      className="gcms-visually-hidden"
-      tabIndex={-1}
-      aria-hidden
-      accept={media.accept || undefined}
-      multiple={multiple}
-      onChange={(event) => {
-        const files = [...(event.target.files ?? [])]
-        event.target.value = ''
-        if (files.length > 0) onFiles(files)
-      }}
-    />
-  )
-  return { element, open: () => input.current?.click() }
-}
-
-const draggingFiles = (event: DragEvent) => [...event.dataTransfer.types].includes('Files')
-
-/** Drag and drop of files onto an element. */
-function useFileDrop(onFiles: (files: File[]) => void) {
-  const [over, setOver] = useState(false)
-  // A read-only field takes no files.
-  const readOnly = useReadOnly()
-  return {
-    over,
-    handlers: {
-      onDragOver: (event: DragEvent) => {
-        if (readOnly || !draggingFiles(event)) return
-        event.preventDefault()
-        event.dataTransfer.dropEffect = 'copy'
-        setOver(true)
-      },
-      onDragLeave: () => setOver(false),
-      onDrop: (event: DragEvent) => {
-        if (readOnly || !draggingFiles(event)) return
-        event.preventDefault()
-        setOver(false)
-        const files = [...event.dataTransfer.files]
-        if (files.length > 0) onFiles(files)
-      },
-    },
-  }
-}
-
-function describeLimits(media: MediaConfig): string {
-  const accept = media.accept === 'image/*' ? 'Images' : media.accept ? media.accept.split(',').map((type) => type.trim()).join(', ') : 'Any file'
-  return `${accept}, up to ${formatBytes(media.maxSize)}`
-}
-
 /** Where files are dropped or browsed for when a field is empty. */
 function DropZone(props: {
   media: MediaConfig
@@ -154,40 +89,6 @@ function DropZone(props: {
       </div>
       <p className="gcms-muted">{describeLimits(props.media)}</p>
     </div>
-  )
-}
-
-/** An image from the repository or a pending upload; other URLs are shown as they are. */
-function Thumbnail({ store, src, alt, focus, className, onSize }: {
-  store: MediaStore
-  src: string
-  alt?: string
-  focus?: FocusPoint
-  className?: string
-  onSize?: (size: [number, number]) => void
-}) {
-  const path = store.resolve(src)
-  const { url, error } = useAssetUrl(path)
-  // The image's own aspect ratio lets the stylesheet scale small images up without distorting
-  // them, so a focal point picked on the preview maps exactly onto the image.
-  const [aspect, setAspect] = useState<number>()
-  if (error) return <span className={`${className ?? ''} gcms-media-missing`}>Not found</span>
-  const shown = path ? url : src
-  if (!shown) return <span className={`${className ?? ''} gcms-media-loading`} aria-label="Loading" />
-  const style = { objectPosition: focusToObjectPosition(focus), '--gcms-aspect': aspect } as CSSProperties
-  return (
-    <img
-      className={className}
-      src={shown}
-      alt={alt ?? ''}
-      draggable={false}
-      style={style}
-      onLoad={(event) => {
-        const { naturalWidth, naturalHeight } = event.currentTarget
-        if (naturalWidth > 0 && naturalHeight > 0) setAspect(naturalWidth / naturalHeight)
-        onSize?.([naturalWidth, naturalHeight])
-      }}
-    />
   )
 }
 
@@ -347,27 +248,11 @@ function MediaLibrary({ store, media, onPick, onClose, title }: {
       <ul className="gcms-library-list">
         {paths.map((path) => (
           <li key={path}>
-            <button type="button" className="gcms-library-item" onClick={() => onPick(path)}>
-              {isImagePath(path) ? (
-                <Thumbnail store={store} src={toPublicPath(media, path)!} className="gcms-library-thumb" />
-              ) : (
-                <FileIcon name={path} />
-              )}
-              <span className="gcms-media-name">{fileName(path)}</span>
-            </button>
+            <MediaTile store={store} path={path} src={toPublicPath(media, path)!} onClick={() => onPick(path)} />
           </li>
         ))}
       </ul>
     </section>
-  )
-}
-
-function FileIcon({ name }: { name: string }) {
-  const extension = /\.([a-z0-9]{1,5})$/i.exec(name)?.[1] ?? 'file'
-  return (
-    <span className="gcms-file-icon" aria-hidden>
-      {extension.toUpperCase()}
-    </span>
   )
 }
 
@@ -650,17 +535,6 @@ export function GalleryField(props: AutoFormFieldProps) {
       <NestedErrors name={props.id} />
     </div>
   )
-}
-
-/** Saves a repository file through the browser, which also works for private repositories. */
-async function download(store: MediaStore, path: string) {
-  const asset = await store.load(path)
-  const link = document.createElement('a')
-  link.href = asset.url
-  link.download = fileName(path)
-  document.body.append(link)
-  link.click()
-  link.remove()
 }
 
 /** Any file uploaded into the repository, such as a PDF: shows its name and size, with a download. */

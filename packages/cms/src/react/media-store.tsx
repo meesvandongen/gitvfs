@@ -32,7 +32,8 @@ export interface AddedAsset {
 
 // Files read from the repository, per CMS and branch (a change can hold uploads its base branch
 // does not have yet), shared by all editors so each file is fetched once. Paths are a good key
-// within a branch: uploads never overwrite files. The URLs live as long as the CMS.
+// within a branch: uploads never overwrite files, and the media library forgets the files it
+// deletes (`MediaStore.forget`). The URLs live as long as the CMS.
 const repositoryFiles = new WeakMap<GitCms, Map<string, Map<string, Entry>>>()
 
 function cacheOf(cms: GitCms): Map<string, Entry> {
@@ -73,7 +74,7 @@ export class MediaStore {
   constructor(
     readonly cms: GitCms,
     /** Media folders of the document's fields, used to find files from URLs in content. */
-    readonly folders: MediaConfig[] = [],
+    readonly folders: ReadonlyArray<Pick<MediaConfig, 'folder' | 'publicPath'>> = [],
   ) {}
 
   subscribe = (listener: () => void) => {
@@ -117,7 +118,7 @@ export class MediaStore {
   }
 
   /** Repository path of a URL stored in content, when it points into a media folder. */
-  resolve(src: string, media?: MediaConfig): string | undefined {
+  resolve(src: string, media?: Pick<MediaConfig, 'folder' | 'publicPath'>): string | undefined {
     for (const folder of media ? [media] : this.folders) {
       const path = toRepoPath(folder, src)
       if (path !== undefined) return path
@@ -192,6 +193,19 @@ export class MediaStore {
     return Promise.all(
       referenced.map(async ([path, upload]) => ({ path, content: new Uint8Array(await upload.asset.blob.arrayBuffer()) })),
     )
+  }
+
+  /**
+   * Drop a repository file from the cache, after it was deleted: a later upload can reuse its path,
+   * which must not show the old content.
+   */
+  forget(path: string): void {
+    const cache = cacheOf(this.cms)
+    const entry = cache.get(path)
+    if (!entry) return
+    cache.delete(path)
+    if (entry.asset) URL.revokeObjectURL(entry.asset.url)
+    this.notify()
   }
 
   /** After a save: committed uploads are repository files now, and keep their URLs. */
