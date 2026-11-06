@@ -19,6 +19,8 @@ export type CmsFieldType =
   | 'gallery'
   | 'file'
   | 'embed'
+  | 'code'
+  | 'mermaid'
   | 'graph'
   | 'geopoints'
   | 'daterange'

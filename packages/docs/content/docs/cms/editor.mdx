@@ -747,6 +747,120 @@ date-times (a start that does not match the rule is skipped, as in rrule.js and 
 rules. `expandRecurrence` throws for rules with parts it does not support rather than return wrong
 dates.
 
+## Code fields
+
+`code()` edits a string as code: syntax highlighting, line numbers, Tab and Shift+Tab to indent
+and outdent, and Enter keeps the indentation (one level deeper after `{`, `[` or `(`, and after a
+trailing `:` in YAML and Python). Keyboard users leave the editor with Esc, then Tab. JSON and YAML
+are checked as you type, with the line of the first error marked, and the schema rejects them on
+save, so a broken file is never committed. `codeBlock()` adds a language picker for snippets.
+
+| Schema | Stored as |
+| --- | --- |
+| `code({ language })` | a string |
+| `codeBlock({ languages })` | `{ language, code }`; `language` defaults to the first of `languages` |
+| `mermaid()` | the diagram's source, a string (see below) |
+
+```ts
+import { code, codeBlock, mermaid } from 'gitvfs-cms'
+
+const snippets = defineCollection({
+  name: 'snippets',
+  folder: 'data/snippets',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string(),
+    snippet: codeBlock({ label: 'Snippet', languages: ['ts', 'json', 'yaml', 'shell'] }),
+    settings: code({ label: 'Settings', language: 'json' }).optional(),
+    diagram: mermaid({ label: 'Diagram' }).optional(),
+  }),
+})
+```
+
+Multi-line strings are written as YAML block scalars, so the code reads and diffs line by line:
+
+```yaml
+snippet:
+  language: ts
+  code: |
+    export const answer = 42
+settings: |
+  {
+    "pageSize": 10
+  }
+```
+
+| Option | Default | |
+| --- | --- | --- |
+| `language` | `text` | `ts`, `js`, `json`, `yaml`, `css`, `html`, `shell`, `python`, `sql`, `mermaid` or `text`. Aliases such as `typescript`, `yml` and `bash` work too. |
+| `languages` | all | `codeBlock` only: the languages to pick from. |
+| `lineNumbers` | `true` | Show the line number gutter. |
+| `tabSize` | `2` | Spaces per indentation level. |
+| `rows` | `8` | Lines shown before the editor grows (up to 24, then it scrolls). |
+
+The built-in editor has no dependencies: a transparent textarea over a highlighted copy of the text,
+colored by a small tokenizer for strings, comments, numbers, keywords, keys and punctuation. Its
+colors are custom properties (`--gcms-code-keyword`, `--gcms-code-string`, …) with dark-mode values.
+The pure helpers are exported from `gitvfs-cms`: `tokenize`, `validateJson`, `validateYaml`,
+`validateCode`, and the editing commands `indentSelection`, `outdentSelection` and `insertNewline`.
+
+### CodeMirror
+
+For a full editor (undo history per field, multiple cursors, bracket matching, language-aware
+indentation), register the CodeMirror 6 field from its own entry point. Its packages are optional
+peer dependencies, so apps that do not import it never install or ship CodeMirror, and each
+language package is loaded only when a field needs it:
+
+```sh
+pnpm add @codemirror/state @codemirror/view @codemirror/commands @codemirror/language @lezer/highlight \
+  @codemirror/lang-javascript @codemirror/lang-json @codemirror/lang-yaml @codemirror/lang-css @codemirror/lang-html
+```
+
+```tsx
+import { CodeMirrorField } from 'gitvfs-cms/codemirror'
+
+<CmsApp cms={cms} formComponents={{ code: CodeMirrorField }} />
+```
+
+It uses the same `--gcms-*` colors, so it follows your theme and dark mode. Languages without a
+CodeMirror package (shell, Python, SQL, Mermaid) are highlighted with the built-in tokenizer.
+`CodeMirrorEditor` is the editor alone; `createCodeField(editor)` and
+`createMermaidField({ editor })` build fields around any component that takes `CodeEditorProps`.
+
+## Mermaid diagrams
+
+`mermaid()` stores a [Mermaid](https://mermaid.js.org) diagram's source and edits it in the code
+editor with a live preview beside it (below it on narrow forms). Errors show under the preview while
+the last good diagram stays visible, dimmed. Mermaid is large, so the renderer lives in its own entry
+point with `mermaid` as an optional peer dependency, loaded with a dynamic import the first time a
+diagram is shown:
+
+```sh
+pnpm add mermaid
+```
+
+```tsx
+import { MermaidField } from 'gitvfs-cms/mermaid'
+
+<CmsApp cms={cms} formComponents={{ mermaid: MermaidField }} />
+```
+
+Without it the field still edits the source and says that the preview needs `gitvfs-cms/mermaid`.
+Diagrams render with `securityLevel: 'strict'` and Mermaid's dark theme when the editor is dark.
+They are shown as images (`<img>` with an SVG data URL), so a diagram can never run scripts or load
+anything, whatever its labels contain.
+
+Registering `MermaidField` also draws ` ```mermaid ` blocks in the markdown preview, rendered in the
+editor page and placed in the sandboxed preview frame as images. To edit diagrams with CodeMirror:
+`createMermaidField({ render: renderMermaid, editor: CodeMirrorEditor })`.
+
+```yaml
+diagram: |
+  flowchart LR
+    A[Editor] -->|save| B(gitvfs)
+    B --> C[GitHub]
+```
+
 ## Media fields
 
 Images and other files are uploaded into the repository, next to the content, like Decap CMS's

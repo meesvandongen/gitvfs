@@ -4,6 +4,8 @@ import { github } from 'gitvfs/providers/github'
 import { createCms, nominatimGeocoder, type MapOptions } from 'gitvfs-cms'
 import { CmsApp, RepositoryPicker } from 'gitvfs-cms/react'
 import type { MockRepository } from 'gitvfs-github-msw'
+import { CodeMirrorField } from 'gitvfs-cms/codemirror'
+import { MermaidField } from 'gitvfs-cms/mermaid'
 import { ColorField } from './ColorField'
 import { collections, singletons } from './content'
 import { AuthorPreview, EventPreview, ShowPreview } from './previews'
@@ -14,6 +16,15 @@ const DOCS_URL = 'https://docs.gitvfs.mvd.im/docs/cms'
 // run on Enter only, at most one per second, and repeated ones come from a cache, as its usage
 // policy asks (https://operations.osmfoundation.org/policies/nominatim/).
 const mapDefaults: MapOptions = { geocoder: nominatimGeocoder({ language: 'en' }) }
+
+// Both optional subpaths: CodeMirror for code fields, and live Mermaid previews (in the field and
+// for ```mermaid blocks in markdown). Mermaid fields keep the built-in editor, so the demo shows
+// both editors; mermaid itself loads only when a diagram is on screen.
+const formComponents = {
+  color: ColorField,
+  code: CodeMirrorField,
+  mermaid: MermaidField,
+}
 
 export interface DemoRepository {
   fullName: string
@@ -111,7 +122,7 @@ export function App({ repositories, subscribe, reset }: AppProps) {
             key={`${current}:${generation}`}
             cms={cms}
             title="Acme content"
-            formComponents={{ color: ColorField }}
+            formComponents={formComponents}
             mapDefaults={mapDefaults}
             previews={{ authors: AuthorPreview, events: EventPreview, shows: ShowPreview }}
             sidebarFooter={

@@ -114,6 +114,23 @@ export type {
   UploadOptions,
 } from './media.js'
 export {
+  applyTextEdit,
+  code,
+  codeBlock,
+  formatCodeError,
+  indentSelection,
+  insertNewline,
+  lineColumn,
+  mermaid,
+  outdentSelection,
+  validateCode,
+  validateJson,
+  validateYaml,
+} from './code.js'
+export type { CodeBlock, CodeCustomData, CodeError, CodeFieldConfig, CodeOptions, MermaidCodeOptions, TextEdit } from './code.js'
+export { CODE_LANGUAGES, normalizeLanguage, tokenize } from './highlight.js'
+export type { CodeLanguage, Token, TokenType } from './highlight.js'
+export {
   NODE_ID_PATTERN,
   autoLayout,
   boundaryPoint,

@@ -1,5 +1,7 @@
 import { z } from 'zod'
 import {
+  code,
+  codeBlock,
   dateRange,
   datetime,
   defineCollection,
@@ -18,6 +20,7 @@ import {
   image,
   imagePath,
   markdown,
+  mermaid,
   money,
   openingHours,
   phone,
@@ -233,6 +236,24 @@ export const flows = defineCollection({
   }),
 })
 
+export const snippets = defineCollection({
+  name: 'snippets',
+  label: 'Code snippets',
+  folder: 'data/snippets',
+  format: 'yaml',
+  schema: z.object({
+    title: z.string().min(1),
+    snippet: codeBlock({
+      label: 'Snippet',
+      description: 'Stored as { language, code }; the language is picked below the editor',
+      languages: ['ts', 'js', 'json', 'yaml', 'css', 'html', 'shell', 'python', 'sql'],
+    }),
+    settings: code({ label: 'Settings', language: 'json', description: 'JSON, checked for syntax errors as you type', rows: 6 }).optional(),
+    styles: code({ label: 'Styles', language: 'css', rows: 4 }).optional(),
+    diagram: mermaid({ label: 'Diagram', description: 'Mermaid, with a live preview' }).optional(),
+  }),
+})
+
 export const site = defineSingleton({
   name: 'site',
   label: 'Site settings',
@@ -318,7 +339,7 @@ export const navigation = defineSingleton({
   }),
 })
 
-export const collections = [posts, docs, authors, events, places, shows, flows]
+export const collections = [posts, docs, authors, events, places, shows, flows, snippets]
 export const singletons = [site, homepage, theme, pricing, navigation]
 
 const fromBase64 = (base64: string) => Uint8Array.from(atob(base64), (char) => char.charCodeAt(0))
@@ -394,6 +415,18 @@ Every entry in this demo is a file in a Git repository. The editor on the left i
 ![The cover image again, from the repository](/images/posts/sunset.png)
 
 > Nothing leaves your browser. The GitHub API is mocked with Mock Service Worker.
+
+## What a save does
+
+\`\`\`mermaid
+sequenceDiagram
+  participant Editor
+  participant gitvfs
+  participant GitHub
+  Editor->>gitvfs: write the file
+  gitvfs->>GitHub: create a commit
+  GitHub-->>Editor: new commit SHA
+\`\`\`
 `,
   'content/posts/editing-frontmatter.md': `---
 title: Keys the schema does not know survive
@@ -749,6 +782,54 @@ price:
   currency: GBP
 onSale: 45
 onSaleFrom: 2026-11-01T10:00:00+01:00
+`,
+  'data/snippets/fetch-entries.yml': `title: Fetch entries
+snippet:
+  language: ts
+  code: |
+    import type { GitCms } from 'gitvfs-cms'
+
+    // List the blog posts, newest first.
+    export async function latestPosts(cms: GitCms, count = 5) {
+      const entries = await cms.listEntries('posts')
+      return entries.slice(0, count).map((entry) => ({
+        title: entry.label,
+        href: \`/blog/\${entry.slug}\`,
+      }))
+    }
+settings: |
+  {
+    "pageSize": 10,
+    "features": ["search", "rss"],
+    "beta": false
+  }
+styles: |
+  .post-card {
+    padding: 1rem;
+    border-radius: 8px; /* matches the theme */
+  }
+diagram: |
+  flowchart LR
+    A[Editor] -->|save| B(gitvfs)
+    B --> C{Provider}
+    C -->|REST| D[GitHub]
+    C -->|REST| E[GitLab]
+`,
+  'data/snippets/broken-json.yml': `title: Broken JSON
+snippet:
+  language: yaml
+  code: |
+    deploy:
+      branch: main
+      preview: true
+settings: |
+  {
+    "pageSize": 10,
+    "features": ["search", "rss"],
+  }
+diagram: |
+  flowchart TD
+    A[Start] --> B[
 `,
   'data/site.json': `${JSON.stringify(
     {

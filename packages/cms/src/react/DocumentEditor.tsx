@@ -6,6 +6,7 @@ import { describeReferences } from '../references.js'
 import { isValidSlug, slugify } from '../slug.js'
 import { ContentForm, type ContentFormProps } from './autoform.js'
 import type { CmsView } from './CmsApp.js'
+import { mermaidRendererOf } from './mermaid.js'
 import { useCms, useCmsState } from './context.js'
 import { BaseValuesContext } from './field-changes.js'
 import { MediaProvider, MediaStore } from './media-store.js'
@@ -107,6 +108,9 @@ function LoadedEditor(
   const [slugInput, setSlugInput] = useState(props.slug ?? '')
   const [slugTouched, setSlugTouched] = useState(props.slug !== null)
   const [status, setStatus] = useState<Status>({ kind: 'idle' })
+  // What is wrong with the file as stored. A save only succeeds with values that pass the schema,
+  // so the stored file is valid from then on.
+  const [storedIssues, setStoredIssues] = useState(document.issues)
   const previewValues = useDeferredValue(values)
   // Uploads wait here until a save commits them along with the document.
   const media = useMemo(() => new MediaStore(cms, mediaFolders(contentType.schema)), [cms, contentType])
@@ -184,6 +188,7 @@ function LoadedEditor(
         : await cms.saveSingleton(contentType.name, data, { assets })
       media.committed(assets.map((asset) => asset.path))
       setBaseline(snapshot)
+      setStoredIssues([])
       setSlugInput(derivedSlug)
       setSlugTouched(true)
       setStatus({ kind: 'saved', sha: result.commit.sha })
@@ -247,10 +252,10 @@ function LoadedEditor(
         </div>
       )}
 
-      {document.issues.length > 0 && (
+      {storedIssues.length > 0 && (
         <div className="gcms-notice" role="status">
           The stored file does not match the schema:{' '}
-          {document.issues.map((issue) => `${issue.path.join('.') || 'document'}: ${issue.message}`).join('; ')}
+          {storedIssues.map((issue) => `${issue.path.join('.') || 'document'}: ${issue.message}`).join('; ')}
         </div>
       )}
 
@@ -296,6 +301,7 @@ function LoadedEditor(
               contentType={contentType}
               values={previewValues}
               render={props.renderPreview}
+              renderMermaid={mermaidRendererOf(props.formComponents)}
               compare={compare}
             />
           </div>

@@ -42,11 +42,13 @@ export {
   PreviewFrame,
   SourceDiff,
   buildPreviewDocument,
+  mermaidBlocks,
   renderMarkdown,
   toSource,
 } from './preview.js'
 export type {
   DocumentPreviewProps,
+  MarkdownPreviewProps,
   PreviewComparison,
   PreviewDocumentOptions,
   PreviewFrameProps,
@@ -54,6 +56,18 @@ export type {
 } from './preview.js'
 export { CmsNavigationProvider, useCmsNavigate } from './navigation.js'
 export type { CmsNavigate } from './navigation.js'
+export { CodeEditor, CodeField, createCodeField } from './code.js'
+export type { CodeEditorComponent, CodeEditorProps } from './code.js'
+export {
+  MermaidField,
+  MermaidPreview,
+  createMermaidField,
+  isDarkColor,
+  mermaidRendererOf,
+  svgDataUrl,
+  useDarkMode,
+} from './mermaid.js'
+export type { MermaidFieldComponent, MermaidFieldOptions, MermaidPreviewProps, MermaidRenderer } from './mermaid.js'
 export { ReferenceField, ReferencesField } from './references.js'
 export { useAsync } from './use-async.js'
 export { DateTimeField, TimeField } from './datetime.js'
