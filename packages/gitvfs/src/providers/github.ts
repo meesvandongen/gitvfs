@@ -240,17 +240,15 @@ class GitHubRepository implements GitRepository {
         repository: Record<string, { text: string | null; oid: string; byteSize: number } | null>
       }
 
-      for (let j = 0; j < chunk.length; j++) {
+      for (const [j, path] of chunk.entries()) {
         const entry = data.repository[`f${i + j}`]
-        if (entry?.text !== undefined && entry.text !== null) {
-          const content = encodeText(entry.text)
-          result.set(chunk[j], {
-            path: chunk[j],
-            sha: entry.oid,
-            content,
-            size: entry.byteSize,
-          })
-        }
+        if (!entry?.oid) continue
+        // GraphQL has no text for binary files, such as images: fetch their bytes by blob id, one
+        // at a time, to stay clear of GitHub's limits on concurrent requests.
+        const content = entry.text === null || entry.text === undefined
+          ? await this.getBlob(entry.oid)
+          : encodeText(entry.text)
+        result.set(path, { path, sha: entry.oid, content, size: entry.byteSize })
       }
     }
 

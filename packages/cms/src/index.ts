@@ -7,8 +7,11 @@ export type {
   CmsState,
   ContentChange,
   LoadedDocument,
+  PendingAsset,
   SaveEntryOptions,
+  SaveSingletonOptions,
   SaveResult,
+  UploadMediaResult,
   ValidationIssue,
 } from './cms.js'
 export { defineCollection, defineSingleton, formatFromPath } from './config.js'
@@ -32,7 +35,7 @@ export {
 } from './document.js'
 export type { ParsedDocument } from './document.js'
 export { field, markdown, textarea } from './fields.js'
-export type { CmsFieldConfig, CmsFieldType, FieldConfigCheck } from './fields.js'
+export type { CmsFieldConfig, CmsFieldType, FieldConfigCheck, MarkdownFieldConfig } from './fields.js'
 export {
   OSM_TILES,
   destination,
@@ -70,6 +73,48 @@ export type {
 export { NOMINATIM_ENDPOINT, nominatimGeocoder } from './geocode.js'
 export type { GeoBounds, GeocodeOptions, GeocodeResult, Geocoder, NominatimOptions } from './geocode.js'
 export { isValidSlug, slugify } from './slug.js'
+export {
+  DEFAULT_MAX_SIZE,
+  assetFileName,
+  defaultPublicPath,
+  embed,
+  file,
+  fileName,
+  focusToObjectPosition,
+  formatBytes,
+  gallery,
+  image,
+  imagePath,
+  isImagePath,
+  isSafeAssetPath,
+  matchesAccept,
+  mediaConfig,
+  mediaFieldConfigs,
+  mediaFolders,
+  mimeType,
+  parseEmbedUrl,
+  roundFocus,
+  toDataUrl,
+  toPublicPath,
+  toRepoPath,
+  uniqueAssetPath,
+  uploadError,
+} from './media.js'
+export type {
+  EmbedCustomData,
+  EmbedFieldConfig,
+  EmbedInfo,
+  EmbedProvider,
+  FocusPoint,
+  GalleryOptions,
+  ImageOptions,
+  ImageValue,
+  MediaConfig,
+  MediaCustomData,
+  MediaFieldConfig,
+  MediaFolder,
+  UploadOptions,
+} from './media.js'
 export {
   applyTextEdit,
   code,
@@ -273,3 +318,13 @@ export type {
   RecurrenceRule,
   RRuleWeekday,
 } from './recurrence.js'
+export {
+  describeMediaUsage,
+  findMediaUsage,
+  mediaFolderLabel,
+  mediaFolderOf,
+  mediaLibraryFolders,
+  mediaPattern,
+  mediaUsageIn,
+} from './media-library.js'
+export type { MediaFile, MediaFolderOptions, MediaLibraryFolder, MediaUpload, MediaUsage } from './media-library.js'

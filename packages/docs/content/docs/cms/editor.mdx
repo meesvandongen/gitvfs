@@ -861,6 +861,163 @@ diagram: |
     B --> C[GitHub]
 ```
 
+## Media fields
+
+Images and other files are uploaded into the repository, next to the content, like Decap CMS's
+`media_folder` and `public_folder` or Keystatic's `fields.image({ directory, publicPath })`. Each
+field names a repository `folder` and the `publicPath` your site serves it at; content stores the
+public URL, so templates use it as is.
+
+| Schema | Stored as | Editor |
+| --- | --- | --- |
+| `image()` | `{ src, alt?, focus? }` | drop or browse, pick an existing image, preview with file size and dimensions, alt text, focal point |
+| `imagePath()` | `'/images/team.jpg'` | the same, without alt text and focal point, for templates that expect a plain path |
+| `gallery()` | `[{ src, alt?, focus? }, ...]` | several images at once; reorder by dragging or with the arrow buttons |
+| `file()` | `'/files/menu.pdf'` | any file type, with name, size and a download button |
+| `embed()` | `'https://youtu.be/…'` | a link; YouTube and Vimeo get a player that loads only on request |
+| `markdown({ media })` | `![alt](/images/x.png)` in the body | an **Image** button in the toolbar that uploads or picks an image and inserts it at the cursor |
+
+```ts
+import { embed, file, gallery, image, markdown } from 'gitvfs-cms'
+
+const images = { folder: 'public/images/posts', publicPath: '/images/posts', maxSize: 2 * 1024 * 1024 }
+
+const posts = defineCollection({
+  name: 'posts',
+  folder: 'content/posts',
+  schema: z.object({
+    title: z.string(),
+    cover: image({ label: 'Cover', ...images }).optional(),
+    photos: gallery({ label: 'Photos', ...images, max: 12 }).optional(),
+    menu: file({ label: 'Menu', folder: 'public/files', accept: '.pdf' }).optional(),
+    video: embed({ label: 'Video', providers: ['youtube', 'vimeo'] }).optional(),
+    body: z.string().check(markdown({ media: images })).default(''),
+  }),
+})
+```
+
+```yaml
+cover:
+  src: /images/posts/team.jpg
+  alt: The team on the roof terrace
+  focus:
+    x: 0.5
+    y: 0.3
+photos:
+  - src: /images/posts/talk.jpg
+    alt: A talk in the main hall
+menu: /files/menu.pdf
+video: https://www.youtube.com/watch?v=aircAruvnKk
+```
+
+**Saving.** Uploads wait in the editor until the document is saved, then go into the same commit as
+the document: one commit per save, as everywhere in the CMS. Only uploads the saved values still
+refer to are committed, so an image that was replaced or removed before saving never reaches the
+repository. File names are made safe (`Team Photo.JPG` becomes `team-photo.jpg`) and get `-2`, `-3`,
+... when the name is taken; uploads never overwrite a file. When a save fails, nothing stays staged.
+Without the React editor, pass the files yourself:
+
+```ts
+await cms.saveEntry('posts', {
+  slug: 'hello',
+  data: { title: 'Hello', cover: { src: '/images/posts/team.jpg', alt: 'The team' } },
+  assets: [{ path: 'public/images/posts/team.jpg', content: bytes }],
+})
+const path = await cms.availableAssetPath('public/images/posts', 'Team.JPG') // a free path
+```
+
+**Showing files.** The editor reads stored files through the CMS, so they show for private
+repositories too, and caches them per CMS. `toRepoPath(media, src)` and `toPublicPath(media, path)`
+map between the two. Custom previews can call `useMediaUrl(src)` from `gitvfs-cms/react` to show a
+stored or just uploaded image.
+
+The markdown **Preview** frame is sandboxed into an opaque origin that cannot load the editor's
+`blob:` URLs, so images under a media folder are inlined as `data:` URLs before the HTML goes into
+the frame. Its content security policy already allowed `data:` images, so nothing was loosened:
+the frame still runs no scripts. The cost is that large images make the preview document bigger;
+other image URLs are left alone and load as before (resolved against `previewBaseUrl`).
+
+**Focal point.** Click the image (or use the arrow keys) to set the point that crops keep in view,
+stored as fractions from the top left. On the site, `focusToObjectPosition(image.focus)` gives the
+CSS `object-position` (`'50% 30%'`), and works for `background-position` too.
+
+**Embeds.** `parseEmbedUrl(url)` returns `{ provider, id, embedUrl, start }` for YouTube (watch,
+`youtu.be`, shorts, live and embed links) and Vimeo (including unlisted links), and `{ provider: 'url' }`
+for other http(s) links. The editor loads nothing from those sites until **Load preview** is
+clicked, and then uses `youtube-nocookie.com` or Vimeo's do-not-track flag. Use `embedUrl` on your
+site the same way.
+
+| Option | Default | |
+| --- | --- | --- |
+| `folder` | `public/images` (`file()`: `public/files`) | Repository folder uploads are committed to. |
+| `publicPath` | `folder` from the root, without `public/` or `static/` | URL stored in content, e.g. `/images`. Can be a full URL for a CDN. |
+| `accept` | `image/*` (`file()`: any) | Accepted types, as in `<input accept>`: `image/*,.pdf`. |
+| `maxSize` | 10 MB | Largest upload in bytes. Git hosts are not made for large binaries; keep it small. |
+| `requireAlt` | `false` | `image()` and `gallery()`: make alt text required. |
+| `focalPoint` | `true` | `image()` and `gallery()`: offer the focal point picker. |
+| `min`, `max` | none | `gallery()`: number of images. |
+| `providers` | all | `embed()`: `['youtube', 'vimeo', 'url']`, or a subset. |
+
+`image()` keeps keys it does not know, such as a `caption` added by hand. Uploaded SVG files can
+contain scripts that run when the file is opened directly on your site; use `accept` to leave out
+`image/svg+xml` if editors are not fully trusted.
+
+### Media library
+
+`CmsApp` shows **Media** in the sidebar when there is at least one media folder. It lists the files
+of each folder, as they are on the branch being edited, in a grid with thumbnails, names and sizes,
+with a filter box and a button per folder. Upload with **Upload…** or by dropping files on the view;
+the folder's limits apply. Selecting a file opens its details: a large preview, the repository path,
+the public path with a **Copy** button, size and image dimensions, **Used in** (the entries and
+singletons that use the file, with links to open them), **Download** and **Delete**.
+
+The folders are those of the media fields of all collections and singletons (markdown `media`
+included), each once. A folder's uploads accept what any of its fields accepts, up to the largest
+`maxSize`. Add folders no field uses yet, or label one that a field does, with the `media` option:
+
+```ts
+const cms = createCms({
+  fs,
+  collections,
+  media: [
+    { folder: 'public/downloads', label: 'Downloads', accept: '.pdf,.zip' },
+    { folder: 'public/images/posts', label: 'Post images' },
+  ],
+})
+```
+
+Files are plain files in the repository, with no metadata stored next to them: alt text and focal
+points stay in the content that uses an image, as in Decap CMS and TinaCMS. The library shows one
+level of a folder; a subfolder that a field uploads to is a folder of its own.
+
+**Uploads and deletes are commits.** An upload is one commit with only the files (`Upload
+public/images/team.jpg`), with the same safe, collision-free names as field uploads; a file is never
+overwritten. A delete is one commit too. Both go to the branch being edited, so inside a change
+they wait for publishing like any edit, and **Review & publish** lists them as media files (the
+sidebar counts them under **Media**). When changes are required, the published branch is read-only:
+the library browses but does not upload or delete.
+
+**Where a file is used.** Before a delete, the library looks through every entry and singleton for
+the file's public URL (also with `%20` and the like decoded) or its repository path (also inside a
+relative path such as `../../public/images/team.jpg`), in any field and in markdown bodies. Deleting
+an unused file asks for a plain confirmation; deleting a used one names the documents that will
+point at a missing file. Nothing stores usage, so this reads every document: on GitHub that is one
+request per document the first time, then the cache.
+
+Without the React UI:
+
+```ts
+cms.mediaFolders() // [{ folder: 'public/images', publicPath: '/images', label: 'Images', accept: 'image/*', maxSize }]
+await cms.listMedia('public/images') // [{ path, name, publicPath, size }], sizes from the tree listing
+const { paths, commit } = await cms.uploadMedia('public/images', [{ name: 'Team.JPG', content: bytes }])
+await cms.findMediaUsage('public/images/team.jpg') // [{ type, name, slug?, label, path, fields: ['cover.src'] }]
+await cms.deleteMedia('public/images/team.jpg')
+```
+
+`deleteMedia` and `uploadMedia` refuse paths outside the media folders. In your own UI, render
+`<MediaLibraryView view={{ type: 'media', folder, path }} onNavigate={...} />` from
+`gitvfs-cms/react` inside a `CmsProvider`.
+
 ## Preview
 
 The editor shows two tabs next to the form:
@@ -918,6 +1075,9 @@ The [CMS demo](https://demo.cms.gitvfs.mvd.im) does this with **Switch repositor
 - `DocumentEditor` loads, edits, previews and commits one entry or singleton.
 - `ContentForm` is the AutoForm for a content type, with the CMS field components.
 - `DocumentPreview`, `MarkdownPreview` and `PreviewFrame` render previews.
+- `MediaStore` and `MediaProvider` hold the uploads of media fields until a save. `DocumentEditor`
+  provides them; with a `ContentForm` of your own, wrap it in a `MediaProvider`, pass
+  `await store.assets(values)` as the save's `assets`, then call `store.committed(paths)`.
 - `uiComponents` and `formComponents` are the AutoForm components; override any of them through
   the `uiComponents` and `formComponents` props, for example to add a custom `fieldType`.
 

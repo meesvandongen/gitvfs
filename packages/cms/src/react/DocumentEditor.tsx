@@ -1,6 +1,7 @@
-import { useDeferredValue, useId, useMemo, useState, type ReactNode } from 'react'
+import { useDeferredValue, useEffect, useId, useMemo, useState, type ReactNode } from 'react'
 import type { LoadedDocument } from '../cms.js'
 import type { ContentType } from '../config.js'
+import { mediaFolders } from '../media.js'
 import { describeReferences } from '../references.js'
 import { isValidSlug, slugify } from '../slug.js'
 import { ContentForm, type ContentFormProps } from './autoform.js'
@@ -8,6 +9,7 @@ import type { CmsView } from './CmsApp.js'
 import { mermaidRendererOf } from './mermaid.js'
 import { useCms, useCmsState } from './context.js'
 import { BaseValuesContext } from './field-changes.js'
+import { MediaProvider, MediaStore } from './media-store.js'
 import { CmsNavigationProvider, useCmsNavigate } from './navigation.js'
 import { DocumentPreview, type PreviewProps } from './preview.js'
 import { errorMessage, useAsync } from './use-async.js'
@@ -110,6 +112,9 @@ function LoadedEditor(
   // so the stored file is valid from then on.
   const [storedIssues, setStoredIssues] = useState(document.issues)
   const previewValues = useDeferredValue(values)
+  // Uploads wait here until a save commits them along with the document.
+  const media = useMemo(() => new MediaStore(cms, mediaFolders(contentType.schema)), [cms, contentType])
+  useEffect(() => () => media.dispose(), [media])
   // The base version as the form would hold it: with the schema's defaults filled in, so a
   // default the file leaves out does not count as a change.
   const baseFormValues = useMemo(() => {
@@ -172,13 +177,16 @@ function LoadedEditor(
     }
     setStatus({ kind: 'busy', message: 'Committing…' })
     try {
+      const assets = await media.assets(data)
       const result = contentType.kind === 'collection'
         ? await cms.saveEntry(contentType.name, {
           slug: derivedSlug,
           data,
           previousSlug: props.slug ?? undefined,
+          assets,
         })
-        : await cms.saveSingleton(contentType.name, data)
+        : await cms.saveSingleton(contentType.name, data, { assets })
+      media.committed(assets.map((asset) => asset.path))
       setBaseline(snapshot)
       setStoredIssues([])
       setSlugInput(derivedSlug)
@@ -251,52 +259,54 @@ function LoadedEditor(
         </div>
       )}
 
-      <div className="gcms-panes">
-        <div className="gcms-pane gcms-pane--form">
-          {isEntry && (
-            <div className="gcms-field">
-              <label className="gcms-label" htmlFor={`${formId}-slug`}>
-                Slug
-              </label>
-              <input
-                id={`${formId}-slug`}
-                className="gcms-input"
-                value={derivedSlug}
-                aria-invalid={slugError ? true : undefined}
-                onChange={(event) => {
-                  setSlugTouched(true)
-                  setSlugInput(event.target.value)
-                }}
+      <MediaProvider store={media}>
+        <div className="gcms-panes">
+          <div className="gcms-pane gcms-pane--form">
+            {isEntry && (
+              <div className="gcms-field">
+                <label className="gcms-label" htmlFor={`${formId}-slug`}>
+                  Slug
+                </label>
+                <input
+                  id={`${formId}-slug`}
+                  className="gcms-input"
+                  value={derivedSlug}
+                  aria-invalid={slugError ? true : undefined}
+                  onChange={(event) => {
+                    setSlugTouched(true)
+                    setSlugInput(event.target.value)
+                  }}
+                />
+                <p className={slugError ? 'gcms-error' : 'gcms-description'}>
+                  {slugError ?? 'File name of the entry.'}
+                </p>
+              </div>
+            )}
+            <BaseValuesContext.Provider value={baseValues}>
+            <CmsNavigationProvider navigate={navigate ? leave : undefined}>
+              <ContentForm
+                contentType={contentType}
+                defaultValues={document.data}
+                onSubmit={save}
+                onValuesChange={handleValues}
+                formId={formId}
+                uiComponents={props.uiComponents}
+                formComponents={props.formComponents}
               />
-              <p className={slugError ? 'gcms-error' : 'gcms-description'}>
-                {slugError ?? 'File name of the entry.'}
-              </p>
-            </div>
-          )}
-          <BaseValuesContext.Provider value={baseValues}>
-          <CmsNavigationProvider navigate={navigate ? leave : undefined}>
-            <ContentForm
+            </CmsNavigationProvider>
+            </BaseValuesContext.Provider>
+          </div>
+          <div className="gcms-pane gcms-pane--preview">
+            <DocumentPreview
               contentType={contentType}
-              defaultValues={document.data}
-              onSubmit={save}
-              onValuesChange={handleValues}
-              formId={formId}
-              uiComponents={props.uiComponents}
-              formComponents={props.formComponents}
+              values={previewValues}
+              render={props.renderPreview}
+              renderMermaid={mermaidRendererOf(props.formComponents)}
+              compare={compare}
             />
-          </CmsNavigationProvider>
-          </BaseValuesContext.Provider>
+          </div>
         </div>
-        <div className="gcms-pane gcms-pane--preview">
-          <DocumentPreview
-            contentType={contentType}
-            values={previewValues}
-            render={props.renderPreview}
-            renderMermaid={mermaidRendererOf(props.formComponents)}
-            compare={compare}
-          />
-        </div>
-      </div>
+      </MediaProvider>
     </div>
   )
 }

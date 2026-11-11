@@ -6,16 +6,17 @@ A public playground for [gitvfs-cms](../cms). It runs the real editor, the real 
 
 | Content | Format | Features |
 | --- | --- | --- |
-| Blog posts | markdown | every built-in field type (text, textarea, date, select, number, checkboxes, a list, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
+| Blog posts | markdown | a cover image with alt text and focal point, and the markdown toolbar's image button (uploads are committed with the post); every built-in field type (text, textarea, date, select, number, checkboxes, a list, markdown); slugs derived from titles; custom sort; frontmatter the schema does not know is preserved; a stored file that fails validation |
 | Documentation | MDX | the site's own stylesheet in the preview (`previewStylesheets`) |
-| Authors | JSON | a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
-| Events | YAML | an optional nested object with a map pin, a list of objects with numbers, a custom preview |
+| Authors | JSON | an avatar stored as a plain path (`imagePath`), a custom field type (`ColorField.tsx`), a custom preview (`previews.tsx`), a list of objects |
+| Events | YAML | a photo gallery, a PDF agenda (`file`), a YouTube recording (`embed`), an optional nested object with a map pin, a list of objects with numbers, a custom preview |
 | Places | YAML | map fields: a point, a point with a delivery radius, a service area polygon, a route line and labelled branch markers (`geoPoints`); address search on every map field through `mapDefaults={{ geocoder: nominatimGeocoder() }}` |
 | Code snippets | YAML | code fields: a snippet with a language picker, JSON with live syntax checks, CSS, and a Mermaid diagram with a live preview; code fields use CodeMirror (`gitvfs-cms/codemirror`), the diagram the built-in editor and `gitvfs-cms/mermaid`, which also draws the diagram in the welcome post's preview |
 | Events, Places (scheduling) | YAML | a date range (Git summer camp), a recurring series with an RRULE (CMS office hours), opening hours with a lunch break, hours past midnight and holidays (both places) |
 | Flows | YAML | a graph field: a support decision tree and a publishing workflow, with node kinds (shapes), node and edge fields, canvas and list views |
 | Shows | YAML | date and time in a fixed time zone and in the editor's own, time, durations, money, a phone number, a slider, a read-only id and hidden import metadata, a custom preview using the formatting helpers |
 | Blog posts, Homepage | markdown | references: each post's author (one post points at an author that does not exist), up to three related posts in order, and a homepage highlight that can be a post or a doc (`{ collection, slug }`); deleting a referenced author lists the posts that use it |
+| Media (sidebar) | files | the media library: the folders of all media fields plus `public/downloads` from the `media` option; upload by button or drop, file details with **Used in**, delete (`public/images/posts/old-banner.png` and `public/downloads/brand-guide.txt` are unused, so deleting them is a plain confirmation) |
 | Site settings, Homepage, Theme | JSON, markdown, YAML | singletons; the theme uses sliders |
 | Pricing, Navigation | YAML | a table of plans (spreadsheet-like grid with paste and CSV copy, a read-only list column) and a nested menu edited as an outline (`tree()`); event tickets use the table too |
 

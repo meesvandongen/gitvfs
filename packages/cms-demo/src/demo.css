@@ -143,3 +143,21 @@ body {
   padding: 0.3rem 0;
   border-top: 1px solid var(--gcms-border);
 }
+
+.demo-avatar {
+  object-fit: cover;
+}
+
+.demo-photos {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(5rem, 1fr));
+  gap: 0.4rem;
+  margin: 0.75rem 0;
+}
+
+.demo-photos img {
+  width: 100%;
+  aspect-ratio: 1;
+  border-radius: 6px;
+  object-fit: cover;
+}
