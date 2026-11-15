@@ -3,8 +3,11 @@ title: Sign in with GitHub
 description: GitHub sign-in for browser apps, with PKCE and a tiny token exchange handler.
 ---
 
-`gitvfs-github-auth` lets users of a browser app sign in with GitHub and turns the session into a
-gitvfs `TokenProvider`. It is what the [editor for these docs](/admin) uses.
+`gitvfs-github-auth` lets users of any browser app sign in with GitHub. It returns a user access
+token that refreshes itself, which works with `fetch`, Octokit, gitvfs or any other GitHub API
+client. The package does not depend on gitvfs or on any framework. The
+[editor for these docs](/admin) uses it, and so can any single-page app that talks to GitHub as
+the signed-in user.
 
 ## Why it needs a server part
 
@@ -33,19 +36,17 @@ refreshed automatically).
 1. Under **Settings → Developer settings → GitHub Apps**, create an app.
 2. Set the **Callback URL** to the page that handles the redirect, for example
    `https://docs.example.com/admin`.
-3. Under **Repository permissions**, give **Contents** read and write access. Keep **Expire user
-   authorization tokens** enabled.
-4. Generate a client secret, and install the app on the repositories it may edit.
+3. Under **Permissions**, choose what your app needs, for example **Contents** read and write
+   access to commit files, as an editor does. Keep **Expire user authorization tokens** enabled.
+4. Generate a client secret, and install the app on the repositories it may reach.
 
-An OAuth App works too. Its client ID starts with `Ov23`, and its tokens can only write with a
-scope: pass `scope: 'public_repo'` for public repositories, or `scope: 'repo'` (which grants access
-to all of the user's private repositories) to the browser client.
+An OAuth App works too. Its client ID starts with `Ov23`, and it gets its access from scopes that
+you pass to the browser client, such as `scope: 'public_repo'` to write to public repositories, or
+`scope: 'repo'` (which grants access to all of the user's private repositories).
 
 ## Browser
 
 ```ts
-import { GitVFS } from 'gitvfs'
-import { github } from 'gitvfs/providers/github'
 import { createGitHubAuth } from 'gitvfs-github-auth'
 
 const auth = createGitHubAuth({
@@ -58,15 +59,14 @@ await auth.handleRedirect() // completes the sign-in when GitHub sends the user 
 
 if (!auth.isSignedIn()) await auth.login()
 
-const fs = new GitVFS({
-  repository: github({ token: auth.token }).repository('acme/site'),
-  branch: 'main',
+const response = await fetch('https://api.github.com/user/repos', {
+  headers: { Authorization: `Bearer ${await auth.token()}` },
 })
 ```
 
-`auth.token` hands gitvfs a valid access token for every request, refreshing it when it has
-expired; concurrent requests share one refresh. `auth.fetchUser()` returns the user's profile and
-`auth.signOut()` forgets the tokens.
+`auth.token()` resolves to a valid access token and refreshes it when it has expired; concurrent
+calls share one refresh. `auth.fetchUser()` returns the user's profile and `auth.signOut()` forgets
+the tokens.
 
 | Option | Default | |
 | --- | --- | --- |
@@ -79,6 +79,25 @@ expired; concurrent requests share one refresh. `auth.fetchUser()` returns the u
 
 Failures throw a `GitHubAuthError` whose `code` is `not_signed_in`, `session_expired`,
 `state_mismatch`, `token_exchange_failed`, or GitHub's own error such as `access_denied`.
+
+### With gitvfs, Octokit and other clients
+
+`auth.token` is a plain `() => Promise<string>`. It matches gitvfs's `TokenProvider`, and other
+clients can call it before each request:
+
+```ts
+// gitvfs
+const fs = new GitVFS({
+  repository: github({ token: auth.token }).repository('acme/site'),
+  branch: 'main',
+})
+
+// Octokit
+const octokit = new Octokit()
+octokit.hook.before('request', async (options) => {
+  options.headers.authorization = `Bearer ${await auth.token()}`
+})
+```
 
 ## Where tokens live
 
@@ -135,6 +154,6 @@ See [Deployment](/docs/github-auth/deployment) for a complete Cloudflare Worker.
   allow the pattern in the handler: `allowedOrigins: ['https://*.docs.example.com']`. GitHub warns
   that wildcards let codes reach any subdomain; with PKCE such a code is useless without the
   verifier, which never leaves the tab that started the sign-in.
-- As with any browser sign-in, code running on the page can read the tokens. Host the editor on
+- As with any browser sign-in, code running on the page can read the tokens. Host the app on
   its own origin and never render untrusted HTML next to it; `gitvfs-cms` sandboxes its previews
   for this reason.

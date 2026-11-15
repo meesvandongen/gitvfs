@@ -27,7 +27,7 @@ const packages = [
   {
     name: 'gitvfs-github-auth',
     href: '/docs/github-auth',
-    description: 'Sign in with GitHub from the browser with PKCE, plus the token handler GitHub requires.',
+    description: 'Sign in with GitHub from any browser app with PKCE, plus the token handler GitHub requires. Works without gitvfs.',
   },
 ]
 

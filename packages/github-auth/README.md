@@ -1,6 +1,8 @@
 # gitvfs-github-auth
 
-Sign in with GitHub from a browser app, using the authorization code flow with PKCE, and hand the token to [gitvfs](../gitvfs).
+Sign in with GitHub from a browser app, using the authorization code flow with PKCE. You get a user access token that is refreshed automatically, and you can use it with `fetch`, Octokit, isomorphic-git, [gitvfs](../gitvfs), or anything else that calls the GitHub API.
+
+The package has no framework or gitvfs dependency. It lives in this repository because the gitvfs CMS uses it for sign-in.
 
 GitHub [supports PKCE](https://github.blog/changelog/2025-07-14-pkce-support-for-oauth-and-github-app-authentication/), but its token endpoint still requires the client secret and sends no CORS headers. A browser app therefore cannot finish the sign-in on its own. This package has two halves:
 
@@ -10,7 +12,7 @@ GitHub [supports PKCE](https://github.blog/changelog/2025-07-14-pkce-support-for
 ## Install
 
 ```sh
-pnpm add gitvfs gitvfs-github-auth
+pnpm add gitvfs-github-auth
 ```
 
 ## Create a GitHub App
@@ -19,10 +21,10 @@ A GitHub App is recommended over an OAuth App. Its user tokens only reach reposi
 
 1. Create the app under **Settings → Developer settings → GitHub Apps**.
 2. Set the **Callback URL** to the page that handles the redirect, for example `https://docs.example.com/admin`.
-3. Under **Permissions → Repository permissions**, set **Contents** to **Read and write**. Leave **Expire user authorization tokens** on.
-4. Generate a client secret, then install the app on the repositories it should edit.
+3. Under **Permissions**, choose what your app needs, for example **Contents: Read and write** to commit files. Leave **Expire user authorization tokens** on.
+4. Generate a client secret, then install the app on the repositories it should reach.
 
-With an OAuth App, pass `scope: 'repo'` (or `public_repo`) instead.
+With an OAuth App, pass the scopes you need instead, for example `scope: 'repo'` or `public_repo`.
 
 ## Token handler
 
@@ -46,8 +48,6 @@ Store the secret with `wrangler secret put GITHUB_CLIENT_SECRET`, not in code.
 ## Browser
 
 ```ts
-import { GitVFS } from 'gitvfs'
-import { github } from 'gitvfs/providers/github'
 import { createGitHubAuth } from 'gitvfs-github-auth'
 
 const auth = createGitHubAuth({
@@ -62,13 +62,12 @@ if (!auth.isSignedIn()) {
   await auth.login() // redirects to GitHub
 }
 
-const fs = new GitVFS({
-  repository: github({ token: auth.token }).repository('acme/site'),
-  branch: 'main',
+const response = await fetch('https://api.github.com/user/repos', {
+  headers: { Authorization: `Bearer ${await auth.token()}` },
 })
 ```
 
-`auth.token` is a gitvfs `TokenProvider`: every request gets a valid access token, and expired tokens are refreshed once, even with concurrent requests. Other methods:
+`auth.token()` always resolves to a valid access token. An expired token is refreshed only once, even when several requests ask for it at the same time. Other methods:
 
 | Method | |
 | --- | --- |
@@ -77,6 +76,24 @@ const fs = new GitVFS({
 | `getTokens()` | The stored tokens and their expiry times. |
 
 Errors are `GitHubAuthError`s with a `code`: `not_signed_in`, `session_expired`, `state_mismatch`, `token_exchange_failed`, or GitHub's own error (`access_denied`, `bad_verification_code`, `bad_refresh_token`, …).
+
+## With other clients
+
+`auth.token` is a plain `() => Promise<string>`, so you can pass it to any client that accepts a token callback, or call it before each request.
+
+```ts
+// Octokit: set a fresh token on every request
+import { Octokit } from '@octokit/rest'
+const octokit = new Octokit()
+octokit.hook.before('request', async (options) => {
+  options.headers.authorization = `Bearer ${await auth.token()}`
+})
+
+// gitvfs: the signature matches its TokenProvider
+import { GitVFS } from 'gitvfs'
+import { github } from 'gitvfs/providers/github'
+const fs = new GitVFS({ repository: github({ token: auth.token }).repository('acme/site'), branch: 'main' })
+```
 
 ## Where tokens live
 
@@ -103,4 +120,4 @@ if (!(await auth.restoreSession())) await auth.login()
 ## Limits
 
 - GitHub matches the redirect URL against the app's callback URLs (a GitHub App accepts up to ten). For preview deployments on subdomains, enable **wildcard matching** on the callback URL. Then `https://docs.example.com/admin` also accepts `https://<preview>.docs.example.com/admin`. Allow the same origins in the handler with a pattern: `allowedOrigins: ['https://*.docs.example.com']` matches one subdomain label (see `originMatcher`). PKCE keeps a code that lands on another subdomain useless without the verifier.
-- Anything with access to the page can read the tokens, which holds for any browser-based sign-in. Keep the editor on its own origin and do not render untrusted HTML next to it.
+- Anything with access to the page can read the tokens, which holds for any browser-based sign-in. Serve the app on its own origin and do not render untrusted HTML next to it.
