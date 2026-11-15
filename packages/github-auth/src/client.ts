@@ -1,7 +1,7 @@
 import { createPkcePair, randomString } from './pkce.js'
 import type { SignOutRequest, TokenRequest, TokenResponse } from './protocol.js'
 
-/** Same shape as gitvfs's `TokenProvider`, so `auth.token` can be passed to a provider directly. */
+/** Returns a valid access token. Same shape as gitvfs's `TokenProvider`, so `auth.token` also works with gitvfs providers directly. */
 export type TokenProvider = () => Promise<string>
 
 export interface StorageLike {
@@ -162,7 +162,7 @@ export class GitHubAuth {
     if (this.cookieSession && this.getTokens()?.refreshToken) this.forget()
   }
 
-  /** A gitvfs `TokenProvider`: returns a valid access token, refreshing it when needed. */
+  /** Returns a valid access token, refreshing it when needed. Pass it to any client that takes a token callback. */
   readonly token: TokenProvider = () => this.getAccessToken()
 
   private get githubUrl(): string {

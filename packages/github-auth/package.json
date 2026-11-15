@@ -1,14 +1,19 @@
 {
   "name": "gitvfs-github-auth",
   "version": "0.1.0",
-  "description": "Sign in with GitHub from the browser using PKCE, with a tiny token exchange handler for Workers and other Fetch API runtimes",
+  "description": "Sign in with GitHub from any browser app using PKCE, with automatic token refresh and a tiny token exchange handler for Workers and other Fetch API runtimes",
   "keywords": [
     "github",
     "oauth",
     "pkce",
     "github-app",
+    "oauth2",
+    "sign-in",
+    "browser",
+    "spa",
     "cloudflare-workers",
-    "gitvfs"
+    "deno",
+    "bun"
   ],
   "repository": {
     "type": "git",
