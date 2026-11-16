@@ -15,9 +15,9 @@
   },
   "dependencies": {
     "@hookform/resolvers": "^5.2.2",
-    "fumadocs-core": "16.18.0",
-    "fumadocs-mdx": "15.5.0",
-    "fumadocs-ui": "npm:@fumadocs/base-ui@16.18.0",
+    "fumadocs-core": "16.19.0",
+    "fumadocs-mdx": "15.6.1",
+    "fumadocs-ui": "npm:@fumadocs/base-ui@16.19.0",
     "gitvfs": "workspace:*",
     "gitvfs-cms": "workspace:*",
     "gitvfs-github-auth": "workspace:*",
@@ -39,6 +39,6 @@
     "typescript": "^5.5.0",
     "vite": "catalog:",
     "vite-plus": "catalog:",
-    "wrangler": "4.158.0"
+    "wrangler": "4.161.0"
   }
 }
